@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/multisig-encoding",
+    "crates/multisig-registry",
+    "crates/multisig-proposals",
+    "crates/multisig-tool",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.94"

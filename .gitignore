@@ -1,0 +1,6 @@
+/target/
+**/target/
+**/*.sqlite
+.DS_Store
+*.swp
+*~

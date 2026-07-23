@@ -1,0 +1,44 @@
+/* Self-hosted Literata/Sora — same design language as agent-pay-demo. */
+
+@font-face {
+  font-family: "Literata";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/literata-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Literata";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/literata-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/sora-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/sora-500.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/sora-600.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Sora";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/sora-700.woff2") format("woff2");
+}

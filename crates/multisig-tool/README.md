@@ -1,0 +1,242 @@
+# multisig-tool
+
+Local signing tool + web UI for exercising [`multisig-registry`](../multisig-registry/README.md)
+and [`multisig-proposals`](../multisig-proposals/README.md) against the real
+Dusk testnet — account creation, quorum flows, governance, and the
+multi-person propose/approve/finalize path. One binary, two skins: a CLI
+(scriptable/headless) and a served local web UI (`serve` subcommand).
+
+**TESTNET ONLY.** Never use with mainnet keys or funds — see "Security model"
+below.
+
+## Scope
+
+This tool owns both ends of the wire — the contract's own source
+(`multisig-registry/src/call_types.rs`, included directly via `#[path = ...]`,
+see `src/registry_types.rs`) and this client — so it skips the JSON/
+data-driver round-trip every other deploy/wire script in this repo uses for
+*other* contracts. Args are rkyv-serialized directly in Rust; chain
+submission goes two ways:
+
+- **Writes** (`create_account`, `verify_quorum`, `verify_quorum_aggregate`,
+  `change_account`): shell out to the `rusk-wallet` CLI binary, same pattern
+  as `scripts/wire-contract.sh` — real testnet transaction, costs gas, needs
+  `RUSK_WALLET_PWD` set (see `references/testnet-wallet.md`).
+- **Reads** (`account`, `account_meta`, `member_key_bytes`, `next_account_id`,
+  …): a direct RUES HTTP call (`POST /on/contracts:<id>/<fn>`) — free, no
+  gas, no wallet. Request and response bodies are **raw rkyv bytes** with
+  `Content-Type: application/octet-stream` (and a `rusk-version` header),
+  same as `agent-pay-lp`. Hex-encoding the request body is wrong: the node
+  does not hex-decode it, so a hex ASCII `u64` is parsed as a huge id and
+  every `account` lookup returns `None`. See `src/chain.rs`.
+
+## Security model
+
+- Every identity's secret key lives only in this process (in memory) or the
+  local encrypted keystore file (`~/.multisig-tool/identities.dat` by
+  default) — signing happens server-side; the web UI's JS never receives a
+  secret key, only names/public keys/messages/signatures.
+- Keystore: AES-256-GCM, key derived via PBKDF2-HMAC-SHA256 (100k rounds)
+  from a password prompted at startup (or `MULTISIG_TOOL_PWD` env for
+  scripting). Not `rusk-wallet`'s wallet format (that's one BIP39-seed
+  wallet — wrong shape for N independently-named identities); reuses the
+  same class of vetted crates instead of inventing a new format.
+- The local RPC (`serve`) binds `127.0.0.1` only — refuses any other bind
+  address outright (see `rpc::serve`'s check). Every `/api/*` route requires
+  a random bearer token generated at process start
+  (`X-Multisig-Tool-Token` header) — printed once to the terminal, embedded
+  into the served `index.html`. No token, no access (`401`).
+- `--network testnet` / the testnet RUES base URL are hard-coded, not
+  configurable via any flag, env var, or UI control.
+- All shelling-out uses argument arrays (`std::process::Command`), never a
+  shell string — no injection surface from user-typed message text or names.
+
+## Known caveats
+
+- **Signing scheme**: uses post-hardfork secure `sign`/`sign_multisig`.
+  Real testnet is past Aegis/`PreFork` and rejects `sign_insecure` —
+  confirmed for RFQ (`rfq-settlement/README.md`) and for this registry
+  (`member_matches=1, sigs_ok=0` under insecure; secure `change_account`
+  succeeds). `VM::ephemeral()` unit tests in `multisig-registry` still
+  sign with `_insecure` because dusk-vm defaults host-query policy to
+  `HardFork::PreFork` with no public override — see
+  `references/dusk-native/dusk-vm-issue-1-ephemeral-hardfork-policy-unreachable.md`.
+  Matching the test suite's `_insecure` calls in this tool is wrong for
+  live testnet.
+- **RUES free-reads must use raw bodies** (see Scope). An early client bug
+  hex-encoded requests and looked like “stuck `account` not found” /
+  upstream lag; that was not a node or contract-state failure. Historical
+  write-up: [`testnet-read-lag-2026-07-22.md`](testnet-read-lag-2026-07-22.md)
+  (frozen).
+- **Free-read `verify_quorum` / `verify_quorum_aggregate` / `diagnose_quorum`:**
+  with raw RUES these no longer 500, but can report `false` /
+  `sigs_ok=0` for secure signatures that succeed in transaction
+  execution (`change_account`). Do not treat free-read verify as the
+  source of truth for live correctness; use writes + account reads.
+
+## Status
+
+- **v0.1.0 + M2 file blob (2026-07-23)** — topology B: `blob create|show|sign|
+  aggregate|submit-agg` moves a JSON `ProposalBlob` over any BYO channel;
+  combiner aggregates `MultisigSignature` and submits one
+  `verify_quorum_aggregate`. Local AC:
+  `cargo test --test blob_aggregate_local` (builds against registry WASM;
+  PreFork insecure sigs). QR deferred. Collector holds no secret keys.
+- **M3 fingerprint (2026-07-23)** — `blob show` / `blob fingerprint` /
+  `proposal approve` print full-digest hex + 24-word BIP39 mnemonic + safety
+  number for out-of-band compare. Hardware keys: research note only (below).
+- **M1 intent display (2026-07-23)** — structured `proposal create`
+  (target / function / args / deadline), approve recomputes §4a digest and
+  prints **canonical fields first** (refuses on digest mismatch). Web UI
+  mirrors the same gate.
+- Against `multisig-registry` **v0.1.2** and `multisig-proposals` **v0.2.0**
+  (testnet ids in `../../../deployments/testnet.json`; proposals `init_chain_id=2`).
+  Atlas + treasury-data/logic also on testnet — see those READMEs.
+
+| Check | Result |
+|---|---|
+| Registry create/query/change_account | Pass |
+| Quorum submit + outcome / diagnose surfacing | Pass (free-read verify still untrusted) |
+| Scenario web UI (treasury story + walkthrough) | Pass |
+| Proposal create / approve (canonical intent) / finalize+execute | Lab green; live proposals **v0.2.0** deployed+wired 2026-07-23 |
+| Adversarial digest mismatch refuse | Pass (`multisig-encoding` `gate_blob_for_signing`) |
+| Pk-only import + refuse as signer | Pass |
+| File/BYO blob 2-of-3 → aggregate → `verify_quorum_aggregate` | Pass (local `VM::ephemeral`) |
+| Out-of-band full-digest mnemonic / safety-number | Pass (`multisig-encoding` fingerprint tests) |
+
+Frozen investigation of the earlier false alarms:
+[`testnet-read-lag-2026-07-22.md`](testnet-read-lag-2026-07-22.md).
+
+### Multi-person runbook (two machines)
+
+1. Each person: `identity new <name>` (or import the other's pk for council creation).
+2. One operator creates the registry account with everyone's PKs (mix of local + `import-pk`).
+3. Anyone: `proposal create --account N --target <32-byte-hex> --function <name> [--args-hex ...] [--deadline N]`.
+4. Each member on their own machine: `proposal approve --id ID --signer <me>` — tool prints canonical intent and refuses if digest ≠ recomputed.
+5. Anyone: `proposal finalize --id ID` when approvals ≥ threshold (executes `call_raw` on target).
+6. `proposal status --id ID` should show `Executed` (or `Tombstoned`).
+
+Same flow is in the web UI "Multi-person — on-chain proposals" panel.
+
+### Out-of-band fingerprint (M3)
+
+Before signing (topology A approve or topology B `blob sign`), co-signers must
+compare the printed **full** digest fingerprint on a second channel (call,
+Signal, in person) — not via the same machine that handed them the blob:
+
+- `hex` — full `0x` + 64 hex chars
+- `mnemonic` — 24 BIP39 English words over the full 32-byte digest
+- `safety-number` — grouped decimal of all 256 bits
+
+Never trust a short truncation alone (salt-grinding trap). Compromised
+coordinator cannot forge a matching mnemonic for a different intent.
+
+### Hardware keys (research only — no implementation in this plan)
+
+Ledger / similar devices expose BLS12-381 primarily for Ethereum 2.0
+validator paths, not as a general clear-signing surface for arbitrary
+Dusk/Piecrust contract call payloads. Clear-signing limits (what the device
+screen can show vs what our §4a intent needs) are the blocker, not raw key
+custody. Intent rendering stays in this tool for now; hardware adoption is a
+later product decision if device firmware gains usable BLS clear-signing for
+our preimage shape. **No follow-up work in the current suite plan.**
+
+### Monitoring note
+
+Atlas authority / service-repoint changes are timelocked (see `atlas/README.md`).
+Operators should alarm on the change *and* on unexpected silence (Ronin went
+six days undetected). Registry `change_account` remains the membership path
+with built-in nonce replay protection.
+
+## Usage
+
+### Build
+
+```bash
+cd multisig/crates/multisig-tool
+cargo build --release
+```
+
+### CLI
+
+```bash
+export RUSK_WALLET_PWD=...      # see references/testnet-wallet.md
+export MULTISIG_TOOL_PWD=...    # or omit to be prompted
+
+multisig-tool identity new alice
+multisig-tool identity list
+multisig-tool identity export alice
+# On another machine / store: import a foreign member PK (cannot sign):
+# multisig-tool identity import-pk bob <base58-or-hex-pk>
+
+multisig-tool account create --member alice --member bob --threshold 2
+multisig-tool account query 0
+multisig-tool account meta 0
+multisig-tool account keys 0
+multisig-tool account next-id
+
+multisig-tool quorum submit --account 0 --msg "hello" --signer alice --signer bob
+multisig-tool quorum check --account 0 --msg "hello" --signer alice --signer bob
+multisig-tool quorum diagnose --account 0 --msg "hello" --signer alice --signer bob
+multisig-tool quorum-agg submit --account 0 --msg "hello" --signer alice --signer bob
+
+multisig-tool change-account submit --account 0 \
+  --new-member alice --new-member carol --new-threshold 2 \
+  --signer alice --signer bob   # must be a quorum of the CURRENT members
+# optional: --nonce N to bypass account free-read when diagnosing
+
+# Multi-person proposals (after deploy + one-time `proposal init-registry` + `init_chain_id`)
+multisig-tool proposal create --account 0 \
+  --target <32-byte-hex-ContractId> --function set_value --args-hex <rkyv-hex>
+multisig-tool proposal approve --id 0 --signer alice   # prints canonical intent; refuses on digest mismatch
+multisig-tool proposal approve --id 0 --signer bob
+multisig-tool proposal status --id 0
+multisig-tool proposal finalize --id 0
+
+# Topology B — file / BYO channel (QR deferred). Move the JSON between machines.
+multisig-tool blob create --out proposal.json --committee-id 0 --threshold 2 \
+  --target <32-byte-hex> --function milestone_release --args-hex <hex>
+multisig-tool blob show proposal.json
+# Machine A:
+multisig-tool blob sign --file proposal.json --signer alice --out proposal.json
+# Machine B (after receiving the file):
+multisig-tool blob sign --file proposal.json --signer bob --out proposal.json
+multisig-tool blob aggregate proposal.json
+multisig-tool blob submit-agg --file proposal.json --account 0
+```
+
+Writes print `=== fn: tx included/propagated ===` or `=== fn: FAIL (contract panic) ===`
+plus any `Panic: ...` line (governance counters). Quorum submit also runs a
+free-read diagnose/check follow-up and warns when it looks untrusted.
+`--store <path>` (global flag) overrides the default keystore location
+(`~/.multisig-tool/identities.dat`).
+
+### Web UI
+
+```bash
+multisig-tool serve --bind 127.0.0.1:8877
+```
+
+Prints a URL with an access token (`http://127.0.0.1:8877/?token=...`) — the
+token is also embedded directly into the served page, so opening the plain
+URL works too. Or via this repo's preview convention:
+`scripts/run-multisig-tool-native.sh` (wired into `.claude/launch.json` as
+`multisig-tool`, port 8877) — uses a fixed dev password
+(`MULTISIG_TOOL_PWD=local-dev-only`), fine for local dev only.
+
+The UI matches the Agent Pay demo visual language (Literata/Sora, cream/sky)
+framed as a **treasury payout story**: Cast → Form council → Look it up →
+Approve payout → Cheaper verify → Rotate members → Multi-person. A shared
+narrator updates per chapter; **Start example walkthrough** creates
+alice/bob/carol, prefills fields, and steps through the plot. Each chapter
+has a green “Values to enter” card with the field + explanation combined.
+
+## Explicitly out of scope (this pass)
+
+- Marketing/docs static website explaining the tool — separate, later, no
+  signing capability of its own.
+- Dusk Wallet Extension / Dusk Connect `dusk_signMessage` integration as an
+  alternative signer — still unverified whether the real extension
+  implements it and in what byte format.
+- A polished `ratatui` TUI — plain CLI subcommands cover the
+  scriptable/headless path today.

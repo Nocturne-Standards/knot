@@ -1,0 +1,42 @@
+[package]
+name = "multisig-proposals"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+license = "Apache-2.0"
+
+[dependencies]
+dusk-bls12_381 = { version = "=0.14.2", default-features = false }
+rkyv = { version = "=0.7.39", default-features = false, features = ["size_32"] }
+bytecheck = { version = "=0.6.12", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+multisig-encoding = { path = "../multisig-encoding" }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }
+dusk-data-driver = { version = "0.3", optional = true }
+dusk-forge = "0.3.0"
+dusk-bytes = "=0.1.7"
+
+[dev-dependencies]
+dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", features = ["zk"] }
+dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
+dusk-bytes = "=0.1.7"
+rand = { version = "0.8.6", default-features = false }
+
+[features]
+contract = ["dusk-core/abi-dlmalloc"]
+
+data-driver = [
+  "dusk-core/serde",
+  "dep:dusk-data-driver",
+  "dusk-data-driver/wasm-export",
+  "dep:serde",
+  "dusk-bls12_381/serde",
+]
+
+data-driver-js = ["data-driver", "dusk-data-driver/alloc"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
