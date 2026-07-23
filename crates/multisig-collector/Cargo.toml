@@ -1,0 +1,35 @@
+# multisig-collector — untrusted off-chain proposal/partial-signature relay
+# (Safe Transaction Service analogue). Holds serialized blobs only: no
+# keystore, no BLS signing, no wallet, no chain submit. See ../../README.md
+# licensing matrix and LICENSING.md for the commercial-license option.
+
+[package]
+name = "multisig-collector"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "AGPL-3.0-only"
+publish = false
+description = "Untrusted off-chain signature/proposal collector for the multisig suite"
+
+[[bin]]
+name = "multisig-collector"
+path = "src/main.rs"
+
+[lib]
+name = "multisig_collector"
+path = "src/lib.rs"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tower = { version = "0.5", features = ["util"] }

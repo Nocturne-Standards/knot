@@ -5,6 +5,7 @@ members = [
     "crates/multisig-registry",
     "crates/multisig-proposals",
     "crates/multisig-tool",
+    "crates/multisig-collector",
 ]
 
 [workspace.package]
