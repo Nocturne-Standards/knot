@@ -34,11 +34,20 @@ impl Contract {
     }
 }
 
+/// Walk up from `crates/multisig-tool` until `deployments/testnet.json` is found
+/// (sme_platform root). Pre-nest this was one `parent()`; nested workspace needs
+/// `tool → crates → multisig → repo`.
 fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("multisig-tool is a subdirectory of the sme_platform repo")
-        .to_path_buf()
+    let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for dir in start.ancestors() {
+        if dir.join("deployments/testnet.json").is_file() {
+            return dir.to_path_buf();
+        }
+    }
+    panic!(
+        "could not find deployments/testnet.json walking up from {}",
+        start.display()
+    );
 }
 
 pub fn contract_id_hex(which: Contract) -> Result<String> {
