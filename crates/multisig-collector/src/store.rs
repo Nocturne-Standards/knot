@@ -33,11 +33,12 @@ pub struct Store {
 pub enum CreateOutcome {
     /// New row inserted.
     Created,
-    /// An identical (content-addressed) proposal already existed — create
-    /// is idempotent for byte-identical bodies.
+    /// A proposal with the same identity (version/intent/digest/threshold)
+    /// already existed — create is idempotent even if partials have since
+    /// been appended (create payloads always arrive with `partials: []`).
     AlreadyExists,
-    /// A row already exists under this id with a **different** body. Since
-    /// `id` = hash of `signed_digest`, this can only happen on a hash
+    /// A row already exists under this id with a **different** identity.
+    /// Since `id` = hash of `signed_digest`, this can only happen on a hash
     /// collision or a client bug (e.g. resubmitting with mutated intent
     /// fields under a stale digest) — never treated as a normal path.
     Conflict,
@@ -128,7 +129,10 @@ impl Store {
         if let Some(existing_body) = existing {
             let existing_dto: ProposalDto =
                 serde_json::from_str(&existing_body).context("parse stored proposal body")?;
-            return Ok(if &existing_dto == dto {
+            // Idempotency ignores `partials`: create always arrives with an
+            // empty list, while the store may already hold co-signer partials.
+            // Conflict only when intent/digest/threshold/version disagree.
+            return Ok(if proposal_identity_eq(&existing_dto, dto) {
                 CreateOutcome::AlreadyExists
             } else {
                 CreateOutcome::Conflict
@@ -299,6 +303,14 @@ fn now_unix() -> i64 {
         .unwrap_or(0)
 }
 
+/// Proposal identity for create idempotency — ignores `partials`.
+fn proposal_identity_eq(a: &ProposalDto, b: &ProposalDto) -> bool {
+    a.version == b.version
+        && a.intent == b.intent
+        && a.signed_digest == b.signed_digest
+        && a.threshold == b.threshold
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,6 +434,42 @@ mod tests {
         )
         .then_some(())
         .expect("second identical create should be AlreadyExists");
+    }
+
+    #[test]
+    fn create_after_partial_append_is_still_idempotent() {
+        let store = Store::open_in_memory().expect("open store");
+        let digest = "0x".to_string() + &"ab".repeat(32);
+        let id = digest.trim_start_matches("0x").to_string();
+        let dto = sample_dto(&digest);
+
+        matches!(
+            store.create_proposal(&id, &digest, &dto).unwrap(),
+            CreateOutcome::Created
+        )
+        .then_some(())
+        .expect("first create");
+
+        let partial = PartialDto {
+            signer_pk: "0x".to_string() + &"11".repeat(96),
+            sig: "0x".to_string() + &"22".repeat(48),
+        };
+        matches!(
+            store.append_partial(&id, partial).unwrap(),
+            AppendOutcome::Appended(_)
+        )
+        .then_some(())
+        .expect("append");
+
+        // Re-create with empty partials (normal push payload) must not 409.
+        matches!(
+            store.create_proposal(&id, &digest, &dto).unwrap(),
+            CreateOutcome::AlreadyExists
+        )
+        .then_some(())
+        .expect("re-create after partials should be AlreadyExists");
+        let fetched = store.get_proposal(&id).unwrap().expect("still there");
+        assert_eq!(fetched.partials.len(), 1, "partials must be preserved");
     }
 
     #[test]

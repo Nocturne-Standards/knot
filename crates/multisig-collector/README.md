@@ -24,8 +24,9 @@ only; VPS deploy is an operator TODO (see deploy runbook).
 | `DELETE` | `/v1/party/:pk` | Leave roster |
 
 `id` = lowercase hex of `signed_digest` (32 bytes → 64 hex chars, no `0x`
-prefix) — content-addressed, so re-creating an identical proposal is
-idempotent and creating a different body under a colliding digest is a 409.
+prefix) — content-addressed. Re-creating a proposal with the same identity
+(version/intent/digest/threshold) is idempotent even after partials have been
+appended; a different identity under the same digest id is a 409.
 Partials are appended by rewriting the proposal's whole `body_json` column
 under the store's connection mutex (never a separate `partials` table) —
 this makes "append only, `signed_digest` never mutates" a structural
