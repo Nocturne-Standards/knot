@@ -76,6 +76,18 @@ submission goes two ways:
 
 ## Status
 
+- **Collector client (2026-07-23)** — `blob push|pull` and `blob sign
+  --collector <url> --id <id>` talk to `multisig-collector` over plain HTTP
+  (no `multisig-collector` Cargo dependency — see `src/collector_client.rs`
+  module doc). `party list|signup|leave` drives the same server's
+  party-finder roster. Credentials are HTTP Basic Auth from
+  `MULTISIG_COLLECTOR_URL`/`_USER`/`_PASSWORD` env vars (no `--user`/
+  `--password` flags, so a password never lands in shell history). The
+  collector never sees a secret key or an unsigned digest it could forge —
+  every signer still gates+recomputes the §4a digest locally before signing.
+  Local AC: `cargo test --test collector_roundtrip` (spawns the real
+  `multisig-collector` binary as its own process, drives a 2-of-3
+  push → sign → sign → pull → aggregate over real HTTP).
 - **v0.1.0 + M2 file blob (2026-07-23)** — topology B: `blob create|show|sign|
   aggregate|submit-agg` moves a JSON `ProposalBlob` over any BYO channel;
   combiner aggregates `MultisigSignature` and submits one
@@ -203,6 +215,20 @@ multisig-tool blob sign --file proposal.json --signer alice --out proposal.json
 multisig-tool blob sign --file proposal.json --signer bob --out proposal.json
 multisig-tool blob aggregate proposal.json
 multisig-tool blob submit-agg --file proposal.json --account 0
+
+# Topology B via multisig-collector (untrusted relay — no keys held server-side).
+export MULTISIG_COLLECTOR_URL=http://127.0.0.1:8899
+export MULTISIG_COLLECTOR_USER=...       # optional; omit for no Basic Auth
+export MULTISIG_COLLECTOR_PASSWORD=...   # optional
+multisig-tool blob push --file proposal.json           # prints the content-addressed id
+multisig-tool blob sign --id <id> --signer alice        # pulls, gates, signs, POSTs the partial
+multisig-tool blob sign --id <id> --signer bob --out proposal.json  # --out is optional
+multisig-tool blob pull --id <id> --out proposal.json
+multisig-tool blob aggregate proposal.json
+
+multisig-tool party signup --name alice --pk <base58-or-hex-pk>
+multisig-tool party list
+multisig-tool party leave --pk <base58-or-hex-pk>
 ```
 
 Writes print `=== fn: tx included/propagated ===` or `=== fn: FAIL (contract panic) ===`

@@ -6,3 +6,4 @@
 
 pub mod blob;
 pub mod bls;
+pub mod collector_client;

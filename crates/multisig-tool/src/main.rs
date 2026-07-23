@@ -22,7 +22,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-use multisig_tool::{blob, bls};
+use multisig_tool::{blob, bls, collector_client};
 
 use proposals_types::call_types::{
     ApproveArgs, ProposalStatus, ProposalView, ProposeArgs,
@@ -79,6 +79,11 @@ enum Cmd {
     Blob {
         #[command(subcommand)]
         cmd: BlobCmd,
+    },
+    /// Party-finder roster on the collector (off-chain rendezvous only).
+    Party {
+        #[command(subcommand)]
+        cmd: PartyCmd,
     },
     /// Serve the local web UI + RPC on 127.0.0.1.
     Serve {
@@ -276,13 +281,26 @@ enum BlobCmd {
         file: PathBuf,
     },
     /// Gate + add one local `sign_multisig` partial; write updated file.
+    ///
+    /// Local mode: `--file`/`--out` (unchanged).
+    ///
+    /// Collector mode: `--collector` + `--id` pull the proposal, sign, and
+    /// POST the partial back — `--out` then optionally writes a local copy
+    /// of the server's merged blob too.
     Sign {
         #[arg(long)]
-        file: PathBuf,
+        file: Option<PathBuf>,
         #[arg(long)]
         signer: String,
         #[arg(long)]
-        out: PathBuf,
+        out: Option<PathBuf>,
+        /// Collector base URL (falls back to MULTISIG_COLLECTOR_URL). Presence
+        /// of this flag (or the env var) switches to collector mode.
+        #[arg(long)]
+        collector: Option<String>,
+        /// Proposal id on the collector — required in collector mode.
+        #[arg(long)]
+        id: Option<String>,
     },
     /// Aggregate partials (threshold must be met); print keys + aggregate hex.
     Aggregate {
@@ -298,6 +316,50 @@ enum BlobCmd {
     /// Print out-of-band full-digest fingerprint (hex + 24-word mnemonic).
     Fingerprint {
         file: PathBuf,
+    },
+    /// POST a local blob file to the collector; prints the content-addressed id.
+    Push {
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(long)]
+        collector: Option<String>,
+    },
+    /// GET a proposal from the collector by id; writes it as a local blob file.
+    Pull {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        collector: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum PartyCmd {
+    /// List the party-finder roster.
+    List {
+        #[arg(long)]
+        collector: Option<String>,
+    },
+    /// Sign up (or refresh, if `--pk` already present) on the roster.
+    Signup {
+        #[arg(long)]
+        name: String,
+        /// Base58 or 96-byte hex compressed BLS public key.
+        #[arg(long)]
+        pk: String,
+        #[arg(long)]
+        note: Option<String>,
+        #[arg(long)]
+        collector: Option<String>,
+    },
+    /// Remove a roster row by public key.
+    Leave {
+        #[arg(long)]
+        pk: String,
+        #[arg(long)]
+        collector: Option<String>,
     },
 }
 
@@ -816,20 +878,67 @@ async fn main() -> Result<()> {
                 let proposal = file_blob.to_proposal_blob()?;
                 blob::print_canonical_intent(&proposal)?;
             }
-            BlobCmd::Sign { file, signer, out } => {
+            BlobCmd::Sign {
+                file,
+                signer,
+                out,
+                collector,
+                id,
+            } => {
                 let (identities, _) = load_store(&store_path)?;
                 let identity = find_identity(&identities, &signer)?;
                 let sk = identity.require_sk()?;
-                let file_blob = blob::read_file(&file)?;
-                let mut proposal = file_blob.to_proposal_blob()?;
-                blob::add_partial(&mut proposal, sk, &identity.pk)?;
-                blob::write_file(&out, &blob::BlobFile::from_proposal_blob(&proposal))?;
-                println!(
-                    "added partial from {signer}; partials={}/{}",
-                    proposal.partials.len(),
-                    proposal.threshold
-                );
-                println!("wrote {}", out.display());
+
+                let use_collector = collector.is_some()
+                    || std::env::var(collector_client::URL_ENV).is_ok();
+                if use_collector {
+                    let id = id.ok_or_else(|| {
+                        anyhow::anyhow!("--id is required in collector mode (with --collector)")
+                    })?;
+                    if file.is_some() {
+                        bail!("--file is ignored in collector mode — use --id instead");
+                    }
+                    let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
+                    let pulled = client.pull(&id).await?;
+                    let mut proposal = pulled.to_proposal_blob()?;
+                    blob::add_partial(&mut proposal, sk, &identity.pk)?;
+                    let new_partial = proposal
+                        .partials
+                        .last()
+                        .expect("add_partial just pushed one")
+                        .clone();
+                    let partial_file = blob::PartialFile {
+                        signer_pk: format!("0x{}", hex::encode(new_partial.signer_pk)),
+                        sig: format!("0x{}", hex::encode(&new_partial.sig)),
+                    };
+                    let updated = client.append_partial(&id, &partial_file).await?;
+                    println!(
+                        "added partial from {signer} via collector; partials={}/{}",
+                        updated.partials.len(),
+                        updated.threshold
+                    );
+                    if let Some(out) = out {
+                        blob::write_file(&out, &updated)?;
+                        println!("wrote {}", out.display());
+                    }
+                } else {
+                    let file = file.ok_or_else(|| {
+                        anyhow::anyhow!("--file is required in local mode (or use --collector/--id)")
+                    })?;
+                    let out = out.ok_or_else(|| {
+                        anyhow::anyhow!("--out is required in local mode (with --file)")
+                    })?;
+                    let file_blob = blob::read_file(&file)?;
+                    let mut proposal = file_blob.to_proposal_blob()?;
+                    blob::add_partial(&mut proposal, sk, &identity.pk)?;
+                    blob::write_file(&out, &blob::BlobFile::from_proposal_blob(&proposal))?;
+                    println!(
+                        "added partial from {signer}; partials={}/{}",
+                        proposal.partials.len(),
+                        proposal.threshold
+                    );
+                    println!("wrote {}", out.display());
+                }
             }
             BlobCmd::Aggregate { file } => {
                 use dusk_bytes::Serializable;
@@ -861,6 +970,45 @@ async fn main() -> Result<()> {
                 let file_blob = blob::read_file(&file)?;
                 let proposal = file_blob.to_proposal_blob()?;
                 blob::print_canonical_intent(&proposal)?;
+            }
+            BlobCmd::Push { file, collector } => {
+                let file_blob = blob::read_file(&file)?;
+                // Gate locally first — refuse to push a blob whose stored
+                // digest doesn't match its own intent, same check `show` does.
+                blob::print_canonical_intent(&file_blob.to_proposal_blob()?)?;
+                let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
+                let resp = client.push(&file_blob).await?;
+                println!("pushed: id={} signed_digest={}", resp.id, resp.signed_digest);
+            }
+            BlobCmd::Pull { id, out, collector } => {
+                let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
+                let file_blob = client.pull(&id).await?;
+                let proposal = file_blob.to_proposal_blob()?;
+                blob::print_canonical_intent(&proposal)?;
+                blob::write_file(&out, &file_blob)?;
+                println!("wrote {}", out.display());
+            }
+        },
+
+        Cmd::Party { cmd } => match cmd {
+            PartyCmd::List { collector } => {
+                let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
+                let members = client.list_party().await?;
+                println!("party roster: {} member(s)", members.len());
+                for m in &members {
+                    let note = m.note.as_deref().unwrap_or("");
+                    println!("  {} pk={} note={note}", m.name, m.pk);
+                }
+            }
+            PartyCmd::Signup { name, pk, note, collector } => {
+                let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
+                let member = client.signup_party(&name, &pk, note.as_deref()).await?;
+                println!("signed up: {} pk={}", member.name, member.pk);
+            }
+            PartyCmd::Leave { pk, collector } => {
+                let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
+                client.leave_party(&pk).await?;
+                println!("left party roster: pk={pk}");
             }
         },
 
