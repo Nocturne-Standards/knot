@@ -13,7 +13,7 @@ Signed bytes are the §4a digest from [`multisig-encoding`](../multisig-encoding
   execute path).
 - **Testnet (2026-07-23):** v0.2.0 deployed; `init_registry` → live
   `multisig-registry` v0.1.2; `init_chain_id` = `2` (DuskDS testnet). Id in
-  `../deployments/testnet.json`.
+  `../../../deployments/testnet.json`.
 - Unit tests use `sign_insecure` (PreFork). Live clients must use secure `sign`.
 
 ## Functions
@@ -36,5 +36,5 @@ cd ../multisig-proposals && make test
 
 ## Deploy
 
-**Live on testnet since 2026-07-23** (see Status above and `../deployments/testnet.json`).
+**Live on testnet since 2026-07-23** (see Status above and `../../../deployments/testnet.json`).
 When redeploying, bump `deployments/testnet.json` and re-`init_registry` / `init_chain_id`.
