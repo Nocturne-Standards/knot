@@ -62,6 +62,54 @@ pub struct ProposalSummary {
     pub created_at: i64,
 }
 
+/// `POST /v1/party` request body — sign up (or refresh) on the party-finder
+/// roster. `pk` accepts either hex (with or without `0x`) or base58, mirroring
+/// `multisig-tool::keystore::parse_pk`'s accepted formats; this crate never
+/// constructs a `BlsPublicKey` from it (no `dusk_core` dependency — see the
+/// module doc in `lib.rs`), it only validates the decoded length is 96 bytes.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PartySignupDto {
+    pub name: String,
+    pub pk: String,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// Roster row for `GET /v1/party`. `pk` is always the canonical
+/// `"0x"+lowercase-hex` form (see [`normalize_pk`]), regardless of which
+/// format the signup request used.
+#[derive(Debug, Clone, Serialize)]
+pub struct PartyMemberDto {
+    pub name: String,
+    pub pk: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    pub joined_at: i64,
+}
+
+/// Decodes `s` as hex (optionally `0x`-prefixed) or base58, whichever
+/// matches, and checks the result is exactly [`PK_BYTES`] (96) bytes long.
+/// Returns the canonical `"0x"+lowercase-hex` form on success. A string of
+/// only hex digits is treated as hex (never base58 — base58 excludes `0`,
+/// `O`, `I`, `l` but not the other 55 alphanumerics, so this only matters
+/// for all-hex-digit strings, which decode losslessly as hex anyway).
+pub fn normalize_pk(s: &str) -> Result<String, String> {
+    let t = s.trim();
+    let bytes = if t.starts_with("0x") || t.starts_with("0X") {
+        hex::decode(&t[2..]).map_err(|e| format!("invalid hex: {e}"))?
+    } else if t.chars().all(|c| c.is_ascii_hexdigit()) {
+        hex::decode(t).map_err(|e| format!("invalid hex: {e}"))?
+    } else {
+        bs58::decode(t)
+            .into_vec()
+            .map_err(|e| format!("invalid base58: {e}"))?
+    };
+    if bytes.len() != PK_BYTES {
+        return Err(format!("expected {PK_BYTES} bytes, got {}", bytes.len()));
+    }
+    Ok(format!("0x{}", hex::encode(bytes)))
+}
+
 /// Strips an optional `0x`/`0X` prefix, hex-decodes, checks the exact byte
 /// length, and returns a canonical `"0x" + lowercase-hex"` string. Used for
 /// `signed_digest` (32 bytes) and `signer_pk` (96 bytes) — the two fields
@@ -117,5 +165,33 @@ mod tests {
     #[test]
     fn digest_to_id_strips_prefix() {
         assert_eq!(digest_to_id("0xabcd"), "abcd");
+    }
+
+    #[test]
+    fn normalize_pk_accepts_hex_with_and_without_prefix() {
+        let hex96 = "11".repeat(96);
+        let got_bare = normalize_pk(&hex96).unwrap();
+        let got_prefixed = normalize_pk(&format!("0x{hex96}")).unwrap();
+        assert_eq!(got_bare, format!("0x{hex96}"));
+        assert_eq!(got_bare, got_prefixed);
+    }
+
+    #[test]
+    fn normalize_pk_accepts_base58() {
+        let hex96 = "ab".repeat(96);
+        let bytes = hex::decode(&hex96).unwrap();
+        let b58 = bs58::encode(&bytes).into_string();
+        let got = normalize_pk(&b58).unwrap();
+        assert_eq!(got, format!("0x{hex96}"));
+    }
+
+    #[test]
+    fn normalize_pk_rejects_wrong_length() {
+        assert!(normalize_pk("abcd").is_err());
+    }
+
+    #[test]
+    fn normalize_pk_rejects_garbage() {
+        assert!(normalize_pk("not a valid pk at all!!").is_err());
     }
 }

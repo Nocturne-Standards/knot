@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) 2026 Leon Frenzel
 
-//! SQLite-backed store: health scaffold (Task 4) plus the `proposals` table
-//! (Task 5). Party-roster tables land in Task 6.
+//! SQLite-backed store: health scaffold (Task 4), the `proposals` table
+//! (Task 5), and the `party` roster table (Task 6).
 //!
 //! `proposals` holds one row per content-addressed proposal id. Partials
 //! are **not** a separate table — per the task brief we keep the whole
@@ -20,7 +20,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::dto::{PartialDto, ProposalDto, ProposalSummary};
+use crate::dto::{PartialDto, PartyMemberDto, ProposalDto, ProposalSummary};
 
 /// Wraps a single `rusqlite::Connection` behind a mutex — `Connection` is
 /// `Send` but not `Sync`, and axum handlers need a `Sync` shared state.
@@ -92,9 +92,15 @@ impl Store {
                 digest TEXT NOT NULL,
                 body_json TEXT NOT NULL,
                 created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS party (
+                pk TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                note TEXT,
+                joined_at INTEGER NOT NULL
             );",
         )
-        .context("create proposals table")?;
+        .context("create proposals and party tables")?;
         Ok(())
     }
 
@@ -220,6 +226,69 @@ impl Store {
         )
         .context("update proposal body")?;
         Ok(AppendOutcome::Appended(dto))
+    }
+
+    /// Inserts a new roster row under `pk`, or — if `pk` already has a row —
+    /// overwrites its `name`/`note` while leaving `joined_at` at the
+    /// original signup time (a re-signup refreshes displayed info, it
+    /// doesn't reset "when this person joined").
+    pub fn upsert_party_member(
+        &self,
+        pk: &str,
+        name: &str,
+        note: Option<&str>,
+    ) -> Result<PartyMemberDto> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let existing_joined_at: Option<i64> = conn
+            .query_row(
+                "SELECT joined_at FROM party WHERE pk = ?1",
+                params![pk],
+                |row| row.get(0),
+            )
+            .optional()
+            .context("query existing party member")?;
+        let joined_at = existing_joined_at.unwrap_or_else(now_unix);
+        conn.execute(
+            "INSERT INTO party (pk, name, note, joined_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(pk) DO UPDATE SET name = excluded.name, note = excluded.note",
+            params![pk, name, note, joined_at],
+        )
+        .context("upsert party member")?;
+        Ok(PartyMemberDto {
+            name: name.to_string(),
+            pk: pk.to_string(),
+            note: note.map(str::to_string),
+            joined_at,
+        })
+    }
+
+    /// Roster for `GET /v1/party`, earliest signup first.
+    pub fn list_party(&self) -> Result<Vec<PartyMemberDto>> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let mut stmt = conn
+            .prepare("SELECT pk, name, note, joined_at FROM party ORDER BY joined_at ASC, pk ASC")
+            .context("prepare party list query")?;
+        let mut rows = stmt.query([]).context("run party list query")?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next().context("step party list query")? {
+            out.push(PartyMemberDto {
+                pk: row.get(0)?,
+                name: row.get(1)?,
+                note: row.get(2)?,
+                joined_at: row.get(3)?,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Removes the roster row under `pk`. Returns `true` if a row was
+    /// deleted, `false` if `pk` wasn't on the roster.
+    pub fn remove_party_member(&self, pk: &str) -> Result<bool> {
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        let affected = conn
+            .execute("DELETE FROM party WHERE pk = ?1", params![pk])
+            .context("delete party member")?;
+        Ok(affected > 0)
     }
 }
 
@@ -376,6 +445,58 @@ mod tests {
         )
         .then_some(())
         .expect("second create with different body under same id should be Conflict");
+    }
+
+    #[test]
+    fn party_signup_visible_on_second_list() {
+        let store = Store::open_in_memory().expect("open store");
+        let pk = "0x".to_string() + &"11".repeat(96);
+
+        store
+            .upsert_party_member(&pk, "Alice", Some("first signup"))
+            .expect("upsert");
+        let first_list = store.list_party().expect("list");
+        assert_eq!(first_list.len(), 1);
+        assert_eq!(first_list[0].name, "Alice");
+
+        let second_list = store.list_party().expect("list again");
+        assert_eq!(second_list.len(), 1);
+        assert_eq!(second_list[0].pk, pk);
+    }
+
+    #[test]
+    fn party_upsert_updates_name_and_keeps_joined_at() {
+        let store = Store::open_in_memory().expect("open store");
+        let pk = "0x".to_string() + &"22".repeat(96);
+
+        let first = store
+            .upsert_party_member(&pk, "Alice", None)
+            .expect("first upsert");
+        let second = store
+            .upsert_party_member(&pk, "Alice Renamed", Some("now with a note"))
+            .expect("second upsert");
+
+        assert_eq!(second.name, "Alice Renamed");
+        assert_eq!(second.note.as_deref(), Some("now with a note"));
+        assert_eq!(second.joined_at, first.joined_at);
+
+        let list = store.list_party().expect("list");
+        assert_eq!(list.len(), 1, "upsert must not create a duplicate row");
+        assert_eq!(list[0].name, "Alice Renamed");
+    }
+
+    #[test]
+    fn party_remove_by_pk() {
+        let store = Store::open_in_memory().expect("open store");
+        let pk = "0x".to_string() + &"33".repeat(96);
+        store.upsert_party_member(&pk, "Bob", None).expect("upsert");
+
+        assert!(store.remove_party_member(&pk).expect("remove"));
+        assert!(store.list_party().expect("list").is_empty());
+        assert!(
+            !store.remove_party_member(&pk).expect("remove again"),
+            "removing an already-absent pk returns false, not an error"
+        );
     }
 
     fn tempfile_dir() -> std::path::PathBuf {

@@ -117,3 +117,70 @@ async fn proposal_lifecycle_over_real_http() {
     assert_eq!(arr[0]["id"], id);
     assert_eq!(arr[0]["partials_count"], 1);
 }
+
+/// Real-listener coverage for the party-finder roster: signup, upsert-by-pk,
+/// list, and leave — same "actual HTTP, not `oneshot`" rationale as above.
+#[tokio::test]
+async fn party_roster_lifecycle_over_real_http() {
+    let store = Store::open_in_memory().expect("open in-memory sqlite store");
+    let state = AppState::new(store);
+    let app = multisig_collector::api::router(state);
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind ephemeral port");
+    let addr = listener.local_addr().expect("local addr");
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("serve");
+    });
+
+    let base = format!("http://{addr}");
+    let client = reqwest::Client::new();
+    let pk = format!("0x{}", "55".repeat(96));
+
+    let signup_resp = client
+        .post(format!("{base}/v1/party"))
+        .json(&serde_json::json!({ "name": "Alice", "pk": pk, "note": "demo" }))
+        .send()
+        .await
+        .expect("POST /v1/party");
+    assert_eq!(signup_resp.status(), reqwest::StatusCode::OK);
+
+    let update_resp = client
+        .post(format!("{base}/v1/party"))
+        .json(&serde_json::json!({ "name": "Alice Renamed", "pk": pk }))
+        .send()
+        .await
+        .expect("POST /v1/party (upsert)");
+    assert_eq!(update_resp.status(), reqwest::StatusCode::OK);
+
+    let list_resp = client
+        .get(format!("{base}/v1/party"))
+        .send()
+        .await
+        .expect("GET /v1/party");
+    assert_eq!(list_resp.status(), reqwest::StatusCode::OK);
+    let list: serde_json::Value = list_resp.json().await.expect("parse party list body");
+    let arr = list.as_array().expect("party list is an array");
+    assert_eq!(arr.len(), 1, "upsert must not duplicate the roster row");
+    assert_eq!(arr[0]["name"], "Alice Renamed");
+    assert_eq!(arr[0]["pk"], pk);
+
+    let delete_resp = client
+        .delete(format!("{base}/v1/party/{pk}"))
+        .send()
+        .await
+        .expect("DELETE /v1/party/:pk");
+    assert_eq!(delete_resp.status(), reqwest::StatusCode::NO_CONTENT);
+
+    let list_after_delete: serde_json::Value = client
+        .get(format!("{base}/v1/party"))
+        .send()
+        .await
+        .expect("GET /v1/party after delete")
+        .json()
+        .await
+        .expect("parse party list body");
+    assert!(list_after_delete.as_array().unwrap().is_empty());
+}

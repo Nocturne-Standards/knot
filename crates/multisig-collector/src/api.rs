@@ -1,24 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) 2026 Leon Frenzel
 
-//! HTTP routes: `GET /v1/health` plus the proposal/partial relay surface
-//! (`/v1/proposals`, `/v1/proposals/:id`, `/v1/proposals/:id/partials`).
-//! `/v1/party` lands in Task 6.
+//! HTTP routes: `GET /v1/health`, the proposal/partial relay surface
+//! (`/v1/proposals`, `/v1/proposals/:id`, `/v1/proposals/:id/partials`), and
+//! the party-finder roster (`/v1/party`, `/v1/party/:pk`).
 //!
 //! This module never imports `SecretKey`/`sign_multisig` or `dusk_core` —
 //! it only hex-decodes `signed_digest`/`signer_pk` far enough to validate
 //! length and normalize case; it never verifies a signature or recomputes
 //! the §4a digest (that anti-blind-signing check stays in `multisig-tool`,
-//! which is trusted with keys — see `lib.rs` module doc).
+//! which is trusted with keys — see `lib.rs` module doc). The party roster
+//! is pure off-chain rendezvous (name + pk + note) — it authorizes nothing.
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde_json::json;
 
-use crate::dto::{digest_to_id, normalize_hex, PartialDto, ProposalDto, DIGEST_BYTES, PK_BYTES};
+use crate::dto::{
+    digest_to_id, normalize_hex, normalize_pk, PartialDto, PartySignupDto, ProposalDto,
+    DIGEST_BYTES, PK_BYTES,
+};
 use crate::store::{AppendOutcome, CreateOutcome};
 use crate::AppState;
 
@@ -29,6 +33,8 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/proposals", post(create_proposal).get(list_proposals))
         .route("/v1/proposals/{id}", get(get_proposal))
         .route("/v1/proposals/{id}/partials", post(append_partial))
+        .route("/v1/party", get(list_party).post(signup_party))
+        .route("/v1/party/{pk}", delete(leave_party))
         .with_state(state)
 }
 
@@ -121,6 +127,46 @@ async fn append_partial(
             StatusCode::CONFLICT,
             "this signer_pk already has a partial on this proposal",
         ),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+async fn list_party(State(state): State<AppState>) -> Response {
+    match state.store.list_party() {
+        Ok(members) => Json(members).into_response(),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+async fn signup_party(
+    State(state): State<AppState>,
+    Json(dto): Json<PartySignupDto>,
+) -> Response {
+    let pk = match normalize_pk(&dto.pk) {
+        Ok(pk) => pk,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("pk: {e}")),
+    };
+    if dto.name.trim().is_empty() {
+        return error_response(StatusCode::BAD_REQUEST, "name must not be empty");
+    }
+
+    match state
+        .store
+        .upsert_party_member(&pk, dto.name.trim(), dto.note.as_deref())
+    {
+        Ok(member) => Json(member).into_response(),
+        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+async fn leave_party(State(state): State<AppState>, Path(pk): Path<String>) -> Response {
+    let pk = match normalize_pk(&pk) {
+        Ok(pk) => pk,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("pk: {e}")),
+    };
+    match state.store.remove_party_member(&pk) {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => error_response(StatusCode::NOT_FOUND, "no party member with this pk"),
         Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }
@@ -369,5 +415,187 @@ mod tests {
             .unwrap();
         let fetched = body_json(get_resp).await;
         assert_eq!(fetched["partials"].as_array().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn party_signup_visible_on_second_list_call() {
+        let store = Store::open_in_memory().expect("open store");
+        let state = AppState::new(store);
+        let app = router(state);
+
+        let pk = format!("0x{}", "11".repeat(96));
+        let signup_resp = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/v1/party",
+                json!({ "name": "Alice", "pk": pk, "note": "council lead" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(signup_resp.status(), StatusCode::OK);
+        let signed_up = body_json(signup_resp).await;
+        assert_eq!(signed_up["name"], "Alice");
+        assert_eq!(signed_up["pk"], pk);
+        assert_eq!(signed_up["note"], "council lead");
+
+        for _ in 0..2 {
+            let list_resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/v1/party")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(list_resp.status(), StatusCode::OK);
+            let list = body_json(list_resp).await;
+            let arr = list.as_array().unwrap();
+            assert_eq!(arr.len(), 1);
+            assert_eq!(arr[0]["name"], "Alice");
+            assert_eq!(arr[0]["pk"], pk);
+        }
+    }
+
+    #[tokio::test]
+    async fn party_upsert_by_pk_updates_name_without_duplicating() {
+        let store = Store::open_in_memory().expect("open store");
+        let state = AppState::new(store);
+        let app = router(state);
+
+        let pk = format!("0x{}", "22".repeat(96));
+
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                "/v1/party",
+                json!({ "name": "Bob", "pk": pk }),
+            ))
+            .await
+            .unwrap();
+
+        let update_resp = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/v1/party",
+                json!({ "name": "Bob Renamed", "pk": pk }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(update_resp.status(), StatusCode::OK);
+        let updated = body_json(update_resp).await;
+        assert_eq!(updated["name"], "Bob Renamed");
+
+        let list_resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/party")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let list = body_json(list_resp).await;
+        let arr = list.as_array().unwrap();
+        assert_eq!(arr.len(), 1, "upsert must not create a duplicate roster row");
+        assert_eq!(arr[0]["name"], "Bob Renamed");
+    }
+
+    #[tokio::test]
+    async fn party_signup_accepts_base58_pk() {
+        let store = Store::open_in_memory().expect("open store");
+        let state = AppState::new(store);
+        let app = router(state);
+
+        let hex96 = "33".repeat(96);
+        let bytes = hex::decode(&hex96).unwrap();
+        let pk_b58 = bs58::encode(&bytes).into_string();
+
+        let signup_resp = app
+            .oneshot(json_request(
+                "POST",
+                "/v1/party",
+                json!({ "name": "Carol", "pk": pk_b58 }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(signup_resp.status(), StatusCode::OK);
+        let signed_up = body_json(signup_resp).await;
+        assert_eq!(signed_up["pk"], format!("0x{hex96}"));
+    }
+
+    #[tokio::test]
+    async fn party_signup_rejects_bad_pk() {
+        let store = Store::open_in_memory().expect("open store");
+        let state = AppState::new(store);
+        let app = router(state);
+
+        let resp = app
+            .oneshot(json_request(
+                "POST",
+                "/v1/party",
+                json!({ "name": "Eve", "pk": "not-a-valid-key" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn party_delete_removes_member_then_404s_on_repeat() {
+        let store = Store::open_in_memory().expect("open store");
+        let state = AppState::new(store);
+        let app = router(state);
+
+        let pk = format!("0x{}", "44".repeat(96));
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                "/v1/party",
+                json!({ "name": "Dave", "pk": pk }),
+            ))
+            .await
+            .unwrap();
+
+        let delete_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/v1/party/{pk}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(delete_resp.status(), StatusCode::NO_CONTENT);
+
+        let list_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/party")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let list = body_json(list_resp).await;
+        assert!(list.as_array().unwrap().is_empty());
+
+        let second_delete_resp = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/v1/party/{pk}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(second_delete_resp.status(), StatusCode::NOT_FOUND);
     }
 }
