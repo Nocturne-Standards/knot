@@ -3,7 +3,7 @@
 
 //! `multisig-collector` binary entry: reads `MULTISIG_COLLECTOR_BIND` /
 //! `MULTISIG_COLLECTOR_DB`, opens the SQLite store, and serves the axum
-//! router. Health-only surface this task — see `lib.rs`.
+//! router — see `lib.rs` / `api.rs` for the route surface.
 
 use std::path::PathBuf;
 

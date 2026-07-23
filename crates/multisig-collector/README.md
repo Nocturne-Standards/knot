@@ -9,9 +9,24 @@ never submits on-chain. See
 
 ## Status
 
-**2026-07-23 — health + SQLite scaffold only.** `POST/GET /v1/proposals`,
-`/v1/proposals/:id/partials`, and `/v1/party` are **not implemented yet** —
-tracked as follow-up tasks. Only `GET /v1/health` exists today.
+**2026-07-23 — proposals + partials API implemented.** `/v1/party` is not
+implemented yet — tracked as a follow-up task.
+
+| Method | Path | Behavior |
+|---|---|---|
+| `GET` | `/v1/health` | Liveness |
+| `POST` | `/v1/proposals` | Create; body = blob JSON, `partials` ignored → `{ "id", "signed_digest" }` |
+| `GET` | `/v1/proposals` | List summaries (`id`, `signed_digest`, `threshold`, `partials_count`, `created_at`) |
+| `GET` | `/v1/proposals/:id` | Full blob |
+| `POST` | `/v1/proposals/:id/partials` | Append one `{ signer_pk, sig }`; rejects duplicate `signer_pk` (409) and unknown id (404) |
+
+`id` = lowercase hex of `signed_digest` (32 bytes → 64 hex chars, no `0x`
+prefix) — content-addressed, so re-creating an identical proposal is
+idempotent and creating a different body under a colliding digest is a 409.
+Partials are appended by rewriting the proposal's whole `body_json` column
+under the store's connection mutex (never a separate `partials` table) —
+this makes "append only, `signed_digest` never mutates" a structural
+property: the append code path has no way to touch that field.
 
 | Env var | Default | Purpose |
 |---|---|---|
@@ -19,7 +34,30 @@ tracked as follow-up tasks. Only `GET /v1/health` exists today.
 | `MULTISIG_COLLECTOR_DB` | `./collector.sqlite` | SQLite database path |
 
 No `dusk_core` / BLS secret-key dependency anywhere in this crate — see
-`src/lib.rs` module doc for the trust rationale.
+`src/lib.rs` module doc for the trust rationale. Correspondingly, this
+service never calls `gate_blob_for_signing` or recomputes the §4a digest —
+that anti-blind-signing check stays in `multisig-tool`, which holds the
+keys; the collector only checks hex length/shape.
+
+### Wire parity with `multisig-tool`
+
+`src/dto.rs`'s `ProposalDto`/`IntentDto`/`PartialDto` are a **deliberate
+duplicate** of `multisig-tool/src/blob.rs`'s `BlobFile`/`IntentFile`/
+`PartialFile` — same field names, same JSON shape (hex strings with an
+optional `0x` prefix), so a file saved by `multisig-tool blob push` round-trips
+byte-for-byte through this API. They are not shared via `multisig-encoding`
+because that crate is `no_std` + Apache-2.0 and consumed by the WASM
+contract `multisig-proposals`; adding JSON/hex-decoding and `serde` there
+would bloat a size-sensitive on-chain dependency to serve a concern only
+this (off-chain, AGPL) crate has. If the two DTOs ever drift, `multisig-tool
+blob push`/`pull` round-trip tests are the tripwire — fix both files
+together.
+
+Unlike `BlobFile`, the collector never hex-decodes `target_contract_id`,
+`function_name`, `call_args`, or `human_summary` — those pass through as
+opaque strings. Only `signed_digest` (32 bytes, drives the `id`) and
+`signer_pk` (96 bytes, drives partial de-duplication) are hex-validated and
+normalized to lowercase.
 
 ## Run
 

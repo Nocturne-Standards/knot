@@ -12,6 +12,7 @@
 //! a rejected (digest-mismatched) blob, never a forged signature.
 
 pub mod api;
+pub mod dto;
 pub mod store;
 
 use std::sync::Arc;
