@@ -76,6 +76,17 @@ submission goes two ways:
 
 ## Status
 
+- **`init` + first-run script (2026-07-23)** — `multisig-tool init [--name
+  alice] [--store path]` creates the local identity store if missing
+  (prompts for a new password twice, refuses on mismatch), optionally with
+  a first identity; against an existing store it's an idempotent
+  unlock-check + summary (never overwrites, never silently adds an
+  identity a rerun's `--name` implies). `scripts/multisig-first-run.sh`
+  wraps it end to end from repo root: builds the release binary, warns if
+  `rusk-wallet` isn't on `PATH` or `RUSK_WALLET_PWD` is unset, pings a
+  `multisig-collector`'s `/v1/health` if `MULTISIG_COLLECTOR_URL` is set,
+  runs `init`, then prints the `serve` command (or starts it with
+  `--serve`).
 - **Collector client (2026-07-23)** — `blob push|pull` and `blob sign
   --collector <url> --id <id>` talk to `multisig-collector` over plain HTTP
   (no `multisig-collector` Cargo dependency — see `src/collector_client.rs`
@@ -169,12 +180,26 @@ cd multisig/crates/multisig-tool
 cargo build --release
 ```
 
+### First run
+
+```bash
+scripts/multisig-first-run.sh [--name alice] [--store path] [--bind 127.0.0.1:8877] [--serve]
+```
+
+Builds the release binary, warns about a missing `rusk-wallet` /
+`RUSK_WALLET_PWD` (needed for chain-writing commands, not `init` itself),
+optionally checks a `multisig-collector`'s health (`MULTISIG_COLLECTOR_URL`),
+then runs `init` and prints (or, with `--serve`, starts) the `serve`
+command. Safe to re-run — `init` against an existing store is just an
+unlock-check + summary.
+
 ### CLI
 
 ```bash
 export RUSK_WALLET_PWD=...      # see references/testnet-wallet.md
-export MULTISIG_TOOL_PWD=...    # or omit to be prompted
+export MULTISIG_TOOL_PWD=...    # or omit to be prompted (init prompts twice on first creation)
 
+multisig-tool init --name alice   # creates the store if missing, else unlock-check + summary
 multisig-tool identity new alice
 multisig-tool identity list
 multisig-tool identity export alice

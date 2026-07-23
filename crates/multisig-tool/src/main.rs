@@ -45,6 +45,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// First-run setup: create the local identity store if missing (prompts
+    /// for a new password twice), optionally with a first identity. If the
+    /// store already exists, just unlock-checks it and prints a summary.
+    Init {
+        /// Optional first identity to create when the store is being
+        /// created fresh. Ignored (with a note) if the store already exists.
+        #[arg(long)]
+        name: Option<String>,
+    },
     /// Manage local BLS "member" identities.
     Identity {
         #[command(subcommand)]
@@ -370,6 +379,37 @@ fn prompt_password() -> Result<String> {
     rpassword::prompt_password("Identity store password: ").context("reading password")
 }
 
+/// Like `prompt_password`, but for creating a brand-new store: prompts twice
+/// and refuses a mismatch, so a typo doesn't lock the user out of a store
+/// they just created. Skipped (single env var read, no confirmation
+/// possible) when scripted via `MULTISIG_TOOL_PWD` — that's the caller's
+/// deliberate choice, matching every other command in this tool.
+fn prompt_new_password() -> Result<String> {
+    if let Ok(pwd) = std::env::var("MULTISIG_TOOL_PWD") {
+        return Ok(pwd);
+    }
+    let pwd1 = rpassword::prompt_password("New identity store password: ")
+        .context("reading password")?;
+    let pwd2 = rpassword::prompt_password("Confirm password: ")
+        .context("reading password confirmation")?;
+    if pwd1 != pwd2 {
+        bail!("passwords did not match");
+    }
+    Ok(pwd1)
+}
+
+fn print_identity_summary(identities: &[keystore::Identity]) {
+    println!(
+        "{} identit{} in store:",
+        identities.len(),
+        if identities.len() == 1 { "y" } else { "ies" }
+    );
+    for i in identities {
+        let kind = if i.is_pk_only() { "pk-only" } else { "signing" };
+        println!("  {} [{kind}]: pk = {}", i.name, bs58_pk(&i.pk));
+    }
+}
+
 fn load_store(path: &std::path::Path) -> Result<(Vec<keystore::Identity>, String)> {
     let password = prompt_password()?;
     let identities = keystore::load(path, &password)?;
@@ -454,6 +494,32 @@ async fn main() -> Result<()> {
     let store_path = cli.store.clone().unwrap_or_else(keystore::default_path);
 
     match cli.cmd {
+        Cmd::Init { name } => {
+            if store_path.exists() {
+                let (identities, _) = load_store(&store_path)?;
+                println!("identity store already exists at {}", store_path.display());
+                if let Some(name) = name
+                    && !identities.iter().any(|i| i.name == name)
+                {
+                    println!(
+                        "note: store already initialized — run `identity new {name}` to add it"
+                    );
+                }
+                print_identity_summary(&identities);
+            } else {
+                let password = prompt_new_password()?;
+                let mut identities = Vec::new();
+                if let Some(name) = &name {
+                    let identity = keystore::generate(name);
+                    println!("{name}: pk = {}", bs58_pk(&identity.pk));
+                    identities.push(identity);
+                }
+                keystore::save(&store_path, &password, &identities)?;
+                println!("created identity store at {}", store_path.display());
+                print_identity_summary(&identities);
+            }
+        }
+
         Cmd::Identity { cmd } => match cmd {
             IdentityCmd::New { name } => {
                 let (mut identities, password) = load_store(&store_path)?;
@@ -467,10 +533,7 @@ async fn main() -> Result<()> {
             }
             IdentityCmd::List => {
                 let (identities, _) = load_store(&store_path)?;
-                for i in &identities {
-                    let kind = if i.is_pk_only() { "pk-only" } else { "signing" };
-                    println!("{} [{kind}]: pk = {}", i.name, bs58_pk(&i.pk));
-                }
+                print_identity_summary(&identities);
             }
             IdentityCmd::Export { name } => {
                 let (identities, _) = load_store(&store_path)?;
