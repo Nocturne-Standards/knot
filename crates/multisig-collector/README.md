@@ -9,8 +9,8 @@ never submits on-chain. See
 
 ## Status
 
-**2026-07-23 — proposals + partials API implemented.** `/v1/party` is not
-implemented yet — tracked as a follow-up task.
+**2026-07-23 — proposals + partials + party-finder API implemented.** Local/dev
+only; VPS deploy is an operator TODO (see deploy runbook).
 
 | Method | Path | Behavior |
 |---|---|---|
@@ -19,6 +19,9 @@ implemented yet — tracked as a follow-up task.
 | `GET` | `/v1/proposals` | List summaries (`id`, `signed_digest`, `threshold`, `partials_count`, `created_at`) |
 | `GET` | `/v1/proposals/:id` | Full blob |
 | `POST` | `/v1/proposals/:id/partials` | Append one `{ signer_pk, sig }`; rejects duplicate `signer_pk` (409) and unknown id (404) |
+| `GET` | `/v1/party` | Party finder roster |
+| `POST` | `/v1/party` | Sign up / upsert by pk (`{ name, pk, note? }`) |
+| `DELETE` | `/v1/party/:pk` | Leave roster |
 
 `id` = lowercase hex of `signed_digest` (32 bytes → 64 hex chars, no `0x`
 prefix) — content-addressed, so re-creating an identical proposal is

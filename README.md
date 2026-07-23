@@ -22,7 +22,7 @@ per-crate deploy status).
 | `crates/multisig-registry` | Apache-2.0 | On-chain BLS M-of-N quorum registry — testnet v0.1.2 |
 | `crates/multisig-proposals` | Apache-2.0 | On-chain propose→approve→finalize `call_raw` — testnet v0.2.0 |
 | `crates/multisig-tool` | Apache-2.0 | Local signing CLI + web UI (M1–M3) — testnet only |
-| `crates/multisig-collector` | AGPL-3.0-only | Untrusted off-chain relay — proposals + partials API live; `/v1/party` still open; **VPS deploy operator TODO** (runbook below) |
+| `crates/multisig-collector` | AGPL-3.0-only | Untrusted off-chain relay — proposals, partials, and party finder live; **VPS deploy operator TODO** (runbook below) |
 
 - Contract IDs (testnet): `deployments/testnet.json` at the sme_platform root
   (`multisig-registry` / `multisig-proposals` entries).
