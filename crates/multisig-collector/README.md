@@ -66,6 +66,10 @@ cargo run -p multisig-collector
 curl http://127.0.0.1:8899/v1/health   # {"ok":true}
 ```
 
+**VPS deploy (operator TODO):** follow
+[`docs/multisig/multisig-collector-deploy-runbook.md`](../../../docs/multisig/multisig-collector-deploy-runbook.md)
+when ready to stand up `collector.nocturne-standards.org`.
+
 ## License
 
 `multisig-collector` is licensed under **AGPL-3.0-only** (see `LICENSE`). A
