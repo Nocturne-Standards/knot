@@ -51,17 +51,68 @@
     </div>
 
     <div class="tabs" role="tablist" aria-label="Story chapters">
-      <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="cast">1 · Cast</button>
+      <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="setup">0 · Setup</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="cast">1 · Cast</button>
       <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council">2 · Form council</button>
       <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check">3 · Look it up</button>
       <button type="button" class="tab" role="tab" aria-selected="false" data-tab="payout">4 · Approve payout</button>
       <button type="button" class="tab" role="tab" aria-selected="false" data-tab="aggregate">5 · Cheaper verify</button>
       <button type="button" class="tab" role="tab" aria-selected="false" data-tab="rotate">6 · Rotate members</button>
       <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal">7 · Multi-person</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="party">8 · Party finder</button>
+    </div>
+
+    <!-- 0 Setup -->
+    <div class="tab-panel active" id="panel-setup" role="tabpanel">
+      <div class="pane">
+        <header class="pane-head">
+          <p class="pane-role">Chapter 0</p>
+          <h3>Setup</h3>
+          <p class="lede">This server unlocked your identity store once, at startup — every identity below only ever lives in this local process. Create a signing identity, then head to Party finder to find co-signers on a shared roster.</p>
+        </header>
+        <div class="values" id="setup-status-card">
+          <h4>Status</h4>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Keystore</span>
+              <span class="value-hint" id="setup-store-status">loading…</span>
+            </span>
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Collector</span>
+              <span class="value-hint" id="setup-collector-status">loading…</span>
+            </span>
+          </div>
+        </div>
+        <div class="values">
+          <h4>Create your signing identity</h4>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Name</span>
+              <span class="value-hint">Short label used everywhere as a signer/member reference.</span>
+            </span>
+            <input id="setup-identity-name" placeholder="alice" />
+          </div>
+          <div class="actions">
+            <button type="button" class="primary" onclick="createSetupIdentity()">New signing identity</button>
+          </div>
+          <div class="pk-callout" id="setup-my-pk" hidden>
+            <span class="value-name">Your shareable public key</span>
+            <div class="id-row">
+              <span class="pk" id="setup-my-pk-value"></span>
+              <button type="button" class="secondary tiny" id="setup-my-pk-copy">copy pk</button>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="ghost" onclick="activateTab('party')">Go to Party finder →</button>
+        </div>
+      </div>
     </div>
 
     <!-- 1 Cast -->
-    <div class="tab-panel active" id="panel-cast" role="tabpanel">
+    <div class="tab-panel" id="panel-cast" role="tabpanel" hidden>
       <div class="pane">
         <header class="pane-head">
           <p class="pane-role">Chapter 1</p>
@@ -368,6 +419,44 @@
           <p class="pane-hint">On machine B, open this same chapter with Bob’s store and only press approve.</p>
         </div>
         <pre class="log" id="prop-log"></pre>
+      </div>
+    </div>
+
+    <!-- 8 Party finder -->
+    <div class="tab-panel" id="panel-party" role="tabpanel" hidden>
+      <div class="pane">
+        <header class="pane-head">
+          <p class="pane-role">Party finder</p>
+          <h3>Find co-signers</h3>
+          <p class="lede">Off-chain rendezvous on the collector — display name + public key only, never a secret key. It authorizes nothing on-chain; a leader still picks members here and forms the council with a real <code>create_account</code>.</p>
+        </header>
+        <div class="values">
+          <h4>Sign up on the roster</h4>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Your identity</span>
+              <span class="value-hint">A local signing identity (see Setup / Cast). Publishes its public key only.</span>
+            </span>
+            <input id="party-signup-name" class="name-target" placeholder="alice" />
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Note (optional)</span>
+              <span class="value-hint">Shown to others on the roster, e.g. “council lead”.</span>
+            </span>
+            <input id="party-signup-note" placeholder="council lead" />
+          </div>
+          <div class="actions">
+            <button type="button" class="primary" onclick="partySignup()">Sign up</button>
+            <button type="button" class="ghost" onclick="refreshParty()">Refresh roster</button>
+          </div>
+        </div>
+        <div id="party-list" class="identities-list"></div>
+        <p class="pane-hint">Check members below, then prefill Form council with their public keys (imported as pk-only identities if new).</p>
+        <div class="actions">
+          <button type="button" class="primary" onclick="usePartyForCouncil()">Use selected → prefill Form council</button>
+        </div>
+        <pre class="log" id="party-log"></pre>
       </div>
     </div>
   </section>

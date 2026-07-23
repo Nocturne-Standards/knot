@@ -401,6 +401,26 @@ button:active { transform: translateY(1px); }
   color: var(--ok);
 }
 
+.pk-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border-top: 1px solid color-mix(in srgb, var(--ok) 18%, var(--line));
+  padding-top: 0.65rem;
+}
+.pk-callout .value-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.pk-callout .id-row { cursor: default; }
+
+.id-row input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+  accent-color: var(--ok);
+}
+
 .log {
   margin: 0.25rem 0 0;
   min-height: 10rem;

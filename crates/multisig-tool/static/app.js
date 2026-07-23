@@ -57,6 +57,10 @@ const CHAPTERS = [
 ];
 
 const BROWSE = {
+  setup: {
+    step: "Chapter 0 — Setup",
+    text: "Confirm your keystore is unlocked, create a signing identity, and check the collector URL configured server-side.",
+  },
   cast: {
     step: "Chapter 1 — Meet the cast",
     text: "Create named BLS keys that stay in this process. Foreign members can be imported as pk-only.",
@@ -84,6 +88,10 @@ const BROWSE = {
   proposal: {
     step: "Chapter 7 — Multi-person",
     text: "Propose → each machine approves → finalize. Coordination is the chain, not a file handoff.",
+  },
+  party: {
+    step: "Party finder",
+    text: "Sign up your local identity's public key on the shared roster, then pick members to prefill Form council.",
   },
 };
 
@@ -396,6 +404,149 @@ async function importPk() {
   }
 }
 
+async function refreshSetupStatus() {
+  try {
+    const status = await api("/api/setup/status");
+    const count = status.identities_count;
+    document.getElementById("setup-store-status").textContent =
+      `unlocked · ${count} identit${count === 1 ? "y" : "ies"} · ${status.store_path}`;
+    const collectorEl = document.getElementById("setup-collector-status");
+    if (status.collector_configured) {
+      const auth = status.collector_user_configured ? "Basic Auth configured" : "no auth";
+      collectorEl.textContent = `configured: ${status.collector_url} (${auth})`;
+    } else {
+      collectorEl.textContent =
+        "not configured — set MULTISIG_COLLECTOR_URL (and optionally _USER/_PASSWORD) in the tool's environment before serve, then restart";
+    }
+  } catch (e) {
+    document.getElementById("setup-store-status").textContent = e.message;
+  }
+}
+
+function showSetupPk(identity) {
+  document.getElementById("setup-my-pk-value").textContent = identity.pk_base58;
+  document.getElementById("setup-my-pk").hidden = false;
+}
+
+async function createSetupIdentity() {
+  const name = document.getElementById("setup-identity-name").value.trim();
+  if (!name) return;
+  try {
+    const identity = await api("/api/identities", { method: "POST", body: JSON.stringify({ name }) });
+    document.getElementById("setup-identity-name").value = "";
+    await refreshIdentities();
+    await refreshSetupStatus();
+    showSetupPk(identity);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+let partySelected = new Set();
+
+async function refreshParty() {
+  setLog("party-log", "loading roster...");
+  try {
+    const members = await api("/api/party");
+    renderPartyList(members);
+    setLog("party-log", `roster: ${members.length} member(s)`, true);
+  } catch (e) {
+    showError("party-log", e.message);
+  }
+}
+
+function renderPartyList(members) {
+  const list = document.getElementById("party-list");
+  list.innerHTML = "";
+  const pks = new Set(members.map((m) => m.pk));
+  partySelected = new Set([...partySelected].filter((pk) => pks.has(pk)));
+  for (const m of members) {
+    const row = document.createElement("div");
+    row.className = "id-row";
+    row.dataset.name = m.name;
+    row.dataset.pk = m.pk;
+    const note = m.note ? ` · ${m.note}` : "";
+    row.innerHTML =
+      `<input type="checkbox" ${partySelected.has(m.pk) ? "checked" : ""} />` +
+      `<span class="id-name">${m.name}${note}</span>` +
+      `<span class="pk">${m.pk.slice(0, 22)}…</span>` +
+      `<button type="button" class="secondary tiny" data-copy="${m.pk}">copy pk</button>` +
+      `<button type="button" class="tiny" data-leave="${m.pk}">leave</button>`;
+    row.querySelector('input[type="checkbox"]').addEventListener("change", (ev) => {
+      if (ev.target.checked) partySelected.add(m.pk);
+      else partySelected.delete(m.pk);
+    });
+    row.querySelector("[data-copy]").addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(m.pk);
+      } catch {
+        prompt("Public key", m.pk);
+      }
+    });
+    row.querySelector("[data-leave]").addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      try {
+        await api(`/api/party/${encodeURIComponent(m.pk)}`, { method: "DELETE" });
+        await refreshParty();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+    list.appendChild(row);
+  }
+}
+
+async function partySignup() {
+  const name = document.getElementById("party-signup-name").value.trim();
+  const note = document.getElementById("party-signup-note").value.trim();
+  if (!name) return;
+  setLog("party-log", "signing up...");
+  try {
+    await api("/api/party", {
+      method: "POST",
+      body: JSON.stringify({ name, note: note || undefined }),
+    });
+    await refreshParty();
+    setLog("party-log", `signed up as ${name}`, true);
+  } catch (e) {
+    showError("party-log", e.message);
+  }
+}
+
+// Ensures each selected roster member exists as a local pk-only identity
+// (importing it if new — "already exists" is treated as already-imported,
+// the idempotent common case), then prefills Form council's members field.
+async function usePartyForCouncil() {
+  if (partySelected.size === 0) {
+    alert("Select at least one roster row first.");
+    return;
+  }
+  const rows = [...document.querySelectorAll("#party-list .id-row")].filter((r) =>
+    partySelected.has(r.dataset.pk)
+  );
+  const names = [];
+  for (const row of rows) {
+    const { name, pk } = row.dataset;
+    try {
+      await api("/api/identities/import-pk", {
+        method: "POST",
+        body: JSON.stringify({ name, pk }),
+      });
+    } catch (e) {
+      if (!String(e.message).includes("already exists")) {
+        setLog("party-log", `import failed for ${name}: ${e.message}`, false);
+        continue;
+      }
+    }
+    names.push(name);
+  }
+  await refreshIdentities();
+  document.getElementById("create-members").value = names.join(",");
+  activateTab("council");
+  setLog("party-log", `prefilled Form council with: ${names.join(",")}`, true);
+}
+
 async function submitCreateAccount() {
   const members = splitNames(document.getElementById("create-members").value);
   const threshold = parseInt(document.getElementById("create-threshold").value, 10);
@@ -646,11 +797,23 @@ function activateTab(name, opts = {}) {
     if (idx >= 0) walkIndex = idx;
     setWalkUi(true);
   }
+  if (name === "setup") refreshSetupStatus().catch((e) => console.error(e));
+  if (name === "party") refreshParty().catch((e) => console.error(e));
   syncGuideForTab(name);
 }
 
 wireNameTargets();
 refreshIdentities().catch((e) => console.error(e));
+refreshSetupStatus().catch((e) => console.error(e));
+
+document.getElementById("setup-my-pk-copy").addEventListener("click", async () => {
+  const pk = document.getElementById("setup-my-pk-value").textContent;
+  try {
+    await navigator.clipboard.writeText(pk);
+  } catch {
+    prompt("Public key", pk);
+  }
+});
 
 document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => activateTab(btn.dataset.tab));

@@ -282,6 +282,19 @@ narrator updates per chapter; **Start example walkthrough** creates
 alice/bob/carol, prefills fields, and steps through the plot. Each chapter
 has a green “Values to enter” card with the field + explanation combined.
 
+Two chapters sit outside the one-machine walkthrough, for the real
+multi-person path: **Setup** (chapter 0, the default landing tab) shows
+keystore-unlocked status and the configured collector URL (from
+`MULTISIG_COLLECTOR_*` in the server process's own env — the browser never
+sees the Basic Auth password) and lets you create your first signing
+identity. **Party finder** (chapter 8) signs a local identity's *public* key
+up to the collector's off-chain roster (`/v1/party`, proxied through
+`serve`'s `/api/party`), lists who else has signed up, and lets a council
+leader multi-select roster rows to prefill Form council's members field
+(importing new ones as pk-only identities first). The roster authorizes
+nothing on-chain — it's discovery only; `create_account` is still the real
+governance step.
+
 ## Explicitly out of scope (this pass)
 
 - Marketing/docs static website explaining the tool — separate, later, no

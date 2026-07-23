@@ -11,7 +11,7 @@ use anyhow::{bail, Result};
 use axum::extract::{Path as AxPath, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use dusk_bytes::Serializable;
 use dusk_core::abi::ContractId;
@@ -30,6 +30,7 @@ use crate::registry_types::call_types::{
 };
 use crate::{chain, keystore};
 use multisig_tool::bls;
+use multisig_tool::collector_client::{self, CollectorClient};
 
 struct AppState {
     identities: Mutex<Vec<keystore::Identity>>,
@@ -58,6 +59,9 @@ pub async fn serve(bind: &str, store_path: PathBuf) -> Result<()> {
     });
 
     let api = Router::new()
+        .route("/api/setup/status", get(api_setup_status))
+        .route("/api/party", get(api_party_list).post(api_party_signup))
+        .route("/api/party/{pk}", delete(api_party_leave))
         .route("/api/identities", get(api_list_identities).post(api_new_identity))
         .route("/api/identities/import-pk", post(api_import_pk))
         .route("/api/account/create", post(api_account_create))
@@ -233,6 +237,93 @@ async fn api_import_pk(
     keystore::save(&state.store_path, &state.password, &identities)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(out))
+}
+
+#[derive(Serialize)]
+struct SetupStatusOut {
+    store_path: String,
+    identities_count: usize,
+    collector_configured: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    collector_url: Option<String>,
+    collector_user_configured: bool,
+}
+
+/// Server-side-only env read — the URL is shown to the browser (harmless),
+/// but `MULTISIG_COLLECTOR_PASSWORD` never is; only whether a user was set.
+async fn api_setup_status(State(state): State<Arc<AppState>>) -> Json<SetupStatusOut> {
+    let identities = state.identities.lock().await;
+    let collector_url = std::env::var(collector_client::URL_ENV).ok();
+    let collector_user_configured = std::env::var(collector_client::USER_ENV)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    Json(SetupStatusOut {
+        store_path: state.store_path.display().to_string(),
+        identities_count: identities.len(),
+        collector_configured: collector_url.is_some(),
+        collector_url,
+        collector_user_configured,
+    })
+}
+
+fn to_400<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
+    (StatusCode::BAD_REQUEST, e.to_string())
+}
+
+#[derive(Serialize)]
+struct PartyMemberOut {
+    name: String,
+    pk: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
+    joined_at: i64,
+}
+
+impl From<collector_client::PartyMember> for PartyMemberOut {
+    fn from(m: collector_client::PartyMember) -> Self {
+        PartyMemberOut {
+            name: m.name,
+            pk: m.pk,
+            note: m.note,
+            joined_at: m.joined_at,
+        }
+    }
+}
+
+/// Party finder proxy — `multisig-tool serve` holds `MULTISIG_COLLECTOR_*`
+/// in its own process env; the browser only ever sees names/pks/notes here,
+/// never the collector's Basic Auth password.
+async fn api_party_list() -> Result<Json<Vec<PartyMemberOut>>, (StatusCode, String)> {
+    let client = CollectorClient::resolve(None).map_err(to_400)?;
+    let members = client.list_party().await.map_err(to_500)?;
+    Ok(Json(members.into_iter().map(PartyMemberOut::from).collect()))
+}
+
+#[derive(Deserialize)]
+struct PartySignupReq {
+    /// Local identity name whose *public* key gets published to the roster.
+    name: String,
+    #[serde(default)]
+    note: Option<String>,
+}
+
+async fn api_party_signup(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<PartySignupReq>,
+) -> Result<Json<PartyMemberOut>, (StatusCode, String)> {
+    let pk = find_pk(&state, &req.name).await?;
+    let client = CollectorClient::resolve(None).map_err(to_400)?;
+    let member = client
+        .signup_party(&req.name, &bs58_pk(&pk), req.note.as_deref())
+        .await
+        .map_err(to_500)?;
+    Ok(Json(member.into()))
+}
+
+async fn api_party_leave(AxPath(pk): AxPath<String>) -> Result<StatusCode, (StatusCode, String)> {
+    let client = CollectorClient::resolve(None).map_err(to_400)?;
+    client.leave_party(&pk).await.map_err(to_500)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn find_pk(state: &AppState, name: &str) -> Result<BlsPublicKey, (StatusCode, String)> {
