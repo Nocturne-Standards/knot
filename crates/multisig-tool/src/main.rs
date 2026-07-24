@@ -250,6 +250,9 @@ enum ProposalCmd {
         /// Refuse to sign unless this full digest hex matches recomputed intent.
         #[arg(long)]
         expect_digest: Option<String>,
+        /// Required — print fingerprint first (omit this flag), then re-run with `--confirm`.
+        #[arg(long)]
+        confirm: bool,
     },
     /// Free-read proposal view / status.
     Status {
@@ -315,6 +318,9 @@ enum BlobCmd {
         /// Proposal id on the collector — required in collector mode.
         #[arg(long)]
         id: Option<String>,
+        /// Required — show fingerprint first, then re-run with `--confirm`.
+        #[arg(long)]
+        confirm: bool,
     },
     /// Aggregate partials (threshold must be met); print keys + aggregate hex.
     Aggregate {
@@ -386,6 +392,9 @@ enum PmResolveCmd {
         /// Local mode: write updated blob here (defaults to `--file`).
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Required — show fingerprint first, then re-run with `--confirm`.
+        #[arg(long)]
+        confirm: bool,
     },
     /// Print partials vs threshold; optional registry free-read warn.
     Status {
@@ -406,6 +415,8 @@ enum PmResolveCmd {
         collector: Option<String>,
     },
     /// Start the standalone PM council-resolve UI (local browser; not the treasury demo).
+    /// Alias: `pm-resolve demo`.
+    #[command(alias = "demo")]
     Ui {
         #[arg(long, default_value = "127.0.0.1:8877")]
         bind: String,
@@ -422,25 +433,6 @@ enum PmResolveCmd {
         #[arg(long)]
         summary: Option<String>,
         /// Do not open the browser automatically.
-        #[arg(long)]
-        no_open: bool,
-    },
-    /// Alias for `pm-resolve ui` (standalone council UI).
-    Demo {
-        #[arg(long, default_value = "127.0.0.1:8877")]
-        bind: String,
-        #[arg(long)]
-        market: Option<u64>,
-        #[arg(long)]
-        outcome: Option<u8>,
-        #[arg(long)]
-        pm: Option<String>,
-        #[arg(long)]
-        account: Option<u64>,
-        #[arg(long)]
-        threshold: Option<u32>,
-        #[arg(long)]
-        summary: Option<String>,
         #[arg(long)]
         no_open: bool,
     },
@@ -465,39 +457,58 @@ enum PartyCmd {
         #[arg(long)]
         collector: Option<String>,
     },
-    /// Remove a roster row by public key.
-    Leave {
-        #[arg(long)]
-        pk: String,
-        #[arg(long)]
-        collector: Option<String>,
-    },
 }
 
 fn prompt_password() -> Result<String> {
-    if let Ok(pwd) = std::env::var("MULTISIG_TOOL_PWD") {
-        return Ok(pwd);
+    match std::env::var("MULTISIG_TOOL_PWD") {
+        Ok(pwd) if !pwd.is_empty() => {
+            if std::env::var("MULTISIG_TOOL_ALLOW_ENV_PWD").as_deref() != Ok("1") {
+                bail!(
+                    "MULTISIG_TOOL_PWD is set but MULTISIG_TOOL_ALLOW_ENV_PWD=1 is required to honor it \
+                     (refusing env password to reduce casual leakage — set both for scripting)"
+                );
+            }
+            Ok(pwd)
+        }
+        _ => rpassword::prompt_password("Identity store password: ").context("reading password"),
     }
-    rpassword::prompt_password("Identity store password: ").context("reading password")
 }
 
 /// Like `prompt_password`, but for creating a brand-new store: prompts twice
 /// and refuses a mismatch, so a typo doesn't lock the user out of a store
 /// they just created. Skipped (single env var read, no confirmation
-/// possible) when scripted via `MULTISIG_TOOL_PWD` — that's the caller's
-/// deliberate choice, matching every other command in this tool.
+/// possible) when scripted via `MULTISIG_TOOL_PWD` + `MULTISIG_TOOL_ALLOW_ENV_PWD=1`.
 fn prompt_new_password() -> Result<String> {
-    if let Ok(pwd) = std::env::var("MULTISIG_TOOL_PWD") {
-        return Ok(pwd);
+    match std::env::var("MULTISIG_TOOL_PWD") {
+        Ok(pwd) if !pwd.is_empty() => {
+            if std::env::var("MULTISIG_TOOL_ALLOW_ENV_PWD").as_deref() != Ok("1") {
+                bail!(
+                    "MULTISIG_TOOL_PWD is set but MULTISIG_TOOL_ALLOW_ENV_PWD=1 is required to honor it \
+                     (refusing env password to reduce casual leakage — set both for scripting)"
+                );
+            }
+            Ok(pwd)
+        }
+        _ => {
+            let pwd1 = rpassword::prompt_password("New identity store password: ")
+                .context("reading password")?;
+            let pwd2 = rpassword::prompt_password("Confirm password: ")
+                .context("reading password confirmation")?;
+            if pwd1 != pwd2 {
+                bail!("passwords did not match");
+            }
+            Ok(pwd1)
+        }
     }
-    let pwd1 = rpassword::prompt_password("New identity store password: ")
-        .context("reading password")?;
-    let pwd2 = rpassword::prompt_password("Confirm password: ")
-        .context("reading password confirmation")?;
-    if pwd1 != pwd2 {
-        bail!("passwords did not match");
+}
+
+fn require_cli_confirm(confirm: bool) -> Result<()> {
+    if confirm {
+        return Ok(());
     }
-    Ok(pwd1)
+    bail!(
+        "refusing to sign without --confirm (preview the fingerprint first, then re-run with --confirm)"
+    );
 }
 
 fn print_identity_summary(identities: &[keystore::Identity]) {
@@ -886,6 +897,7 @@ async fn main() -> Result<()> {
                 id,
                 signer,
                 expect_digest,
+                confirm,
             } => {
                 let (identities, _) = load_store(&store_path)?;
                 let identity = find_identity(&identities, &signer)?;
@@ -940,6 +952,7 @@ async fn main() -> Result<()> {
                     "  safety-number: {}",
                     multisig_encoding::digest_safety_number(&digest)
                 );
+                require_cli_confirm(confirm)?;
                 let signature = bls::sign(sk, &digest);
                 let args = ApproveArgs {
                     proposal_id: id,
@@ -1049,6 +1062,7 @@ async fn main() -> Result<()> {
                 out,
                 collector,
                 id,
+                confirm,
             } => {
                 let (identities, _) = load_store(&store_path)?;
                 let identity = find_identity(&identities, &signer)?;
@@ -1066,6 +1080,8 @@ async fn main() -> Result<()> {
                     let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
                     let pulled = client.pull(&id).await?;
                     let mut proposal = pulled.to_proposal_blob()?;
+                    blob::print_canonical_intent(&proposal)?;
+                    require_cli_confirm(confirm)?;
                     blob::add_partial(&mut proposal, sk, &identity.pk)?;
                     let new_partial = proposal
                         .partials
@@ -1095,6 +1111,8 @@ async fn main() -> Result<()> {
                     })?;
                     let file_blob = blob::read_file(&file)?;
                     let mut proposal = file_blob.to_proposal_blob()?;
+                    blob::print_canonical_intent(&proposal)?;
+                    require_cli_confirm(confirm)?;
                     blob::add_partial(&mut proposal, sk, &identity.pk)?;
                     blob::write_file(&out, &blob::BlobFile::from_proposal_blob(&proposal))?;
                     println!(
@@ -1185,6 +1203,7 @@ async fn main() -> Result<()> {
                 expect_digest,
                 collector,
                 out,
+                confirm,
             } => {
                 let (identities, _) = load_store(&store_path)?;
                 let identity = find_identity(&identities, &signer)?;
@@ -1205,6 +1224,8 @@ async fn main() -> Result<()> {
                             bail!("REFUSING TO SIGN: digest does not match --expect-digest");
                         }
                     }
+                    blob::print_pm_canonical_intent(&pulled)?;
+                    require_cli_confirm(confirm)?;
                     blob::add_pm_partial(&mut pulled, sk, &identity.pk)?;
                     let new_partial = pulled
                         .partials
@@ -1236,6 +1257,8 @@ async fn main() -> Result<()> {
                             bail!("REFUSING TO SIGN: digest does not match --expect-digest");
                         }
                     }
+                    blob::print_pm_canonical_intent(&file_blob)?;
+                    require_cli_confirm(confirm)?;
                     blob::add_pm_partial(&mut file_blob, sk, &identity.pk)?;
                     blob::write_file(&out_path, &file_blob)?;
                     println!(
@@ -1326,16 +1349,6 @@ async fn main() -> Result<()> {
                 threshold,
                 summary,
                 no_open,
-            }
-            | PmResolveCmd::Demo {
-                bind,
-                market,
-                outcome,
-                pm,
-                account,
-                threshold,
-                summary,
-                no_open,
             } => {
                 let mut extras = Vec::new();
                 if let Some(m) = market {
@@ -1384,11 +1397,6 @@ async fn main() -> Result<()> {
                 let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
                 let member = client.signup_party(&name, &pk, note.as_deref()).await?;
                 println!("signed up: {} pk={}", member.name, member.pk);
-            }
-            PartyCmd::Leave { pk, collector } => {
-                let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
-                client.leave_party(&pk).await?;
-                println!("left party roster: pk={pk}");
             }
         },
 

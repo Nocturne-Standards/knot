@@ -412,8 +412,14 @@
             </span>
             <input id="prop-signer" class="name-target" placeholder="alice" />
           </div>
+          <div id="prop-preview" class="pane-hint" hidden></div>
+          <label class="value-field" style="align-items:center;gap:0.5rem;flex-direction:row">
+            <input id="prop-confirm" type="checkbox" />
+            <span class="value-hint">I compared the fingerprint with co-signers and confirm these canonical fields.</span>
+          </label>
           <div class="actions">
-            <button type="button" class="primary" onclick="proposalApprove()">approve</button>
+            <button type="button" class="ghost" onclick="proposalPreview()">preview</button>
+            <button type="button" class="primary" id="prop-approve-btn" onclick="proposalApprove()" disabled>approve</button>
             <button type="button" class="ghost" onclick="proposalStatus()">status</button>
             <button type="button" class="primary" onclick="proposalFinalize()">finalize</button>
           </div>
@@ -429,7 +435,7 @@
         <header class="pane-head">
           <p class="pane-role">Chapter 8</p>
           <h3>PM council resolve</h3>
-          <p class="lede">Collect M-of-N secure BLS partials for a prediction-market <code>resolve</code> over the collector, then submit when the threshold is met. Digest is <code>council-resolve.v1</code> — never trust the summary alone.</p>
+          <p class="lede">Collect M-of-N secure BLS partials for a prediction-market <code>resolve</code> over the collector, then submit when the threshold is met. Digest is <code>council-resolve.v2</code> (binds PM contract id, registry account, threshold, market, outcome) — never trust the summary alone.</p>
         </header>
         <div class="values">
           <h4>Init + push</h4>
@@ -493,8 +499,14 @@
             </span>
             <input id="pm-signer" class="name-target" placeholder="alice" />
           </div>
+          <div id="pm-preview" class="pane-hint" hidden></div>
+          <label class="value-field" style="align-items:center;gap:0.5rem;flex-direction:row">
+            <input id="pm-confirm" type="checkbox" />
+            <span class="value-hint">I compared the fingerprint (mnemonic / safety number) with co-signers.</span>
+          </label>
           <div class="actions">
-            <button type="button" class="primary" onclick="pmResolveSign()">sign</button>
+            <button type="button" class="ghost" onclick="pmResolvePreview()">preview</button>
+            <button type="button" class="primary" id="pm-sign-btn" onclick="pmResolveSign()" disabled>sign</button>
             <button type="button" class="ghost" onclick="pmResolveStatus()">status</button>
             <button type="button" class="primary" onclick="pmResolveSubmit()">submit resolve</button>
           </div>

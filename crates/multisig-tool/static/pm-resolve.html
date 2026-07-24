@@ -60,7 +60,8 @@
     <p class="lede">
       Sign and submit a prediction-market dispute resolve. Portal shows the case;
       this UI collects council partials and submits on-chain. Digest domain:
-      <code>council-resolve.v1</code>.
+      <code>council-resolve.v2</code> (binds PM contract id, registry account,
+      threshold, market, outcome).
     </p>
 
     <div class="panel">
@@ -114,10 +115,16 @@
         <input id="blob-id" placeholder="64 hex chars" spellcheck="false" />
       </label>
       <div class="actions">
-        <button type="button" class="primary" id="btn-sign">Sign as selected identity</button>
+        <button type="button" class="ghost" id="btn-preview">Preview fingerprint</button>
+        <button type="button" class="primary" id="btn-sign" disabled>Sign as selected identity</button>
         <button type="button" class="ghost" id="btn-status">Refresh status</button>
         <button type="button" class="ghost" id="btn-list">List PM blobs</button>
       </div>
+      <label style="margin-top:0.75rem;flex-direction:row;align-items:center;gap:0.5rem">
+        <input type="checkbox" id="confirm" />
+        <span>I compared the fingerprint with co-signers</span>
+      </label>
+      <pre class="log" id="preview-box" style="display:none;min-height:2rem"></pre>
       <p class="hint">Each council member runs this UI (or CLI) on their machine with their own identity store, same blob id.</p>
       <div id="ready-line" style="margin-top:0.75rem"></div>
       <div class="blob-list" id="blob-list"></div>

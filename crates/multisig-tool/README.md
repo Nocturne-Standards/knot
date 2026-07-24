@@ -37,10 +37,14 @@ submission goes two ways:
   default) — signing happens server-side; the web UI's JS never receives a
   secret key, only names/public keys/messages/signatures.
 - Keystore: AES-256-GCM, key derived via PBKDF2-HMAC-SHA256 (100k rounds)
-  from a password prompted at startup (or `MULTISIG_TOOL_PWD` env for
-  scripting). Not `rusk-wallet`'s wallet format (that's one BIP39-seed
-  wallet — wrong shape for N independently-named identities); reuses the
-  same class of vetted crates instead of inventing a new format.
+  from a password prompted at startup. Rounds are a **compile-time constant**
+  (not persisted in the keystore file) — do not bump without a format-version
+  change or existing stores will fail to unlock. `MULTISIG_TOOL_PWD` is honored only
+  when `MULTISIG_TOOL_ALLOW_ENV_PWD=1` is also set (scripting); otherwise the
+  tool refuses the env password with a clear error. Not `rusk-wallet`'s
+  wallet format (that's one BIP39-seed wallet — wrong shape for N
+  independently-named identities); reuses the same class of vetted crates
+  instead of inventing a new format.
 - The local RPC (`serve`) binds `127.0.0.1` only — refuses any other bind
   address outright (see `rpc::serve`'s check). Every `/api/*` route requires
   a random bearer token generated at process start
@@ -66,7 +70,7 @@ submission goes two ways:
 - **RUES free-reads must use raw bodies** (see Scope). An early client bug
   hex-encoded requests and looked like “stuck `account` not found” /
   upstream lag; that was not a node or contract-state failure. Historical
-  write-up: [`testnet-read-lag-2026-07-22.md`](testnet-read-lag-2026-07-22.md)
+  write-up: [`docs/multisig/testnet-read-lag-2026-07-22.md`](../../../docs/multisig/testnet-read-lag-2026-07-22.md)
   (frozen).
 - **Free-read `verify_quorum` / `verify_quorum_aggregate` / `diagnose_quorum`:**
   with raw RUES these no longer 500, but can report `false` /
@@ -77,16 +81,24 @@ submission goes two ways:
 ## Status
 
 - **PM council resolve CLI + standalone UI (2026-07-24)** — `pm-resolve init|sign|status|submit|ui`
-  builds v2 `kind=pm_council_resolve` blobs, gates the council-resolve digest,
-  collects secure `sign` (not `sign_multisig`) partials via collector or file,
-  and submits `prediction-market.resolve` to the ContractId in the blob intent
-  (`chain::submit_call_to_contract_id`). **`pm-resolve ui`** (alias: `demo`) opens
+  builds `kind=pm_council_resolve` blobs over **`council-resolve.v2`**
+  (`DOMAIN || pm_contract_id || registry_account_id || threshold || market_id ||
+  outcome`), gates that digest before sign, collects secure `sign` partials via
+  collector or file, and submits `prediction-market.resolve` to the ContractId
+  in the blob intent. Preview/confirm required (`GET …/preview`, then
+  `confirm:true` / CLI `--confirm`). **`pm-resolve ui`** (alias: `demo`) opens
   a **standalone** local browser UI (not the Multisig Lab treasury walkthrough);
   chapter 8 on `serve` remains for the full demo. Prefills via query string.
   Local AC: `cargo test -p multisig-tool` (blob gate/partial helpers) and
   `cargo test -p multisig-tool --test collector_roundtrip` (PM push/pull/append).
   End-to-end / OPS steps:
   [`prediction-market/docs/council-resolve-testing.md`](../../../prediction-market/docs/council-resolve-testing.md).
+- **Signing preview/confirm (2026-07-24)** — proposal approve and PM/blob sign
+  print the fingerprint first; CLI requires `--confirm`; HTTP sign endpoints
+  require `"confirm": true` (400 otherwise). UI: Preview → show mnemonic →
+  checkbox → Sign. Quorum “type any message” lab panels remain an **unsafe
+  demo** (arbitrary UTF-8, not a canonical intent) — use Multi-person / PM
+  resolve for real authorizations.
 - **`init` + first-run script (2026-07-23)** — `multisig-tool init [--name
   alice] [--store path]` creates the local identity store if missing
   (prompts for a new password twice, refuses on mismatch), optionally with
@@ -101,8 +113,8 @@ submission goes two ways:
 - **Collector client (2026-07-23)** — `blob push|pull` and `blob sign
   --collector <url> --id <id>` talk to `multisig-collector` over plain HTTP
   (no `multisig-collector` Cargo dependency — see `src/collector_client.rs`
-  module doc). `party list|signup|leave` drives the same server's
-  party-finder roster. Credentials are HTTP Basic Auth from
+  module doc). `party list|signup` drives the same server's
+  party-finder roster (upsert-only; no leave/DELETE). Credentials are HTTP Basic Auth from
   `MULTISIG_COLLECTOR_URL`/`_USER`/`_PASSWORD` env vars (no `--user`/
   `--password` flags, so a password never lands in shell history). The
   collector never sees a secret key or an unsigned digest it could forge —
@@ -123,8 +135,11 @@ submission goes two ways:
   (target / function / args / deadline), approve recomputes §4a digest and
   prints **canonical fields first** (refuses on digest mismatch). Web UI
   mirrors the same gate.
-- Against `multisig-registry` **v0.1.2** and `multisig-proposals` **v0.2.0**
-  (testnet ids in `../../../deployments/testnet.json`; proposals `init_chain_id=2`).
+- Against `multisig-registry` / `multisig-proposals` testnet ids in
+  `../../../deployments/testnet.json`. **Audit remediation code (proposals
+  0.3.0, registry encoding/`change_account` digests, PM `council-resolve.v2`)
+  needs testnet redeploy** before live lab matches source — see suite
+  [`multisig/README.md`](../../../multisig/README.md) Status.
   Atlas + treasury-data/logic also on testnet — see those READMEs.
 
 | Check | Result |
@@ -139,14 +154,16 @@ submission goes two ways:
 | Out-of-band full-digest mnemonic / safety-number | Pass (`multisig-encoding` fingerprint tests) |
 
 Frozen investigation of the earlier false alarms:
-[`testnet-read-lag-2026-07-22.md`](testnet-read-lag-2026-07-22.md).
+[`docs/multisig/testnet-read-lag-2026-07-22.md`](../../../docs/multisig/testnet-read-lag-2026-07-22.md).
 
 ### Multi-person runbook (two machines)
 
 1. Each person: `identity new <name>` (or import the other's pk for council creation).
 2. One operator creates the registry account with everyone's PKs (mix of local + `import-pk`).
 3. Anyone: `proposal create --account N --target <32-byte-hex> --function <name> [--args-hex ...] [--deadline N]`.
-4. Each member on their own machine: `proposal approve --id ID --signer <me>` — tool prints canonical intent and refuses if digest ≠ recomputed.
+4. Each member on their own machine: `proposal approve --id ID --signer <me>`
+   (prints fingerprint; re-run with `--confirm` to submit) — tool refuses if
+   digest ≠ recomputed.
 5. Anyone: `proposal finalize --id ID` when approvals ≥ threshold (executes `call_raw` on target).
 6. `proposal status --id ID` should show `Executed` (or `Tombstoned`).
 
@@ -208,7 +225,9 @@ unlock-check + summary.
 
 ```bash
 export RUSK_WALLET_PWD=...      # see references/testnet-wallet.md
-export MULTISIG_TOOL_PWD=...    # or omit to be prompted (init prompts twice on first creation)
+# Scripting only — both required or the tool refuses the env password:
+export MULTISIG_TOOL_ALLOW_ENV_PWD=1
+export MULTISIG_TOOL_PWD=...    # or omit both to be prompted (init prompts twice on first creation)
 
 multisig-tool init --name alice   # creates the store if missing, else unlock-check + summary
 multisig-tool identity new alice
@@ -223,6 +242,7 @@ multisig-tool account meta 0
 multisig-tool account keys 0
 multisig-tool account next-id
 
+# Lab-only unsafe demo — arbitrary UTF-8 message, not a structured intent:
 multisig-tool quorum submit --account 0 --msg "hello" --signer alice --signer bob
 multisig-tool quorum check --account 0 --msg "hello" --signer alice --signer bob
 multisig-tool quorum diagnose --account 0 --msg "hello" --signer alice --signer bob
@@ -236,8 +256,9 @@ multisig-tool change-account submit --account 0 \
 # Multi-person proposals (after deploy + one-time `proposal init-registry` + `init_chain_id`)
 multisig-tool proposal create --account 0 \
   --target <32-byte-hex-ContractId> --function set_value --args-hex <rkyv-hex>
-multisig-tool proposal approve --id 0 --signer alice   # prints canonical intent; refuses on digest mismatch
-multisig-tool proposal approve --id 0 --signer bob
+multisig-tool proposal approve --id 0 --signer alice            # preview fingerprint
+multisig-tool proposal approve --id 0 --signer alice --confirm  # sign + submit
+multisig-tool proposal approve --id 0 --signer bob --confirm
 multisig-tool proposal status --id 0
 multisig-tool proposal finalize --id 0
 
@@ -246,9 +267,9 @@ multisig-tool blob create --out proposal.json --committee-id 0 --threshold 2 \
   --target <32-byte-hex> --function milestone_release --args-hex <hex>
 multisig-tool blob show proposal.json
 # Machine A:
-multisig-tool blob sign --file proposal.json --signer alice --out proposal.json
+multisig-tool blob sign --file proposal.json --signer alice --out proposal.json --confirm
 # Machine B (after receiving the file):
-multisig-tool blob sign --file proposal.json --signer bob --out proposal.json
+multisig-tool blob sign --file proposal.json --signer bob --out proposal.json --confirm
 multisig-tool blob aggregate proposal.json
 multisig-tool blob submit-agg --file proposal.json --account 0
 
@@ -257,14 +278,20 @@ export MULTISIG_COLLECTOR_URL=http://127.0.0.1:8899
 export MULTISIG_COLLECTOR_USER=...       # optional; omit for no Basic Auth
 export MULTISIG_COLLECTOR_PASSWORD=...   # optional
 multisig-tool blob push --file proposal.json           # prints the content-addressed id
-multisig-tool blob sign --id <id> --signer alice        # pulls, gates, signs, POSTs the partial
-multisig-tool blob sign --id <id> --signer bob --out proposal.json  # --out is optional
+multisig-tool blob sign --id <id> --signer alice --confirm
+multisig-tool blob sign --id <id> --signer bob --out proposal.json --confirm
 multisig-tool blob pull --id <id> --out proposal.json
 multisig-tool blob aggregate proposal.json
 
+# PM council resolve (council-resolve.v2)
+multisig-tool pm-resolve init --market 0 --outcome 1 --pm <32-byte-hex> --account 0 --threshold 2
+multisig-tool pm-resolve sign --file pm-resolve.json --as alice --confirm
+multisig-tool pm-resolve status --file pm-resolve.json
+multisig-tool pm-resolve submit --file pm-resolve.json
+
 multisig-tool party signup --name alice --pk <base58-or-hex-pk>
 multisig-tool party list
-multisig-tool party leave --pk <base58-or-hex-pk>
+# (no party leave — collector roster is upsert-only; clear the DB to remove a row)
 ```
 
 Writes print `=== fn: tx included/propagated ===` or `=== fn: FAIL (contract panic) ===`
@@ -279,12 +306,12 @@ free-read diagnose/check follow-up and warns when it looks untrusted.
 multisig-tool serve --bind 127.0.0.1:8877
 ```
 
-Prints a URL with an access token (`http://127.0.0.1:8877/?token=...`) — the
-token is also embedded directly into the served page, so opening the plain
-URL works too. Or via this repo's preview convention:
+Prints a loopback URL (`http://127.0.0.1:8877/`) and the API auth header
+name (`X-Multisig-Tool-Token`). The token value is **not** printed in the
+URL — it is injected into the served HTML only. Or via this repo's preview convention:
 `scripts/run-multisig-tool-native.sh` (wired into `.claude/launch.json` as
 `multisig-tool`, port 8877) — uses a fixed dev password
-(`MULTISIG_TOOL_PWD=local-dev-only`), fine for local dev only.
+(`MULTISIG_TOOL_ALLOW_ENV_PWD=1` + `MULTISIG_TOOL_PWD=local-dev-only`), fine for local dev only.
 
 The UI matches the Agent Pay demo visual language (Literata/Sora, cream/sky)
 framed as a **treasury payout story**: Cast → Form council → Look it up →

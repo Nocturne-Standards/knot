@@ -474,8 +474,7 @@ function renderPartyList(members) {
       `<input type="checkbox" ${partySelected.has(m.pk) ? "checked" : ""} />` +
       `<span class="id-name">${m.name}${note}</span>` +
       `<span class="pk">${m.pk.slice(0, 22)}…</span>` +
-      `<button type="button" class="secondary tiny" data-copy="${m.pk}">copy pk</button>` +
-      `<button type="button" class="tiny" data-leave="${m.pk}">leave</button>`;
+      `<button type="button" class="secondary tiny" data-copy="${m.pk}">copy pk</button>`;
     row.querySelector('input[type="checkbox"]').addEventListener("change", (ev) => {
       if (ev.target.checked) partySelected.add(m.pk);
       else partySelected.delete(m.pk);
@@ -486,15 +485,6 @@ function renderPartyList(members) {
         await navigator.clipboard.writeText(m.pk);
       } catch {
         prompt("Public key", m.pk);
-      }
-    });
-    row.querySelector("[data-leave]").addEventListener("click", async (ev) => {
-      ev.stopPropagation();
-      try {
-        await api(`/api/party/${encodeURIComponent(m.pk)}`, { method: "DELETE" });
-        await refreshParty();
-      } catch (e) {
-        alert(e.message);
       }
     });
     list.appendChild(row);
@@ -747,14 +737,41 @@ async function proposalStatus() {
   }
 }
 
+async function proposalPreview() {
+  const id = document.getElementById("prop-id").value;
+  setLog("prop-log", "preview (no signing)...");
+  try {
+    const out = await api(`/api/proposal/${id}/preview`);
+    const box = document.getElementById("prop-preview");
+    box.hidden = false;
+    box.innerHTML =
+      `<strong>Fingerprint</strong><br>` +
+      `digest: ${out.digest_hex}<br>` +
+      `mnemonic: ${out.digest_mnemonic}<br>` +
+      `safety: ${out.digest_safety_number}<br>` +
+      `chain=${out.chain_id} committee=${out.committee_id} nonce=${out.nonce}<br>` +
+      `target=${out.target_hex}<br>fn=${out.function_name}<br>` +
+      `args=${out.call_args_hex}<br>deadline=${out.deadline}`;
+    document.getElementById("prop-confirm").checked = false;
+    document.getElementById("prop-approve-btn").disabled = true;
+    setLog("prop-log", "preview ok — check fingerprint, then confirm + approve", true);
+  } catch (e) {
+    setLog("prop-log", e.message, false);
+  }
+}
+
 async function proposalApprove() {
   const id = document.getElementById("prop-id").value;
   const signer = document.getElementById("prop-signer").value.trim();
-  setLog("prop-log", "approving (recompute digest + show canonical intent)...");
+  if (!document.getElementById("prop-confirm").checked) {
+    setLog("prop-log", "check the confirm box after preview", false);
+    return;
+  }
+  setLog("prop-log", "approving (confirm:true)...");
   try {
     const out = await api(`/api/proposal/${id}/approve`, {
       method: "POST",
-      body: JSON.stringify({ signer }),
+      body: JSON.stringify({ signer, confirm: true }),
     });
     const submit = out.submit || out;
     const intent = out.intent;
@@ -862,6 +879,37 @@ async function pmResolveStatus() {
   }
 }
 
+async function pmResolvePreview() {
+  const id = document.getElementById("pm-id").value.trim();
+  if (!id) {
+    setLog("pm-log", "set blob id first", false);
+    return;
+  }
+  setLog("pm-log", "preview (no signing)...");
+  try {
+    const out = await api(`/api/pm-resolve/${encodeURIComponent(id)}/preview`);
+    const box = document.getElementById("pm-preview");
+    box.hidden = false;
+    box.innerHTML =
+      `<strong>council-resolve.v2 fingerprint</strong><br>` +
+      `digest: ${out.digest_hex}<br>` +
+      `mnemonic: ${out.digest_mnemonic}<br>` +
+      `safety: ${out.digest_safety_number}<br>` +
+      `market=${out.market_id} outcome=${out.winning_outcome}<br>` +
+      `pm=${out.pm_contract_id}<br>account=${out.registry_account_id} threshold=${out.threshold}`;
+    document.getElementById("pm-market").value = out.market_id;
+    document.getElementById("pm-outcome").value = out.winning_outcome;
+    document.getElementById("pm-contract").value = out.pm_contract_id;
+    document.getElementById("pm-account").value = out.registry_account_id;
+    document.getElementById("pm-threshold").value = out.threshold;
+    document.getElementById("pm-confirm").checked = false;
+    document.getElementById("pm-sign-btn").disabled = true;
+    setLog("pm-log", "preview ok — compare mnemonic with co-signers, then confirm + sign", true);
+  } catch (e) {
+    setLog("pm-log", e.message, false);
+  }
+}
+
 async function pmResolveSign() {
   const id = document.getElementById("pm-id").value.trim();
   const signer = document.getElementById("pm-signer").value.trim();
@@ -869,15 +917,19 @@ async function pmResolveSign() {
     setLog("pm-log", "need blob id and signer", false);
     return;
   }
+  if (!document.getElementById("pm-confirm").checked) {
+    setLog("pm-log", "check the confirm box after preview", false);
+    return;
+  }
   setLog("pm-log", "signing...");
   try {
     const out = await api(`/api/pm-resolve/${encodeURIComponent(id)}/sign`, {
       method: "POST",
-      body: JSON.stringify({ signer }),
+      body: JSON.stringify({ signer, confirm: true }),
     });
     setLog(
       "pm-log",
-      `signed as ${signer}\npartials=${out.partials_count}/${out.threshold}`,
+      `signed as ${signer}\npartials=${out.partials_count}/${out.threshold} ready=${out.ready}\npk=${out.signer_pk}\ndigest=${out.digest_hex}`,
       true
     );
     await pmResolveList();
@@ -955,6 +1007,24 @@ wireNameTargets();
 applyPmPrefillsFromUrl();
 refreshIdentities().catch((e) => console.error(e));
 refreshSetupStatus().catch((e) => console.error(e));
+
+function wireConfirmGates() {
+  const propConfirm = document.getElementById("prop-confirm");
+  const propBtn = document.getElementById("prop-approve-btn");
+  if (propConfirm && propBtn) {
+    propConfirm.addEventListener("change", () => {
+      propBtn.disabled = !propConfirm.checked;
+    });
+  }
+  const pmConfirm = document.getElementById("pm-confirm");
+  const pmBtn = document.getElementById("pm-sign-btn");
+  if (pmConfirm && pmBtn) {
+    pmConfirm.addEventListener("change", () => {
+      pmBtn.disabled = !pmConfirm.checked;
+    });
+  }
+}
+wireConfirmGates();
 
 document.getElementById("setup-my-pk-copy").addEventListener("click", async () => {
   const pk = document.getElementById("setup-my-pk-value").textContent;

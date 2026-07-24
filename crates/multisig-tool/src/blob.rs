@@ -35,7 +35,7 @@ pub const PM_BLOB_FILE_VERSION: u16 = 2;
 /// Domain tag for PM council-resolve digests — must match
 /// `prediction-market`'s `DOMAIN_COUNCIL_RESOLVE` / `council_resolve_message`.
 pub const DOMAIN_COUNCIL_RESOLVE: &[u8] =
-    b"sme-platform.prediction-market.council-resolve.v1";
+    b"sme-platform.prediction-market.council-resolve.v2";
 
 /// Outer blob discriminator. Missing `kind` on the wire deserializes as
 /// [`BlobKind::Proposals`] (v1 compatibility).
@@ -164,11 +164,21 @@ pub fn digest_id(digest_hex: &str) -> String {
     digest_hex.trim_start_matches("0x").to_ascii_lowercase()
 }
 
-/// `keccak256(DOMAIN || market_id_le64 || winning_outcome_u8)` — byte-for-byte
+/// `keccak256(DOMAIN_V2 || contract_id[32] || registry_account_id_le64 ||
+/// threshold_le32 || market_id_le64 || winning_outcome_u8)` — byte-for-byte
 /// match with the monolith's private `council_resolve_message`.
-pub fn council_resolve_digest(market_id: u64, winning_outcome: u8) -> [u8; 32] {
+pub fn council_resolve_digest(
+    pm_contract_id: &[u8; 32],
+    registry_account_id: u64,
+    threshold: u32,
+    market_id: u64,
+    winning_outcome: u8,
+) -> [u8; 32] {
     let mut hasher = Keccak::v256();
     hasher.update(DOMAIN_COUNCIL_RESOLVE);
+    hasher.update(pm_contract_id);
+    hasher.update(&registry_account_id.to_le_bytes());
+    hasher.update(&threshold.to_le_bytes());
     hasher.update(&market_id.to_le_bytes());
     hasher.update(&[winning_outcome]);
     let mut out = [0u8; 32];
@@ -185,7 +195,13 @@ pub fn create_pm_blob_file(
     threshold: u32,
     human_summary: Option<String>,
 ) -> BlobFile {
-    let signed_digest = council_resolve_digest(market_id, winning_outcome);
+    let signed_digest = council_resolve_digest(
+        &pm_contract_id,
+        registry_account_id,
+        threshold,
+        market_id,
+        winning_outcome,
+    );
     BlobFile {
         version: PM_BLOB_FILE_VERSION,
         kind: BlobKind::PmCouncilResolve,
@@ -203,7 +219,8 @@ pub fn create_pm_blob_file(
 }
 
 /// Anti-blind-signing gate for `kind=pm_council_resolve`: recompute the
-/// council-resolve digest from intent and refuse if ≠ `signed_digest`.
+/// council-resolve.v2 digest from intent + blob threshold and refuse if
+/// ≠ `signed_digest`.
 pub fn gate_pm_blob_for_signing(file: &BlobFile) -> Result<[u8; 32]> {
     match (&file.kind, &file.intent) {
         (BlobKind::PmCouncilResolve, IntentFile::PmCouncilResolve(intent)) => {
@@ -213,11 +230,18 @@ pub fn gate_pm_blob_for_signing(file: &BlobFile) -> Result<[u8; 32]> {
                     file.version
                 );
             }
-            let expected = council_resolve_digest(intent.market_id, intent.winning_outcome);
+            let pm_bytes = hex32(&intent.pm_contract_id)?;
+            let expected = council_resolve_digest(
+                &pm_bytes,
+                intent.registry_account_id,
+                file.threshold,
+                intent.market_id,
+                intent.winning_outcome,
+            );
             let got = hex32(&file.signed_digest)?;
             if got != expected {
                 bail!(
-                    "REFUSING: signed_digest does not match recomputed council-resolve digest"
+                    "REFUSING: signed_digest does not match recomputed council-resolve.v2 digest"
                 );
             }
             Ok(expected)
@@ -237,6 +261,7 @@ pub fn print_pm_canonical_intent(file: &BlobFile) -> Result<[u8; 32]> {
     println!("  winning_outcome: {}", intent.winning_outcome);
     println!("  pm_contract_id: {}", intent.pm_contract_id);
     println!("  registry_account_id: {}", intent.registry_account_id);
+    println!("  threshold: {}", file.threshold);
     println!("  digest: 0x{}", hex::encode(digest));
     println!("=== out-of-band fingerprint (compare with co-signers) ===");
     println!("  hex: {}", multisig_encoding::digest_hex(&digest));
@@ -248,7 +273,6 @@ pub fn print_pm_canonical_intent(file: &BlobFile) -> Result<[u8; 32]> {
         "  safety-number: {}",
         multisig_encoding::digest_safety_number(&digest)
     );
-    println!("  threshold: {}", file.threshold);
     println!("  partials: {}", file.partials.len());
     if let Some(s) = &intent.human_summary {
         println!("  human_summary (untrusted): {s}");
@@ -624,7 +648,7 @@ mod tests {
             }
             IntentFile::Proposals(_) => panic!("expected pm intent"),
         }
-        let expected = council_resolve_digest(42, 1);
+        let expected = council_resolve_digest(&[0xab; 32], 7, 2, 42, 1);
         assert_eq!(hex32(&back.signed_digest).unwrap(), expected);
     }
 
@@ -656,6 +680,31 @@ mod tests {
             IntentFile::Proposals(i) => assert_eq!(i.function_name, "noop"),
             IntentFile::PmCouncilResolve(_) => panic!("expected proposals intent"),
         }
+    }
+
+    #[test]
+    fn pm_gate_binds_contract_account_and_threshold() {
+        let file = create_pm_blob_file(1, 0, [0xaa; 32], 9, 2, None);
+        assert!(gate_pm_blob_for_signing(&file).is_ok());
+
+        // Tamper pm_contract_id without updating digest → refuse.
+        let mut bad = file.clone();
+        if let IntentFile::PmCouncilResolve(ref mut i) = bad.intent {
+            i.pm_contract_id = encode_hex(&[0xbb; 32]);
+        }
+        assert!(gate_pm_blob_for_signing(&bad).is_err());
+
+        // Tamper registry_account_id → refuse.
+        let mut bad = file.clone();
+        if let IntentFile::PmCouncilResolve(ref mut i) = bad.intent {
+            i.registry_account_id = 99;
+        }
+        assert!(gate_pm_blob_for_signing(&bad).is_err());
+
+        // Tamper threshold → refuse.
+        let mut bad = file.clone();
+        bad.threshold = 3;
+        assert!(gate_pm_blob_for_signing(&bad).is_err());
     }
 
     #[test]

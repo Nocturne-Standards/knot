@@ -12,7 +12,7 @@ use anyhow::{bail, Result};
 use axum::extract::{Path as AxPath, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use dusk_bytes::Serializable;
 use dusk_core::abi::ContractId;
@@ -75,20 +75,17 @@ pub async fn serve_with_options(
 
     let mut token_bytes = [0u8; 32];
     OsRng.fill_bytes(&mut token_bytes);
-    let token = hex::encode(token_bytes);
-
     let state = Arc::new(AppState {
         identities: Mutex::new(identities),
         password,
         store_path,
-        token: token.clone(),
+        token: hex::encode(token_bytes),
         standalone_pm_resolve: opts.standalone_pm_resolve,
     });
 
     let api = Router::new()
         .route("/api/setup/status", get(api_setup_status))
         .route("/api/party", get(api_party_list).post(api_party_signup))
-        .route("/api/party/{pk}", delete(api_party_leave))
         .route("/api/identities", get(api_list_identities).post(api_new_identity))
         .route("/api/identities/import-pk", post(api_import_pk))
         .route("/api/account/create", post(api_account_create))
@@ -103,12 +100,15 @@ pub async fn serve_with_options(
         .route("/api/quorum-agg/check", post(api_quorum_agg_check))
         .route("/api/change-account/submit", post(api_change_account_submit))
         .route("/api/proposal/create", post(api_proposal_create))
+        .route("/api/proposal/{id}/preview", get(api_proposal_preview))
         .route("/api/proposal/{id}/approve", post(api_proposal_approve))
         .route("/api/proposal/{id}", get(api_proposal_status))
         .route("/api/proposal/{id}/finalize", post(api_proposal_finalize))
         .route("/api/proposal/next-id", get(api_proposal_next_id))
+        .route("/api/blob/{id}/preview", get(api_blob_preview))
         .route("/api/pm-resolve/init", post(api_pm_resolve_init))
         .route("/api/pm-resolve/list", get(api_pm_resolve_list))
+        .route("/api/pm-resolve/{id}/preview", get(api_pm_resolve_preview))
         .route("/api/pm-resolve/{id}", get(api_pm_resolve_status))
         .route("/api/pm-resolve/{id}/sign", post(api_pm_resolve_sign))
         .route("/api/pm-resolve/{id}/submit", post(api_pm_resolve_submit))
@@ -125,10 +125,13 @@ pub async fn serve_with_options(
         .with_state(state);
 
     let addr: std::net::SocketAddr = bind.parse()?;
-    let mut url = format!("http://{addr}/?token={token}");
+    // Do not put the bearer token in the printed/opened URL (M8) — it is
+    // injected into the local HTML as `window.MULTISIG_TOOL_TOKEN`; API
+    // clients must send header `X-Multisig-Tool-Token`.
+    let mut url = format!("http://{addr}/");
     if let Some(extra) = &opts.query_extra {
         if !extra.is_empty() {
-            url.push('&');
+            url.push('?');
             url.push_str(extra.trim_start_matches('&').trim_start_matches('?'));
         }
     }
@@ -139,10 +142,11 @@ pub async fn serve_with_options(
         }
     }
     eprintln!("multisig-tool listening on {url}");
+    eprintln!("Authorize /api/* with header X-Multisig-Tool-Token (value injected into local HTML only).");
     if opts.standalone_pm_resolve {
         eprintln!("PM council resolve UI (standalone). TESTNET ONLY.");
     } else {
-        eprintln!("TESTNET ONLY. Open the URL above (with token) in your browser.");
+        eprintln!("TESTNET ONLY. Open the URL above in your browser.");
     }
     if opts.open_browser || (!opts.standalone_pm_resolve && opts.open_tab.is_some()) {
         open_default_browser(&url);
@@ -411,12 +415,6 @@ async fn api_party_signup(
         .await
         .map_err(to_500)?;
     Ok(Json(member.into()))
-}
-
-async fn api_party_leave(AxPath(pk): AxPath<String>) -> Result<StatusCode, (StatusCode, String)> {
-    let client = CollectorClient::resolve(None).map_err(to_400)?;
-    client.leave_party(&pk).await.map_err(to_500)?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn find_pk(state: &AppState, name: &str) -> Result<BlsPublicKey, (StatusCode, String)> {
@@ -873,6 +871,23 @@ async fn api_proposal_create(
 #[derive(Deserialize)]
 struct ProposalApproveReq {
     signer: String,
+    /// Must be true — preview first, then confirm before signing.
+    #[serde(default)]
+    confirm: bool,
+}
+
+#[derive(Serialize)]
+struct SignPreviewOut {
+    digest_hex: String,
+    digest_mnemonic: String,
+    digest_safety_number: String,
+    chain_id: u64,
+    committee_id: u64,
+    nonce: u64,
+    target_hex: String,
+    function_name: String,
+    call_args_hex: String,
+    deadline: u64,
 }
 
 #[derive(Serialize)]
@@ -892,6 +907,86 @@ struct IntentDisplay {
     call_args_hex: String,
     deadline: u64,
     digest_hex: String,
+    digest_mnemonic: String,
+    digest_safety_number: String,
+}
+
+fn proposal_preview_from_view(view: &ProposalView) -> Result<SignPreviewOut, (StatusCode, String)> {
+    if view.status != ProposalStatus::Open {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "proposal is not Open".into(),
+        ));
+    }
+    let intent = multisig_encoding::ProposalIntent {
+        chain_id: view.chain_id,
+        committee_id: view.registry_account_id,
+        nonce: view.nonce,
+        target_contract_id: view.target.to_bytes(),
+        function_name: view.function_name.clone(),
+        call_args: view.call_args.clone(),
+        deadline: view.deadline,
+    };
+    let digest = multisig_encoding::recompute_and_verify(&intent, &view.signed_digest).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "REFUSING: on-chain digest does not match recomputed intent".into(),
+        )
+    })?;
+    Ok(SignPreviewOut {
+        digest_hex: format!("0x{}", hex::encode(digest)),
+        digest_mnemonic: multisig_encoding::digest_mnemonic(&digest),
+        digest_safety_number: multisig_encoding::digest_safety_number(&digest),
+        chain_id: intent.chain_id,
+        committee_id: intent.committee_id,
+        nonce: intent.nonce,
+        target_hex: format!("0x{}", hex::encode(intent.target_contract_id)),
+        function_name: intent.function_name,
+        call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
+        deadline: intent.deadline,
+    })
+}
+
+async fn api_proposal_preview(
+    AxPath(id): AxPath<u64>,
+) -> Result<Json<SignPreviewOut>, (StatusCode, String)> {
+    let view: Option<ProposalView> = chain::query_contract(
+        chain::Contract::Proposals,
+        "proposal",
+        chain::encode(&id).map_err(to_500)?,
+    )
+    .await
+    .map_err(to_500)?;
+    let view = view.ok_or_else(|| (StatusCode::BAD_REQUEST, format!("proposal {id} not found")))?;
+    Ok(Json(proposal_preview_from_view(&view)?))
+}
+
+/// Preview a collector proposals-kind blob (no signing).
+async fn api_blob_preview(
+    AxPath(id): AxPath<String>,
+) -> Result<Json<SignPreviewOut>, (StatusCode, String)> {
+    let client = CollectorClient::resolve(None).map_err(to_500)?;
+    let file = client.pull(&id).await.map_err(to_500)?;
+    let proposal = file.to_proposal_blob().map_err(to_500)?;
+    let digest = multisig_encoding::gate_blob_for_signing(&proposal).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "REFUSING: signed_digest does not match recomputed §4a digest".into(),
+        )
+    })?;
+    let i = &proposal.intent.intent;
+    Ok(Json(SignPreviewOut {
+        digest_hex: format!("0x{}", hex::encode(digest)),
+        digest_mnemonic: multisig_encoding::digest_mnemonic(&digest),
+        digest_safety_number: multisig_encoding::digest_safety_number(&digest),
+        chain_id: i.chain_id,
+        committee_id: i.committee_id,
+        nonce: i.nonce,
+        target_hex: format!("0x{}", hex::encode(i.target_contract_id)),
+        function_name: i.function_name.clone(),
+        call_args_hex: format!("0x{}", hex::encode(&i.call_args)),
+        deadline: i.deadline,
+    }))
 }
 
 async fn api_proposal_approve(
@@ -899,6 +994,12 @@ async fn api_proposal_approve(
     AxPath(id): AxPath<u64>,
     Json(req): Json<ProposalApproveReq>,
 ) -> Result<Json<ProposalApproveOut>, (StatusCode, String)> {
+    if !req.confirm {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "confirm required — call /preview first, then POST with confirm:true".into(),
+        ));
+    }
     let view: Option<ProposalView> = chain::query_contract(
         chain::Contract::Proposals,
         "proposal",
@@ -935,6 +1036,8 @@ async fn api_proposal_approve(
         call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
         deadline: intent.deadline,
         digest_hex: format!("0x{}", hex::encode(digest)),
+        digest_mnemonic: multisig_encoding::digest_mnemonic(&digest),
+        digest_safety_number: multisig_encoding::digest_safety_number(&digest),
     };
 
     let identities = state.identities.lock().await;
@@ -1227,6 +1330,22 @@ struct PmResolveSignReq {
     signer: String,
     #[serde(default)]
     expect_digest: Option<String>,
+    /// Must be true — preview first, then confirm before signing.
+    #[serde(default)]
+    confirm: bool,
+}
+
+#[derive(Serialize)]
+struct PmResolvePreviewOut {
+    digest_hex: String,
+    digest_mnemonic: String,
+    digest_safety_number: String,
+    market_id: u64,
+    winning_outcome: u8,
+    pm_contract_id: String,
+    registry_account_id: u64,
+    threshold: u32,
+    human_summary: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1234,7 +1353,35 @@ struct PmResolveSignOut {
     id: String,
     partials_count: usize,
     threshold: u32,
+    ready: bool,
+    signer_pk: String,
+    digest_hex: String,
     blob: BlobFile,
+}
+
+async fn api_pm_resolve_preview(
+    AxPath(id): AxPath<String>,
+) -> Result<Json<PmResolvePreviewOut>, (StatusCode, String)> {
+    let client = CollectorClient::resolve(None).map_err(to_500)?;
+    let file = client.pull(&id).await.map_err(to_500)?;
+    let digest = blob::gate_pm_blob_for_signing(&file).map_err(to_500)?;
+    let blob::IntentFile::PmCouncilResolve(intent) = &file.intent else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "not a pm_council_resolve blob".into(),
+        ));
+    };
+    Ok(Json(PmResolvePreviewOut {
+        digest_hex: format!("0x{}", hex::encode(digest)),
+        digest_mnemonic: multisig_encoding::digest_mnemonic(&digest),
+        digest_safety_number: multisig_encoding::digest_safety_number(&digest),
+        market_id: intent.market_id,
+        winning_outcome: intent.winning_outcome,
+        pm_contract_id: intent.pm_contract_id.clone(),
+        registry_account_id: intent.registry_account_id,
+        threshold: file.threshold,
+        human_summary: intent.human_summary.clone(),
+    }))
 }
 
 async fn api_pm_resolve_sign(
@@ -1242,6 +1389,12 @@ async fn api_pm_resolve_sign(
     AxPath(id): AxPath<String>,
     Json(req): Json<PmResolveSignReq>,
 ) -> Result<Json<PmResolveSignOut>, (StatusCode, String)> {
+    if !req.confirm {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "confirm required — call /preview first, then POST with confirm:true".into(),
+        ));
+    }
     let client = CollectorClient::resolve(None).map_err(to_500)?;
     let file = client.pull(&id).await.map_err(to_500)?;
     let digest = blob::gate_pm_blob_for_signing(&file).map_err(to_500)?;
@@ -1269,7 +1422,6 @@ async fn api_pm_resolve_sign(
         .require_sk()
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let pk = id_rec.pk;
-    // Silence print from add_pm_partial by gating then signing inline for RPC.
     let pk_hex = format!("0x{}", hex::encode(pk.to_bytes()));
     if file.partials.iter().any(|p| {
         p.signer_pk
@@ -1283,15 +1435,19 @@ async fn api_pm_resolve_sign(
     }
     let sig = bls::sign(sk, &digest);
     let partial = blob::PartialFile {
-        signer_pk: pk_hex,
+        signer_pk: pk_hex.clone(),
         sig: format!("0x{}", hex::encode(sig.to_bytes())),
     };
     drop(identities);
     let updated = client.append_partial(&id, &partial).await.map_err(to_500)?;
+    let ready = (updated.partials.len() as u32) >= updated.threshold;
     Ok(Json(PmResolveSignOut {
         id,
         partials_count: updated.partials.len(),
         threshold: updated.threshold,
+        ready,
+        signer_pk: pk_hex,
+        digest_hex: format!("0x{}", hex::encode(digest)),
         blob: updated,
     }))
 }

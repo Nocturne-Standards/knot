@@ -182,6 +182,36 @@ async function status() {
   }
 }
 
+async function preview() {
+  const id = document.getElementById("blob-id").value.trim();
+  if (!id) {
+    log("set blob id first", false);
+    return;
+  }
+  log("preview…");
+  try {
+    const out = await api(`/api/pm-resolve/${encodeURIComponent(id)}/preview`);
+    const box = document.getElementById("preview-box");
+    box.style.display = "block";
+    box.textContent =
+      `digest: ${out.digest_hex}\n` +
+      `mnemonic: ${out.digest_mnemonic}\n` +
+      `safety: ${out.digest_safety_number}\n` +
+      `market=${out.market_id} outcome=${out.winning_outcome}\n` +
+      `pm=${out.pm_contract_id}\naccount=${out.registry_account_id} threshold=${out.threshold}`;
+    document.getElementById("market").value = out.market_id;
+    document.getElementById("outcome").value = out.winning_outcome;
+    document.getElementById("pm").value = out.pm_contract_id;
+    document.getElementById("account").value = out.registry_account_id;
+    document.getElementById("threshold").value = out.threshold;
+    document.getElementById("confirm").checked = false;
+    document.getElementById("btn-sign").disabled = true;
+    log("preview ok — compare mnemonic, then check confirm + sign", true);
+  } catch (e) {
+    log(e.message, false);
+  }
+}
+
 async function sign() {
   const id = document.getElementById("blob-id").value.trim();
   const signer = document.getElementById("signer").value.trim();
@@ -189,14 +219,18 @@ async function sign() {
     log("need blob id and signer", false);
     return;
   }
+  if (!document.getElementById("confirm").checked) {
+    log("check the confirm box after preview", false);
+    return;
+  }
   log(`signing as ${signer}…`);
   try {
     const out = await api(`/api/pm-resolve/${encodeURIComponent(id)}/sign`, {
       method: "POST",
-      body: JSON.stringify({ signer }),
+      body: JSON.stringify({ signer, confirm: true }),
     });
     log(
-      `signed\npartials=${out.partials_count}/${out.threshold} ready=${out.ready}\npk=${out.signer_pk}`,
+      `signed\npartials=${out.partials_count}/${out.threshold} ready=${out.ready}\npk=${out.signer_pk}\ndigest=${out.digest_hex}`,
       true
     );
     await status();
@@ -229,10 +263,14 @@ document.getElementById("btn-refresh-ids").addEventListener("click", () =>
   refreshIdentities().then(refreshSetup).catch((e) => log(e.message, false))
 );
 document.getElementById("btn-init").addEventListener("click", initPush);
+document.getElementById("btn-preview").addEventListener("click", preview);
 document.getElementById("btn-sign").addEventListener("click", sign);
 document.getElementById("btn-status").addEventListener("click", status);
 document.getElementById("btn-list").addEventListener("click", listBlobs);
 document.getElementById("btn-submit").addEventListener("click", submit);
+document.getElementById("confirm").addEventListener("change", (e) => {
+  document.getElementById("btn-sign").disabled = !e.target.checked;
+});
 
 applyPrefills();
 refreshIdentities()
