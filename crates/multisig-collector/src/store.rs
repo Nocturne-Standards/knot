@@ -181,6 +181,7 @@ impl Store {
             out.push(ProposalSummary {
                 id,
                 signed_digest: digest,
+                kind: dto.kind,
                 threshold: dto.threshold,
                 partials_count: dto.partials.len(),
                 created_at,
@@ -306,6 +307,7 @@ fn now_unix() -> i64 {
 /// Proposal identity for create idempotency — ignores `partials`.
 fn proposal_identity_eq(a: &ProposalDto, b: &ProposalDto) -> bool {
     a.version == b.version
+        && a.kind == b.kind
         && a.intent == b.intent
         && a.signed_digest == b.signed_digest
         && a.threshold == b.threshold
@@ -314,7 +316,7 @@ fn proposal_identity_eq(a: &ProposalDto, b: &ProposalDto) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dto::IntentDto;
+    use crate::dto::{BlobKind, IntentDto, ProposalsIntentDto};
 
     #[test]
     fn in_memory_store_opens_and_is_alive() {
@@ -335,7 +337,8 @@ mod tests {
     fn sample_dto(digest: &str) -> ProposalDto {
         ProposalDto {
             version: 1,
-            intent: IntentDto {
+            kind: BlobKind::Proposals,
+            intent: IntentDto::Proposals(ProposalsIntentDto {
                 chain_id: 1,
                 committee_id: 7,
                 nonce: 3,
@@ -344,7 +347,7 @@ mod tests {
                 call_args: "0x0001".to_string(),
                 deadline: 1000,
                 human_summary: Some("hint".to_string()),
-            },
+            }),
             signed_digest: digest.to_string(),
             threshold: 2,
             partials: Vec::new(),
@@ -398,6 +401,68 @@ mod tests {
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].partials_count, 1);
         assert_eq!(summaries[0].id, id);
+    }
+
+    fn sample_pm_dto(digest: &str) -> ProposalDto {
+        ProposalDto {
+            version: 2,
+            kind: BlobKind::PmCouncilResolve,
+            intent: IntentDto::PmCouncilResolve(crate::dto::PmCouncilResolveIntentDto {
+                market_id: 0,
+                winning_outcome: 1,
+                pm_contract_id: format!("0x{}", "ab".repeat(32)),
+                registry_account_id: 0,
+                human_summary: Some("pm smoke".into()),
+            }),
+            signed_digest: digest.to_string(),
+            threshold: 2,
+            partials: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn pm_create_get_append_round_trip() {
+        let store = Store::open_in_memory().expect("open store");
+        let digest = "0x".to_string() + &"99".repeat(32);
+        let id = digest.trim_start_matches("0x").to_string();
+        let dto = sample_pm_dto(&digest);
+
+        matches!(
+            store.create_proposal(&id, &digest, &dto).unwrap(),
+            CreateOutcome::Created
+        )
+        .then_some(())
+        .expect("expected Created");
+
+        let fetched = store.get_proposal(&id).unwrap().expect("proposal exists");
+        assert_eq!(fetched.kind, BlobKind::PmCouncilResolve);
+        assert_eq!(fetched.signed_digest, digest);
+        match &fetched.intent {
+            IntentDto::PmCouncilResolve(i) => {
+                assert_eq!(i.market_id, 0);
+                assert_eq!(i.winning_outcome, 1);
+            }
+            IntentDto::Proposals(_) => panic!("expected pm intent"),
+        }
+
+        let pk = "0x".to_string() + &"11".repeat(96);
+        let sig = "0x".to_string() + &"22".repeat(48);
+        match store
+            .append_partial(
+                &id,
+                PartialDto {
+                    signer_pk: pk,
+                    sig,
+                },
+            )
+            .unwrap()
+        {
+            AppendOutcome::Appended(dto) => {
+                assert_eq!(dto.partials.len(), 1);
+                assert_eq!(dto.kind, BlobKind::PmCouncilResolve);
+            }
+            _ => panic!("expected Appended"),
+        }
     }
 
     #[test]
@@ -479,7 +544,10 @@ mod tests {
         let id = digest.trim_start_matches("0x").to_string();
         let dto = sample_dto(&digest);
         let mut different = dto.clone();
-        different.intent.nonce += 1;
+        match &mut different.intent {
+            IntentDto::Proposals(i) => i.nonce += 1,
+            IntentDto::PmCouncilResolve(_) => panic!("sample_dto is proposals"),
+        }
 
         matches!(
             store.create_proposal(&id, &digest, &dto).unwrap(),

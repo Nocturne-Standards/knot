@@ -9,6 +9,9 @@ never submits on-chain. See
 
 ## Status
 
+**2026-07-24 — `kind` on proposal summaries** (`proposals` | `pm_council_resolve`) so
+clients can filter PM council-resolve blobs without pulling every body.
+
 **2026-07-23 — proposals + partials + party-finder API implemented.** Local/dev
 only; VPS deploy is an operator TODO (see deploy runbook).
 
@@ -16,7 +19,7 @@ only; VPS deploy is an operator TODO (see deploy runbook).
 |---|---|---|
 | `GET` | `/v1/health` | Liveness |
 | `POST` | `/v1/proposals` | Create; body = blob JSON, `partials` ignored → `{ "id", "signed_digest" }` |
-| `GET` | `/v1/proposals` | List summaries (`id`, `signed_digest`, `threshold`, `partials_count`, `created_at`) |
+| `GET` | `/v1/proposals` | List summaries (`id`, `signed_digest`, `kind`, `threshold`, `partials_count`, `created_at`) |
 | `GET` | `/v1/proposals/:id` | Full blob |
 | `POST` | `/v1/proposals/:id/partials` | Append one `{ signer_pk, sig }`; rejects duplicate `signer_pk` (409) and unknown id (404) |
 | `GET` | `/v1/party` | Party finder roster |

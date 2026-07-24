@@ -168,6 +168,7 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
     assert_eq!(summaries.len(), 1);
     assert_eq!(summaries[0].id, pushed.id);
     assert_eq!(summaries[0].partials_count, 0);
+    assert_eq!(summaries[0].kind, blob::BlobKind::Proposals);
 
     sign_via_collector(&client, &pushed.id, &sk_alice, &pk_alice).await;
     let after_bob = sign_via_collector(&client, &pushed.id, &sk_bob, &pk_bob).await;
@@ -212,6 +213,75 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
     client.leave_party(&pk_hex).await.expect("party leave");
     let roster_after = client.list_party().await.expect("party list after leave");
     assert!(roster_after.is_empty());
+
+    let _ = std::fs::remove_file(&db_path);
+}
+
+#[tokio::test]
+async fn pm_council_resolve_push_pull_append_roundtrip() {
+    let port = free_port();
+    let bind = format!("127.0.0.1:{port}");
+    let base_url = format!("http://{bind}");
+    let db_path = std::env::temp_dir().join(format!("multisig-collector-pm-roundtrip-{port}.sqlite"));
+    let _ = std::fs::remove_file(&db_path);
+
+    let _collector = spawn_collector(&bind, &db_path);
+    wait_for_health(&base_url).await;
+
+    let client = CollectorClient::resolve(Some(&base_url)).expect("resolve client");
+
+    let file_blob = blob::create_pm_blob_file(
+        3,
+        1,
+        [0xcd; 32],
+        9,
+        2,
+        Some("pm collector roundtrip".into()),
+    );
+    assert_eq!(file_blob.kind, blob::BlobKind::PmCouncilResolve);
+
+    let pushed = client.push(&file_blob).await.expect("push pm blob");
+    assert_eq!(pushed.id.len(), 64);
+    assert_eq!(
+        pushed.id,
+        file_blob.signed_digest.trim_start_matches("0x").to_ascii_lowercase()
+    );
+
+    let summaries = client.list_proposals().await.expect("list");
+    assert!(
+        summaries
+            .iter()
+            .any(|s| s.id == pushed.id && s.kind == blob::BlobKind::PmCouncilResolve)
+    );
+
+    let pulled = client.pull(&pushed.id).await.expect("pull pm blob");
+    assert_eq!(pulled.kind, blob::BlobKind::PmCouncilResolve);
+    assert_eq!(pulled.version, blob::PM_BLOB_FILE_VERSION);
+    blob::gate_pm_blob_for_signing(&pulled).expect("digest must gate");
+    match &pulled.intent {
+        blob::IntentFile::PmCouncilResolve(i) => {
+            assert_eq!(i.market_id, 3);
+            assert_eq!(i.winning_outcome, 1);
+            assert_eq!(i.registry_account_id, 9);
+        }
+        blob::IntentFile::Proposals(_) => panic!("expected pm intent"),
+    }
+
+    let rng = &mut StdRng::seed_from_u64(20_260_724);
+    let (_sk, pk) = keypair(rng);
+    let after = client
+        .append_partial(
+            &pushed.id,
+            &PartialFile {
+                signer_pk: format!("0x{}", hex::encode(pk.to_bytes())),
+                // Collector is opaque — dummy 48-byte sig is enough for relay round-trip.
+                sig: format!("0x{}", "aa".repeat(48)),
+            },
+        )
+        .await
+        .expect("append pm partial");
+    assert_eq!(after.partials.len(), 1);
+    assert_eq!(after.kind, blob::BlobKind::PmCouncilResolve);
 
     let _ = std::fs::remove_file(&db_path);
 }

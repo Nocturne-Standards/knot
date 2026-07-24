@@ -174,7 +174,7 @@ async fn leave_party(State(state): State<AppState>, Path(pk): Path<String>) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dto::IntentDto;
+    use crate::dto::{BlobKind, IntentDto, ProposalsIntentDto};
     use crate::store::Store;
     use axum::body::Body;
     use axum::http::Request;
@@ -202,7 +202,8 @@ mod tests {
     fn sample_dto(digest: &str) -> ProposalDto {
         ProposalDto {
             version: 1,
-            intent: IntentDto {
+            kind: BlobKind::Proposals,
+            intent: IntentDto::Proposals(ProposalsIntentDto {
                 chain_id: 1,
                 committee_id: 7,
                 nonce: 3,
@@ -211,7 +212,7 @@ mod tests {
                 call_args: "0x0001".to_string(),
                 deadline: 1000,
                 human_summary: Some("hint".to_string()),
-            },
+            }),
             signed_digest: digest.to_string(),
             threshold: 2,
             partials: Vec::new(),
@@ -320,6 +321,75 @@ mod tests {
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["id"], id);
         assert_eq!(arr[0]["partials_count"], 1);
+    }
+
+    #[tokio::test]
+    async fn pm_create_then_get_then_append_partial() {
+        let store = Store::open_in_memory().expect("open store");
+        let state = AppState::new(store);
+        let app = router(state);
+
+        let digest = format!("0x{}", "99".repeat(32));
+        let dto = ProposalDto {
+            version: 2,
+            kind: BlobKind::PmCouncilResolve,
+            intent: IntentDto::PmCouncilResolve(crate::dto::PmCouncilResolveIntentDto {
+                market_id: 5,
+                winning_outcome: 0,
+                pm_contract_id: format!("0x{}", "ab".repeat(32)),
+                registry_account_id: 2,
+                human_summary: None,
+            }),
+            signed_digest: digest.clone(),
+            threshold: 2,
+            partials: Vec::new(),
+        };
+
+        let create_resp = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/v1/proposals",
+                serde_json::to_value(&dto).unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(create_resp.status(), StatusCode::CREATED);
+        let created = body_json(create_resp).await;
+        let id = created["id"].as_str().unwrap().to_string();
+        assert_eq!(id, digest.trim_start_matches("0x"));
+
+        let get_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/proposals/{id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let fetched = body_json(get_resp).await;
+        assert_eq!(fetched["kind"], "pm_council_resolve");
+        assert_eq!(fetched["intent"]["market_id"], 5);
+        assert_eq!(fetched["intent"]["winning_outcome"], 0);
+
+        let pk = format!("0x{}", "11".repeat(96));
+        let sig = format!("0x{}", "22".repeat(48));
+        let append_resp = app
+            .oneshot(json_request(
+                "POST",
+                &format!("/v1/proposals/{id}/partials"),
+                json!({ "signer_pk": pk, "sig": sig }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(append_resp.status(), StatusCode::OK);
+        let appended = body_json(append_resp).await;
+        assert_eq!(appended["kind"], "pm_council_resolve");
+        assert_eq!(appended["partials"].as_array().unwrap().len(), 1);
+        assert_eq!(appended["signed_digest"], digest);
     }
 
     #[tokio::test]

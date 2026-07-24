@@ -11,21 +11,35 @@
 //! parity" section for the exact field-for-field mapping to
 //! `multisig-tool/src/blob.rs`'s `BlobFile`/`IntentFile`/`PartialFile`.
 //!
-//! The collector never decodes `target_contract_id`/`function_name`/
-//! `call_args`/`human_summary` — those pass through as opaque strings. Only
-//! `signed_digest` (drives the content-addressed `id`) and `signer_pk`
-//! (drives partial de-duplication) are hex-validated and normalized here.
+//! The collector never decodes intent fields semantically — those pass
+//! through as opaque strings/numbers. Only `signed_digest` (drives the
+//! content-addressed `id`) and `signer_pk` (drives partial de-duplication)
+//! are hex-validated and normalized here. Digest recomputation stays in
+//! `multisig-tool` (kind-gated: §4a or council-resolve).
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// BLS public key length in bytes (96) — matches `multisig-tool`'s `hex96`.
 pub const PK_BYTES: usize = 96;
 /// `signed_digest` length in bytes (32) — matches `multisig-tool`'s `hex32`.
 pub const DIGEST_BYTES: usize = 32;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// Outer blob discriminator. Missing `kind` deserializes as
+/// [`BlobKind::Proposals`] (v1 compatibility). Lockstep with
+/// `multisig-tool::blob::BlobKind`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BlobKind {
+    #[default]
+    Proposals,
+    PmCouncilResolve,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ProposalDto {
     pub version: u16,
+    #[serde(default)]
+    pub kind: BlobKind,
     pub intent: IntentDto,
     pub signed_digest: String,
     pub threshold: u32,
@@ -33,8 +47,18 @@ pub struct ProposalDto {
     pub partials: Vec<PartialDto>,
 }
 
+/// Kind-discriminated intent (untagged on the wire). Outer `kind` selects
+/// the expected shape on deserialize — lockstep with
+/// `multisig-tool::blob::IntentFile`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct IntentDto {
+#[serde(untagged)]
+pub enum IntentDto {
+    Proposals(ProposalsIntentDto),
+    PmCouncilResolve(PmCouncilResolveIntentDto),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProposalsIntentDto {
     pub chain_id: u64,
     pub committee_id: u64,
     pub nonce: u64,
@@ -47,9 +71,53 @@ pub struct IntentDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PmCouncilResolveIntentDto {
+    pub market_id: u64,
+    pub winning_outcome: u8,
+    pub pm_contract_id: String,
+    pub registry_account_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub human_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PartialDto {
     pub signer_pk: String,
     pub sig: String,
+}
+
+#[derive(Deserialize)]
+struct ProposalDtoDe {
+    version: u16,
+    #[serde(default)]
+    kind: BlobKind,
+    intent: serde_json::Value,
+    signed_digest: String,
+    threshold: u32,
+    #[serde(default)]
+    partials: Vec<PartialDto>,
+}
+
+impl<'de> Deserialize<'de> for ProposalDto {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = ProposalDtoDe::deserialize(deserializer)?;
+        let intent = match raw.kind {
+            BlobKind::Proposals => IntentDto::Proposals(
+                serde_json::from_value(raw.intent).map_err(serde::de::Error::custom)?,
+            ),
+            BlobKind::PmCouncilResolve => IntentDto::PmCouncilResolve(
+                serde_json::from_value(raw.intent).map_err(serde::de::Error::custom)?,
+            ),
+        };
+        Ok(ProposalDto {
+            version: raw.version,
+            kind: raw.kind,
+            intent,
+            signed_digest: raw.signed_digest,
+            threshold: raw.threshold,
+            partials: raw.partials,
+        })
+    }
 }
 
 /// Summary row for `GET /v1/proposals`.
@@ -57,6 +125,7 @@ pub struct PartialDto {
 pub struct ProposalSummary {
     pub id: String,
     pub signed_digest: String,
+    pub kind: BlobKind,
     pub threshold: u32,
     pub partials_count: usize,
     pub created_at: i64,
@@ -193,5 +262,58 @@ mod tests {
     #[test]
     fn normalize_pk_rejects_garbage() {
         assert!(normalize_pk("not a valid pk at all!!").is_err());
+    }
+
+    #[test]
+    fn pm_dto_json_round_trip() {
+        let digest = format!("0x{}", "ab".repeat(32));
+        let dto = ProposalDto {
+            version: 2,
+            kind: BlobKind::PmCouncilResolve,
+            intent: IntentDto::PmCouncilResolve(PmCouncilResolveIntentDto {
+                market_id: 9,
+                winning_outcome: 1,
+                pm_contract_id: format!("0x{}", "cd".repeat(32)),
+                registry_account_id: 3,
+                human_summary: Some("hint".into()),
+            }),
+            signed_digest: digest.clone(),
+            threshold: 2,
+            partials: Vec::new(),
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("\"kind\":\"pm_council_resolve\""));
+        let back: ProposalDto = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, dto);
+        assert_eq!(back.kind, BlobKind::PmCouncilResolve);
+    }
+
+    #[test]
+    fn v1_proposals_dto_without_kind_defaults_to_proposals() {
+        let json = format!(
+            r#"{{
+                "version": 1,
+                "intent": {{
+                    "chain_id": 1,
+                    "committee_id": 7,
+                    "nonce": 3,
+                    "target_contract_id": "0x{}",
+                    "function_name": "set_service",
+                    "call_args": "0x0001",
+                    "deadline": 1000
+                }},
+                "signed_digest": "0x{}",
+                "threshold": 2,
+                "partials": []
+            }}"#,
+            "11".repeat(32),
+            "ab".repeat(32)
+        );
+        let dto: ProposalDto = serde_json::from_str(&json).unwrap();
+        assert_eq!(dto.kind, BlobKind::Proposals);
+        match dto.intent {
+            IntentDto::Proposals(i) => assert_eq!(i.function_name, "set_service"),
+            IntentDto::PmCouncilResolve(_) => panic!("expected proposals intent"),
+        }
     }
 }
