@@ -17,7 +17,7 @@ dusk-bls12_381 = { version = "=0.14.2", default-features = false }
 rkyv = { version = "=0.7.39", default-features = false, features = ["size_32"] }
 bytecheck = { version = "=0.6.12", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
-tiny-keccak = { version = "2", default-features = false, features = ["keccak"] }
+multisig-encoding = { path = "../multisig-encoding" }
 
 # -----------------------------------------------------------------------------
 # WASM Dependencies (contract is gated by #![cfg(target_family = "wasm")])

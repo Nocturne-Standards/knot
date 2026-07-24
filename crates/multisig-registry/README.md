@@ -13,7 +13,7 @@ Moonlight accounts. This contract answers one question: *did enough of this
 account's members sign this message?* Callers build authorization on top of
 that answer — e.g. `prediction-market`'s dispute council
 (`init_dispute_council(registry, account_id)` + `resolve` → `verify_quorum`
-over `council-resolve.v1`; lab green 2026-07-24, live redeploy/wire still
+over `council-resolve.v2`; lab green 2026-07-24, live redeploy/wire still
 open — see `prediction-market/crates/prediction-market/README.md`), or a
 future `compliance-gate` operator council.
 
@@ -35,10 +35,11 @@ future `compliance-gate` operator council.
   it if replay matters for their use case.
 - `change_account(ChangeAccountArgs)` — replaces an account's member set /
   threshold, gated by a quorum of the account's *current* members signing
-  over a fixed, registry-owned encoding (`change_message` in `state.rs`)
-  that includes the account's own nonce — this one path *does* have
-  built-in replay protection, since the registry controls that message's
-  format itself. On failure, the panic string includes
+  over `multisig_encoding::change_account_message` (domain + account_id +
+  on-chain nonce + new member pks + new threshold → Keccak-256). Nonce is
+  not an args field — it is folded from state into the digest. This path
+  *does* have built-in replay protection, since the registry controls that
+  message's format itself. On failure, the panic string includes
   `members`/`threshold`/`member_matches`/`sigs_ok` counters.
 - `verify_quorum_aggregate(VerifyQuorumAggregateArgs) -> bool` — same
   question as `verify_quorum`, checked with **one** native

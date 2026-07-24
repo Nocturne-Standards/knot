@@ -14,7 +14,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 /// One member's signature over the message being authorized. `signer` must
 /// be one of the account's `members` and must not repeat across entries in
-/// the same call — see `quorum::met`'s dedupe check.
+/// the same call — see `quorum_met`'s dedupe check.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
@@ -49,11 +49,14 @@ pub struct VerifyQuorumArgs {
 }
 
 /// Replaces an account's member set / threshold. Authorized by a quorum of
-/// the account's *current* members signing over a fixed encoding of
-/// `(account_id, nonce, new_members, new_threshold)` — see
-/// `state.rs::change_message`. `nonce` must equal the account's current
-/// on-chain nonce (rejected otherwise), preventing a captured quorum
-/// signature from being replayed after the account has already changed once.
+/// the account's *current* members signing over
+/// [`multisig_encoding::change_account_digest`] of
+/// `(account_id, current_nonce, new_members, new_threshold)`.
+///
+/// There is **no `nonce` field** on this args struct — the contract folds
+/// the account's on-chain `nonce` into the digest itself. Signers must
+/// read `account(id).nonce` (or `account_meta`) before signing; a captured
+/// quorum for an older nonce fails once the account has changed.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]

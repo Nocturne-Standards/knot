@@ -13,9 +13,9 @@ use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
 };
 use dusk_vm::{ContractData, Session, VM};
+use multisig_encoding::change_account_message;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use tiny_keccak::{Hasher, Keccak};
 
 #[path = "../src/call_types.rs"]
 mod call_types;
@@ -31,8 +31,6 @@ const MULTISIG_REGISTRY_BYTECODE: &[u8] = include_bytes!(
 const MULTISIG_REGISTRY_ID: ContractId = ContractId::from_bytes([0xa1; 32]);
 const CHAIN_ID: u8 = 0xCA;
 const POINT_LIMIT: u64 = 0x10000000;
-
-const DOMAIN_CHANGE_ACCOUNT: &[u8] = b"sme-platform.multisig-registry.change_account.v1";
 
 fn initialize() -> Session {
     let vm = VM::ephemeral().expect("Creating ephemeral VM should work");
@@ -63,17 +61,8 @@ fn change_message(
     new_members: &[BlsPublicKey],
     new_threshold: u32,
 ) -> Vec<u8> {
-    let mut hasher = Keccak::v256();
-    hasher.update(DOMAIN_CHANGE_ACCOUNT);
-    hasher.update(&account_id.to_le_bytes());
-    hasher.update(&nonce.to_le_bytes());
-    for member in new_members {
-        hasher.update(&member.to_bytes());
-    }
-    hasher.update(&new_threshold.to_le_bytes());
-    let mut out = [0u8; 32];
-    hasher.finalize(&mut out);
-    out.to_vec()
+    let member_pks: Vec<[u8; 96]> = new_members.iter().map(|pk| pk.to_bytes()).collect();
+    change_account_message(account_id, nonce, &member_pks, new_threshold)
 }
 
 fn sign_all(msg: &[u8], sks: &[(&BlsSecretKey, &BlsPublicKey)]) -> Vec<SignatureEntry> {

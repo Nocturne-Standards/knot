@@ -88,6 +88,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bip39_english_wordlist_has_2048_words() {
+        assert_eq!(wordlist().len(), 2048);
+    }
+
+    /// BIP39 Trezor vectors: ENT=256 all-zero → known 24-word mnemonic.
+    #[test]
+    fn bip39_golden_vector_ent256_all_zero() {
+        let entropy = [0u8; 32];
+        let expected = [
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "art",
+        ]
+        .join(" ");
+        assert_eq!(digest_mnemonic(&entropy), expected);
+    }
+
+    #[test]
     fn mnemonic_is_24_words_and_stable() {
         let d = [0x11u8; 32];
         let m1 = digest_mnemonic(&d);

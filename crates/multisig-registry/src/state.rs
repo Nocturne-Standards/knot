@@ -6,14 +6,16 @@ mod multisig_registry {
     use dusk_bytes::Serializable;
     use dusk_core::abi;
     use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-    use tiny_keccak::{Hasher, Keccak};
+    use multisig_encoding::change_account_message;
 
     use multisig_registry::call_types::{
         AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult,
         MultisigAccountView, SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
     };
 
-    const DOMAIN_CHANGE_ACCOUNT: &[u8] = b"sme-platform.multisig-registry.change_account.v1";
+    /// Soft cap on committee size — enough for operator councils; bounds
+    /// O(n²) duplicate checks and per-sig verify work (audit I6).
+    const MAX_COMMITTEE_MEMBERS: usize = 16;
 
     /// One registered account: its member set, the number of distinct
     /// member signatures required to satisfy a quorum, and a nonce used
@@ -99,8 +101,9 @@ mod multisig_registry {
         }
 
         /// Breaks `quorum_met` into observable counters + dumps member key
-        /// bytes. Used on testnet where free-read `verify_quorum` returns
-        /// HTTP 500 and `change_account` only surfaces a single panic string.
+        /// bytes. Thin wrapper over [`quorum_counts`] plus a member-pk dump.
+        /// Used on testnet where free-read `verify_quorum` returns HTTP 500
+        /// and `change_account` only surfaces a single panic string.
         pub fn diagnose_quorum(&self, args: VerifyQuorumArgs) -> DiagnoseQuorumResult {
             let Some(account) = self.accounts.get(&args.account_id) else {
                 return DiagnoseQuorumResult {
@@ -118,23 +121,8 @@ mod multisig_registry {
                 .iter()
                 .map(|pk| pk.to_bytes().to_vec())
                 .collect();
-
-            let mut counted: Vec<BlsPublicKey> = Vec::new();
-            let mut member_matches = 0u32;
-            let mut sigs_ok = 0u32;
-            for entry in &args.sigs {
-                if !account.members.contains(&entry.signer) {
-                    continue;
-                }
-                member_matches += 1;
-                if counted.contains(&entry.signer) {
-                    continue;
-                }
-                if abi::verify_bls(args.msg.clone(), entry.signer, entry.signature) {
-                    counted.push(entry.signer);
-                    sigs_ok += 1;
-                }
-            }
+            let (member_matches, sigs_ok) =
+                quorum_counts(&account.members, &args.msg, &args.sigs);
 
             DiagnoseQuorumResult {
                 exists: true,
@@ -172,6 +160,9 @@ mod multisig_registry {
             let Some(account) = self.accounts.get(&args.account_id) else {
                 return false;
             };
+            if args.signer_keys.len() > account.members.len() {
+                return false;
+            }
             if args.signer_keys.len() < account.threshold as usize {
                 return false;
             }
@@ -190,7 +181,7 @@ mod multisig_registry {
 
         /// Replaces `account_id`'s member set / threshold, authorized by a
         /// quorum of the account's *current* members signing over
-        /// `change_message(account_id, nonce, new_members, new_threshold)`.
+        /// `multisig_encoding::change_account_message(...)`.
         /// Bumps the nonce on success so a captured quorum signature can't
         /// be replayed against a later change.
         pub fn change_account(&mut self, args: ChangeAccountArgs) {
@@ -201,10 +192,15 @@ mod multisig_registry {
                 .get(&args.account_id)
                 .unwrap_or_else(|| panic!("no such multisig account"));
 
-            let msg = change_message(
+            let member_pks: Vec<[u8; 96]> = args
+                .new_members
+                .iter()
+                .map(|pk| pk.to_bytes())
+                .collect();
+            let msg = change_account_message(
                 args.account_id,
                 account.nonce,
-                &args.new_members,
+                &member_pks,
                 args.new_threshold,
             );
             let (matched, verified) =
@@ -228,11 +224,14 @@ mod multisig_registry {
         }
     }
 
-    /// Same bounds `prediction-market::validate_committee` enforces:
-    /// non-empty, no duplicate members, threshold in `1..=members.len()`.
+    /// Same bounds as prediction-market's council validation, plus a hard
+    /// cap of [`MAX_COMMITTEE_MEMBERS`] members.
     fn validate_committee(members: &[BlsPublicKey], threshold: u32) {
         if members.is_empty() {
             panic!("multisig account must have at least one member");
+        }
+        if members.len() > MAX_COMMITTEE_MEMBERS {
+            panic!("multisig account exceeds MAX_COMMITTEE_MEMBERS");
         }
         if threshold == 0 || threshold as usize > members.len() {
             panic!("threshold must be between 1 and committee size");
@@ -268,11 +267,15 @@ mod multisig_registry {
 
     /// Returns `(member_matches, sigs_ok)` — how many sig entries named a
     /// real member, and how many distinct members passed `verify_bls`.
+    /// Early-rejects when `sigs.len() > members.len()` (audit I6).
     fn quorum_counts(
         members: &[BlsPublicKey],
         msg: &[u8],
         sigs: &[SignatureEntry],
     ) -> (u32, u32) {
+        if sigs.len() > members.len() {
+            return (0, 0);
+        }
         let mut counted: Vec<BlsPublicKey> = Vec::new();
         let mut matched = 0u32;
         let mut verified = 0u32;
@@ -290,30 +293,5 @@ mod multisig_registry {
             }
         }
         (matched, verified)
-    }
-
-    /// Fixed encoding authorized by `change_account`'s quorum — domain tag,
-    /// account id, current nonce, then each new member's compressed bytes,
-    /// then the new threshold, keccak-hashed to a 32-byte digest (same
-    /// domain-separated-hash convention as `prediction-market`'s
-    /// `trader_msg`). Any change to this encoding is a breaking change for
-    /// signers.
-    fn change_message(
-        account_id: u64,
-        nonce: u64,
-        new_members: &[BlsPublicKey],
-        new_threshold: u32,
-    ) -> Vec<u8> {
-        let mut hasher = Keccak::v256();
-        hasher.update(DOMAIN_CHANGE_ACCOUNT);
-        hasher.update(&account_id.to_le_bytes());
-        hasher.update(&nonce.to_le_bytes());
-        for member in new_members {
-            hasher.update(&member.to_bytes());
-        }
-        hasher.update(&new_threshold.to_le_bytes());
-        let mut out = [0u8; 32];
-        hasher.finalize(&mut out);
-        out.to_vec()
     }
 }

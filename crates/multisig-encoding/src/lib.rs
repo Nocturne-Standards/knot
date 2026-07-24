@@ -6,7 +6,9 @@
 //! Two artifacts (do not conflate):
 //! - **§4a signing preimage** — malleability-free byte concatenation → Keccak256 digest.
 //!   This is what members sign. Never use rkyv for these bytes.
-//! - **§4b ProposalBlob** — rkyv transport container (intent + partials). Never itself signed.
+//! - **§4b ProposalBlob** — in-memory shape for intent + partials (never itself signed).
+//!   JSON+hex transport for blobs lives in `multisig-tool` / `multisig-collector`;
+//!   this crate does not serialize §4b with rkyv.
 //!
 //! Spec: `docs/multisig/multisig-suite-and-atlas-implementation-plan.md` §4.
 
@@ -24,6 +26,46 @@ pub use fingerprint::{digest_hex, digest_mnemonic, digest_safety_number};
 
 /// Versioned domain tag for the proposal signing preimage.
 pub const DOMAIN_PROPOSAL_V1: &[u8] = b"sme-platform.multisig.proposal.v1";
+
+/// Domain tag for registry `change_account` quorum message.
+pub const DOMAIN_CHANGE_ACCOUNT_V1: &[u8] =
+    b"sme-platform.multisig-registry.change_account.v1";
+
+/// Full 32-byte digest members must sign to authorize a committee change.
+///
+/// `member_pks` are compressed BLS pk bytes (96 each), in the same order
+/// as `new_members` on-chain. Layout (no length prefix on member count):
+/// `DOMAIN || account_id_le || nonce_le || pk₀…pkₙ || threshold_le_u32`,
+/// then Keccak-256 of the full preimage.
+pub fn change_account_digest(
+    account_id: u64,
+    nonce: u64,
+    member_pks: &[[u8; 96]],
+    new_threshold: u32,
+) -> [u8; 32] {
+    let mut hasher = Keccak::v256();
+    hasher.update(DOMAIN_CHANGE_ACCOUNT_V1);
+    hasher.update(&account_id.to_le_bytes());
+    hasher.update(&nonce.to_le_bytes());
+    for pk in member_pks {
+        hasher.update(pk);
+    }
+    hasher.update(&new_threshold.to_le_bytes());
+    let mut out = [0u8; 32];
+    hasher.finalize(&mut out);
+    out
+}
+
+/// Same digest as [`change_account_digest`], returned as a `Vec` for
+/// host/`abi::verify_bls` message buffers.
+pub fn change_account_message(
+    account_id: u64,
+    nonce: u64,
+    member_pks: &[[u8; 96]],
+    new_threshold: u32,
+) -> Vec<u8> {
+    change_account_digest(account_id, nonce, member_pks, new_threshold).to_vec()
+}
 
 /// Fields that fully determine the §4a preimage / digest.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -199,6 +241,30 @@ mod tests {
         let b = sample_intent().digest();
         assert_eq!(a, b);
         assert_eq!(a.len(), 32);
+    }
+
+    /// Locked known vector for registry `change_account` encoding.
+    /// Inputs: account_id=1, nonce=0, pks=[[0;96],[1;96]], threshold=2.
+    #[test]
+    fn change_account_digest_known_vector() {
+        let digest = change_account_digest(1, 0, &[[0u8; 96], [1u8; 96]], 2);
+        let msg = change_account_message(1, 0, &[[0u8; 96], [1u8; 96]], 2);
+        assert_eq!(digest.as_slice(), msg.as_slice());
+        // Hex locked 2026-07-24 from the same layout as historical
+        // registry `change_message` / tool `change_account_message`.
+        let expected = hex_decode(
+            "b0a4bf2e90969fc4cc5f8a6c65cb3f1abcda971794aeee8806ba240abec6557c",
+        );
+        assert_eq!(digest, expected);
+    }
+
+    fn hex_decode(s: &str) -> [u8; 32] {
+        let mut out = [0u8; 32];
+        assert_eq!(s.len(), 64);
+        for i in 0..32 {
+            out[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).unwrap();
+        }
+        out
     }
 
     #[test]

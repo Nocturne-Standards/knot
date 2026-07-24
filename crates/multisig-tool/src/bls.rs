@@ -15,7 +15,6 @@
 use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey, Signature as BlsSignature,
 };
-use tiny_keccak::{Hasher, Keccak};
 
 pub fn sign(sk: &BlsSecretKey, msg: &[u8]) -> BlsSignature {
     sk.sign(msg)
@@ -32,14 +31,9 @@ pub fn aggregate(sigs: &[MultisigSignature]) -> MultisigSignature {
     first.aggregate(rest)
 }
 
-const DOMAIN_CHANGE_ACCOUNT: &[u8] = b"sme-platform.multisig-registry.change_account.v1";
-
-/// Reproduces `multisig-registry`'s private `change_message` encoding
-/// exactly (`multisig-registry/src/state.rs`) — the fixed digest a quorum of
-/// an account's *current* members must sign to authorize `change_account`.
-/// Kept in sync by hand since the contract's version is intentionally
-/// private (not something external callers should construct differently) —
-/// if the contract's encoding ever changes, this must change with it.
+/// Thin wrap of [`multisig_encoding::change_account_message`] — the fixed
+/// digest a quorum of an account's *current* members must sign to authorize
+/// `change_account`. Accepts `BlsPublicKey`s and maps them to the byte API.
 pub fn change_account_message(
     account_id: u64,
     nonce: u64,
@@ -47,15 +41,6 @@ pub fn change_account_message(
     new_threshold: u32,
 ) -> Vec<u8> {
     use dusk_bytes::Serializable;
-    let mut hasher = Keccak::v256();
-    hasher.update(DOMAIN_CHANGE_ACCOUNT);
-    hasher.update(&account_id.to_le_bytes());
-    hasher.update(&nonce.to_le_bytes());
-    for member in new_members {
-        hasher.update(&member.to_bytes());
-    }
-    hasher.update(&new_threshold.to_le_bytes());
-    let mut out = [0u8; 32];
-    hasher.finalize(&mut out);
-    out.to_vec()
+    let member_pks: Vec<[u8; 96]> = new_members.iter().map(|pk| pk.to_bytes()).collect();
+    multisig_encoding::change_account_message(account_id, nonce, &member_pks, new_threshold)
 }
