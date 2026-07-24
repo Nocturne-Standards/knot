@@ -120,6 +120,7 @@ submission goes two ways:
 
 ## Status
 
+- **Package version `0.2.0`** — see [CHANGELOG.md](CHANGELOG.md). Policy: [docs/versioning.md](../../../docs/versioning.md). `multisig-tool --version` prints the same string.
 - **PM council resolve CLI + standalone UI (2026-07-24)** — `pm-resolve init|sign|status|submit|ui`
   builds `kind=pm_council_resolve` blobs over **`council-resolve.v2`**
   (`DOMAIN || pm_contract_id || registry_account_id || threshold || market_id ||

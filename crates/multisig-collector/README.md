@@ -9,6 +9,8 @@ never submits on-chain. See
 
 ## Status
 
+**Package version `0.2.0`** — see [CHANGELOG.md](CHANGELOG.md). Policy: [docs/versioning.md](../../../docs/versioning.md).
+
 **2026-07-24 — availability hardening (audit I8/I9/I10/M10):** last-write-wins
 partial replace (same `signer_pk`); sig capped at 48 bytes (BLS); max 32
 partials / proposal; max 512-char note/summary; 64 KiB body limit; GET id must
@@ -23,7 +25,7 @@ only; VPS deploy is an operator TODO (see deploy runbook).
 
 | Method | Path | Behavior |
 |---|---|---|
-| `GET` | `/v1/health` | Liveness |
+| `GET` | `/v1/health` | Liveness — `{"ok":true,"version":"<semver>"}` (check after every redeploy) |
 | `POST` | `/v1/proposals` | Create; body = blob JSON, `partials` ignored → `{ "id", "signed_digest" }`; `human_summary` ≤ 512 chars |
 | `GET` | `/v1/proposals` | List summaries (`id`, `signed_digest`, `kind`, `threshold`, `partials_count`, `created_at`) |
 | `GET` | `/v1/proposals/:id` | Full blob; `:id` must be exactly 64 hex chars (else 400) |
@@ -82,7 +84,7 @@ length-validated and normalized to lowercase hex where applicable.
 
 ```bash
 cargo run -p multisig-collector
-curl http://127.0.0.1:8899/v1/health   # {"ok":true}
+curl http://127.0.0.1:8899/v1/health   # {"ok":true,"version":"0.2.0"}
 ```
 
 **VPS deploy (operator TODO):** follow
