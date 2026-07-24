@@ -12,9 +12,9 @@ Signed bytes are the §4a digest from [`multisig-encoding`](../multisig-encoding
   open proposals; require `init_chain_id` before propose.
 - Lab AC: `make test` green under `VM::ephemeral()` (includes `test-target`
   execute / reentrancy / failed-`call_raw` paths).
-- **Testnet:** v0.2.0 still live until redeploy; see
-  `../../../deployments/testnet.json`. After cutover, re-`init_registry` /
-  `init_chain_id` / optional `set_tombstone`.
+- **Testnet:** **v0.3.0** live (2026-07-24 cutover); `init_registry` →
+  registry v0.1.3, `init_chain_id` = `2`. See
+  `../../../deployments/testnet.json`.
 - Unit tests use `sign_insecure` (PreFork). Live clients must use secure `sign`.
 
 ## Functions

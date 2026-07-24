@@ -20,21 +20,20 @@ as a client.
 
 **2026-07-24 — first product consumer path:** prediction-market dispute
 council resolve (`multisig-tool pm-resolve`, collector `kind=pm_council_resolve`,
-portal web→CLI handoff). Live PM redeploy/wire still open — see the
-prediction-market crate README in the parent repo.
+portal web→CLI handoff).
 
-**2026-07-24 — audit remediation (code ready, testnet cutover pending):**
-proposals **0.3.0** (CEI finalize, bool `tombstone`, propose caps), registry
-encoding/`change_account` digest single-source + committee caps, collector
-replace-partials/caps, tool preview/confirm + PM **`council-resolve.v2`**.
-Do **not** assume live `deployments/testnet.json` ids already match this
-bytecode — redeploy registry / proposals / PM before lab wire.
+**2026-07-24 — audit remediation live on testnet:** registry **v0.1.3**
+(`66d763b2…`), proposals **v0.3.0** (`6b8ba51c…`, `init_registry` +
+`init_chain_id=2` wired), PM monolith **v0.3.1** (`1c095ae2…`,
+`council-resolve.v2` + `init_treasury` re-wired). **Dispute council account
+still unwired** (`init_dispute_council` + portal `accountId`) — OPS
+`create_account` on the new registry, then wire.
 
 | Surface | License | Notes |
 |---|---|---|
 | `crates/multisig-encoding` | Apache-2.0 | Canonical §4a digest + blob helpers + M3 fingerprint |
-| `crates/multisig-registry` | Apache-2.0 | On-chain BLS M-of-N quorum registry — testnet v0.1.2 |
-| `crates/multisig-proposals` | Apache-2.0 | On-chain propose→approve→finalize `call_raw` — v0.3.0 (testnet cutover pending) |
+| `crates/multisig-registry` | Apache-2.0 | On-chain BLS M-of-N quorum registry — **testnet v0.1.3** |
+| `crates/multisig-proposals` | Apache-2.0 | On-chain propose→approve→finalize `call_raw` — **testnet v0.3.0** |
 | `crates/multisig-tool` | Apache-2.0 | Local signing CLI + web UI + PM council resolve — **testnet only** |
 | `crates/multisig-collector` | AGPL-3.0-only | Untrusted off-chain relay; production auth at reverse proxy |
 

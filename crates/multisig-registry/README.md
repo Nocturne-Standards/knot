@@ -70,7 +70,7 @@ future `compliance-gate` operator council.
 
 ## Status
 
-v0.1.2 on testnet (contract id in `../../../deployments/testnet.json`).
+v0.1.3 on testnet (contract id in `../../../deployments/testnet.json`).
 `make wasm` + `make wasm-dd` + `cargo test --release`, 14/14 green.
 Same dusk-forge-template pattern as `identity-credential`/`compliance-gate`
 (wasm32-unknown-unknown, Rust 1.94.0, `#[dusk_forge::contract]`).
