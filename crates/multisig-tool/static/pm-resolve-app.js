@@ -85,6 +85,85 @@ async function refreshSetup() {
   }
 }
 
+async function refreshChainData() {
+  const hint = document.getElementById("chain-hint");
+  hint.textContent = "Loading from testnet…";
+  try {
+    const [dep, accounts, markets] = await Promise.all([
+      api("/api/deployments/pm"),
+      api("/api/registry/accounts?limit=64"),
+      api("/api/pm/markets?limit=50"),
+    ]);
+    const pmEl = document.getElementById("pm");
+    if (!pmEl.value.trim()) {
+      pmEl.value = dep.pm_contract_id;
+    }
+
+    const council = document.getElementById("council-pick");
+    const prevCouncil = council.value;
+    council.innerHTML = "";
+    const blankC = document.createElement("option");
+    blankC.value = "";
+    blankC.textContent = accounts.length ? "— pick council —" : "— no accounts —";
+    council.appendChild(blankC);
+    for (const a of accounts) {
+      const opt = document.createElement("option");
+      opt.value = String(a.id);
+      opt.textContent = a.label;
+      opt.dataset.threshold = String(a.threshold);
+      council.appendChild(opt);
+    }
+    if (prevCouncil && [...council.options].some((o) => o.value === prevCouncil)) {
+      council.value = prevCouncil;
+    }
+
+    const marketPick = document.getElementById("market-pick");
+    const prevMarket = marketPick.value;
+    marketPick.innerHTML = "";
+    const blankM = document.createElement("option");
+    blankM.value = "";
+    blankM.textContent = markets.length ? "— pick market —" : "— no markets —";
+    marketPick.appendChild(blankM);
+    const sorted = [...markets].sort((a, b) => Number(b.under_review) - Number(a.under_review) || a.id - b.id);
+    for (const m of sorted) {
+      const opt = document.createElement("option");
+      opt.value = String(m.id);
+      opt.textContent = (m.under_review ? "★ " : "") + m.label;
+      marketPick.appendChild(opt);
+    }
+    if (prevMarket && [...marketPick.options].some((o) => o.value === prevMarket)) {
+      marketPick.value = prevMarket;
+    }
+
+    const under = markets.filter((m) => m.under_review).length;
+    hint.textContent = `PM ${dep.pm_contract_id.slice(0, 10)}… · ${accounts.length} account(s) · ${markets.length} market(s) (${under} under review)`;
+  } catch (e) {
+    hint.textContent = e.message;
+    throw e;
+  }
+}
+
+function onCouncilPick() {
+  const sel = document.getElementById("council-pick");
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) return;
+  document.getElementById("account").value = opt.value;
+  if (opt.dataset.threshold) {
+    document.getElementById("threshold").value = opt.dataset.threshold;
+  }
+}
+
+function onMarketPick() {
+  const sel = document.getElementById("market-pick");
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) return;
+  document.getElementById("market").value = opt.value;
+  const summary = document.getElementById("summary");
+  if (!summary.value.trim()) {
+    summary.value = `resolve market ${opt.value}`;
+  }
+}
+
 async function createIdentity() {
   const name = document.getElementById("id-name").value.trim();
   if (!name) {
@@ -262,6 +341,11 @@ document.getElementById("btn-new-id").addEventListener("click", createIdentity);
 document.getElementById("btn-refresh-ids").addEventListener("click", () =>
   refreshIdentities().then(refreshSetup).catch((e) => log(e.message, false))
 );
+document.getElementById("btn-refresh-chain").addEventListener("click", () =>
+  refreshChainData().catch((e) => log(e.message, false))
+);
+document.getElementById("council-pick").addEventListener("change", onCouncilPick);
+document.getElementById("market-pick").addEventListener("change", onMarketPick);
 document.getElementById("btn-init").addEventListener("click", initPush);
 document.getElementById("btn-preview").addEventListener("click", preview);
 document.getElementById("btn-sign").addEventListener("click", sign);
@@ -275,6 +359,7 @@ document.getElementById("confirm").addEventListener("change", (e) => {
 applyPrefills();
 refreshIdentities()
   .then(refreshSetup)
+  .then(() => refreshChainData().catch((e) => log(e.message, false)))
   .then(() => {
     if (document.getElementById("blob-id").value.trim()) status();
     else listBlobs().catch(() => {});

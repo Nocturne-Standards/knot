@@ -9,7 +9,7 @@ use std::process::Command;
 use std::sync::Arc;
 
 use anyhow::{bail, Result};
-use axum::extract::{Path as AxPath, State};
+use axum::extract::{Path as AxPath, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
@@ -29,6 +29,7 @@ use crate::registry_types::call_types::{
     AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
     SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
+use crate::pm_read_types::{MarketInfo, MarketStatus};
 use crate::{chain, keystore};
 use multisig_tool::blob::{self, BlobFile, BlobKind};
 use multisig_tool::bls;
@@ -93,6 +94,9 @@ pub async fn serve_with_options(
         .route("/api/account/{id}/meta", get(api_account_meta))
         .route("/api/account/{id}/keys", get(api_account_keys))
         .route("/api/account/next-id", get(api_account_next_id))
+        .route("/api/deployments/pm", get(api_deployments_pm))
+        .route("/api/registry/accounts", get(api_registry_accounts))
+        .route("/api/pm/markets", get(api_pm_markets))
         .route("/api/quorum/submit", post(api_quorum_submit))
         .route("/api/quorum/check", post(api_quorum_check))
         .route("/api/quorum/diagnose", post(api_quorum_diagnose))
@@ -559,6 +563,177 @@ async fn api_account_next_id() -> Result<Json<u64>, (StatusCode, String)> {
     let bytes = chain::encode(&()).map_err(to_500)?;
     let next: u64 = chain::query("next_account_id", bytes).await.map_err(to_500)?;
     Ok(Json(next))
+}
+
+#[derive(Serialize)]
+struct DeploymentsPmOut {
+    pm_contract_id: String,
+    registry_contract_id: String,
+}
+
+async fn api_deployments_pm() -> Result<Json<DeploymentsPmOut>, (StatusCode, String)> {
+    let pm = chain::contract_id_hex(chain::Contract::PredictionMarket).map_err(to_500)?;
+    let registry = chain::contract_id_hex(chain::Contract::Registry).map_err(to_500)?;
+    Ok(Json(DeploymentsPmOut {
+        pm_contract_id: pm,
+        registry_contract_id: registry,
+    }))
+}
+
+#[derive(Deserialize)]
+struct RegistryAccountsQuery {
+    /// Cap how many accounts to scan from 0 (default 64, max 256).
+    #[serde(default = "default_account_scan")]
+    limit: u64,
+}
+
+fn default_account_scan() -> u64 {
+    64
+}
+
+#[derive(Serialize)]
+struct RegistryAccountRow {
+    id: u64,
+    threshold: u32,
+    nonce: u64,
+    members_len: usize,
+    members_base58: Vec<String>,
+    /// Local identity names matched to member keys (same order; empty if unknown).
+    member_names: Vec<String>,
+    label: String,
+}
+
+async fn api_registry_accounts(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<RegistryAccountsQuery>,
+) -> Result<Json<Vec<RegistryAccountRow>>, (StatusCode, String)> {
+    let scan = q.limit.clamp(1, 256);
+    let next_bytes = chain::encode(&()).map_err(to_500)?;
+    let next: u64 = chain::query("next_account_id", next_bytes)
+        .await
+        .map_err(to_500)?;
+    let end = next.min(scan);
+    let identities = state.identities.lock().await;
+    let mut rows = Vec::new();
+    for id in 0..end {
+        let bytes = chain::encode(&id).map_err(to_500)?;
+        let view: Option<MultisigAccountView> =
+            chain::query("account", bytes).await.map_err(to_500)?;
+        let Some(v) = view else {
+            continue;
+        };
+        let members_base58: Vec<String> = v.members.iter().map(bs58_pk).collect();
+        let member_names: Vec<String> = v
+            .members
+            .iter()
+            .map(|pk| {
+                identities
+                    .iter()
+                    .find(|i| i.pk.to_bytes() == pk.to_bytes())
+                    .map(|i| i.name.clone())
+                    .unwrap_or_default()
+            })
+            .collect();
+        let named: Vec<&str> = member_names
+            .iter()
+            .map(|n| if n.is_empty() { "?" } else { n.as_str() })
+            .collect();
+        let label = format!(
+            "account {id} · {thr}-of-{n} · {}",
+            named.join(", "),
+            thr = v.threshold,
+            n = v.members.len()
+        );
+        rows.push(RegistryAccountRow {
+            id,
+            threshold: v.threshold,
+            nonce: v.nonce,
+            members_len: v.members.len(),
+            members_base58,
+            member_names,
+            label,
+        });
+    }
+    Ok(Json(rows))
+}
+
+#[derive(Deserialize)]
+struct PmMarketsQuery {
+    #[serde(default = "default_market_limit")]
+    limit: u64,
+    #[serde(default)]
+    offset: u64,
+    #[serde(default)]
+    under_review_only: bool,
+}
+
+fn default_market_limit() -> u64 {
+    50
+}
+
+#[derive(Serialize)]
+struct PmMarketRow {
+    id: u64,
+    status: String,
+    under_review: bool,
+    winning_outcome: Option<u8>,
+    yes_reserve: u64,
+    no_reserve: u64,
+    close_block: u64,
+    label: String,
+}
+
+async fn api_pm_markets(
+    Query(q): Query<PmMarketsQuery>,
+) -> Result<Json<Vec<PmMarketRow>>, (StatusCode, String)> {
+    let limit = q.limit.clamp(1, 200);
+    // When filtering, scan a wider page so Under review rows still surface.
+    let fetch = if q.under_review_only {
+        limit.saturating_mul(4).clamp(limit, 200)
+    } else {
+        limit
+    };
+    let args = chain::encode(&(q.offset, fetch)).map_err(to_500)?;
+    let ids: Vec<u64> = chain::query_pm("list_market_ids", args)
+        .await
+        .map_err(to_500)?;
+    let mut rows = Vec::new();
+    for id in ids {
+        let info_args = chain::encode(&id).map_err(to_500)?;
+        let info: Option<MarketInfo> = chain::query_pm("market_info", info_args)
+            .await
+            .map_err(to_500)?;
+        let Some(info) = info else {
+            continue;
+        };
+        let under_review = info.status == MarketStatus::UnderReview;
+        if q.under_review_only && !under_review {
+            continue;
+        }
+        let status = info.status.as_str().to_string();
+        let outcome = info
+            .winning_outcome
+            .map(|o| format!(" outcome={o}"))
+            .unwrap_or_default();
+        let label = format!(
+            "market {id} · {status}{outcome} · yes={} no={}",
+            info.yes_reserve, info.no_reserve
+        );
+        rows.push(PmMarketRow {
+            id,
+            status,
+            under_review,
+            winning_outcome: info.winning_outcome,
+            yes_reserve: info.yes_reserve,
+            no_reserve: info.no_reserve,
+            close_block: info.close_block,
+            label,
+        });
+        if rows.len() as u64 >= limit {
+            break;
+        }
+    }
+    Ok(Json(rows))
 }
 
 #[derive(Deserialize)]

@@ -12,6 +12,7 @@ extern crate alloc;
 
 mod chain;
 mod keystore;
+mod pm_read_types;
 mod proposals_types;
 mod registry_types;
 mod rpc;
@@ -136,6 +137,11 @@ enum AccountCmd {
     Keys { account_id: u64 },
     /// Free-read next account id the contract will allocate.
     NextId,
+    /// Scan registry accounts `0..min(next_id, limit)` and print summaries.
+    List {
+        #[arg(long, default_value_t = 64)]
+        limit: u64,
+    },
 }
 
 #[derive(Subcommand)]
@@ -436,6 +442,17 @@ enum PmResolveCmd {
         #[arg(long)]
         no_open: bool,
     },
+    /// Print PM + registry contract ids from `deployments/testnet.json`.
+    Deployments,
+    /// List markets via free-read (`list_market_ids` + `market_info`).
+    Markets {
+        #[arg(long, default_value_t = 50)]
+        limit: u64,
+        #[arg(long, default_value_t = 0)]
+        offset: u64,
+        #[arg(long)]
+        under_review_only: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -723,6 +740,26 @@ async fn main() -> Result<()> {
                 let bytes = chain::encode(&())?;
                 let next: u64 = chain::query("next_account_id", bytes).await?;
                 println!("next_account_id => {next}");
+            }
+            AccountCmd::List { limit } => {
+                let scan = limit.clamp(1, 256);
+                let bytes = chain::encode(&())?;
+                let next: u64 = chain::query("next_account_id", bytes).await?;
+                let end = next.min(scan);
+                println!("registry accounts 0..{end} (next_account_id={next}):");
+                for id in 0..end {
+                    let bytes = chain::encode(&id)?;
+                    let view: Option<MultisigAccountView> = chain::query("account", bytes).await?;
+                    match view {
+                        Some(v) => println!(
+                            "  [{id}] threshold={} nonce={} members={}",
+                            v.threshold,
+                            v.nonce,
+                            v.members.len()
+                        ),
+                        None => println!("  [{id}] (empty)"),
+                    }
+                }
             }
         },
 
@@ -1380,6 +1417,55 @@ async fn main() -> Result<()> {
                     open_browser: !no_open,
                 };
                 rpc::serve_with_options(&bind, store_path, opts).await?;
+            }
+            PmResolveCmd::Deployments => {
+                let pm = chain::contract_id_hex(chain::Contract::PredictionMarket)?;
+                let registry = chain::contract_id_hex(chain::Contract::Registry)?;
+                println!("prediction-market  {pm}");
+                println!("multisig-registry   {registry}");
+            }
+            PmResolveCmd::Markets {
+                limit,
+                offset,
+                under_review_only,
+            } => {
+                use pm_read_types::{MarketInfo, MarketStatus};
+                let limit = limit.clamp(1, 200);
+                let fetch = if under_review_only {
+                    limit.saturating_mul(4).clamp(limit, 200)
+                } else {
+                    limit
+                };
+                let args = chain::encode(&(offset, fetch))?;
+                let ids: Vec<u64> = chain::query_pm("list_market_ids", args).await?;
+                let mut printed = 0u64;
+                for id in ids {
+                    let info_args = chain::encode(&id)?;
+                    let info: Option<MarketInfo> =
+                        chain::query_pm("market_info", info_args).await?;
+                    let Some(info) = info else {
+                        continue;
+                    };
+                    let under = info.status == MarketStatus::UnderReview;
+                    if under_review_only && !under {
+                        continue;
+                    }
+                    println!(
+                        "  [{id}] {} yes={} no={} close_block={} winning={:?}",
+                        info.status.as_str(),
+                        info.yes_reserve,
+                        info.no_reserve,
+                        info.close_block,
+                        info.winning_outcome
+                    );
+                    printed += 1;
+                    if printed >= limit {
+                        break;
+                    }
+                }
+                if printed == 0 {
+                    println!("(no markets)");
+                }
             }
         },
 

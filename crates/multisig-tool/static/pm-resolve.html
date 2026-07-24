@@ -83,7 +83,21 @@
 
     <div class="panel">
       <h2>1 · Propose resolve</h2>
-      <div class="grid-2">
+      <div class="actions" style="margin-top:0">
+        <button type="button" class="ghost" id="btn-refresh-chain">Refresh councils &amp; markets</button>
+      </div>
+      <p class="hint" id="chain-hint">Loads PM contract id, registry accounts, and markets from testnet.</p>
+      <div class="grid-2" style="margin-top:0.75rem">
+        <label>Council account (on-chain)
+          <select id="council-pick">
+            <option value="">— refresh to load —</option>
+          </select>
+        </label>
+        <label>Market (on-chain)
+          <select id="market-pick">
+            <option value="">— refresh to load —</option>
+          </select>
+        </label>
         <label>Market id
           <input id="market" type="number" value="0" />
         </label>
