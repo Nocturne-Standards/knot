@@ -4,8 +4,9 @@
 //! - **Reads**: direct RUES HTTP with raw rkyv bodies
 //!   (`Content-Type: application/octet-stream`).
 //!
-//! Supports `multisig-registry` and `multisig-proposals` ids from
-//! `deployments/testnet.json`. `--network testnet` is hard-coded.
+//! Supports `multisig-registry`, `multisig-proposals`, and
+//! `prediction-market` ids from `deployments/testnet.json`. `--network
+//! testnet` is hard-coded.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -23,6 +24,7 @@ const RUSK_VERSION: &str = "1.0.0";
 pub enum Contract {
     Registry,
     Proposals,
+    PredictionMarket,
 }
 
 impl Contract {
@@ -30,6 +32,7 @@ impl Contract {
         match self {
             Contract::Registry => "multisig-registry",
             Contract::Proposals => "multisig-proposals",
+            Contract::PredictionMarket => "prediction-market",
         }
     }
 }
@@ -91,12 +94,16 @@ where
         .map_err(|_| anyhow::anyhow!("rkyv deserialize failed"))
 }
 
-pub async fn query_contract<R>(which: Contract, fn_name: &str, args_bytes: Vec<u8>) -> Result<R>
+pub async fn query_contract_id<R>(
+    contract_id_hex: &str,
+    fn_name: &str,
+    args_bytes: Vec<u8>,
+) -> Result<R>
 where
     R: Archive,
     R::Archived: Deserialize<R, Infallible> + for<'b> CheckBytes<DefaultValidator<'b>>,
 {
-    let id = contract_id_hex(which)?;
+    let id = contract_id_hex.trim_start_matches("0x");
     let url = format!("{TESTNET_RUES_BASE}/on/contracts:{id}/{fn_name}");
     let client = reqwest::Client::new();
     let resp = client
@@ -118,6 +125,15 @@ where
     decode::<R>(&body)
 }
 
+pub async fn query_contract<R>(which: Contract, fn_name: &str, args_bytes: Vec<u8>) -> Result<R>
+where
+    R: Archive,
+    R::Archived: Deserialize<R, Infallible> + for<'b> CheckBytes<DefaultValidator<'b>>,
+{
+    let id = contract_id_hex(which)?;
+    query_contract_id(&id, fn_name, args_bytes).await
+}
+
 /// Free read against `multisig-registry`.
 pub async fn query<R>(fn_name: &str, args_bytes: Vec<u8>) -> Result<R>
 where
@@ -125,6 +141,15 @@ where
     R::Archived: Deserialize<R, Infallible> + for<'b> CheckBytes<DefaultValidator<'b>>,
 {
     query_contract(Contract::Registry, fn_name, args_bytes).await
+}
+
+/// Free read against live `prediction-market` from `deployments/testnet.json`.
+pub async fn query_pm<R>(fn_name: &str, args_bytes: Vec<u8>) -> Result<R>
+where
+    R: Archive,
+    R::Archived: Deserialize<R, Infallible> + for<'b> CheckBytes<DefaultValidator<'b>>,
+{
+    query_contract(Contract::PredictionMarket, fn_name, args_bytes).await
 }
 
 pub struct WriteResult {

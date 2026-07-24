@@ -9,6 +9,46 @@ multi-person propose/approve/finalize path. One binary, two skins: a CLI
 **TESTNET ONLY.** Never use with mainnet keys or funds — see "Security model"
 below.
 
+## Quick start
+
+From the **sme_platform** repo root (not this crate alone):
+
+```bash
+export RUSK_WALLET_PWD=sme-platform-testnet-dev   # see references/testnet-wallet.md
+# Optional scripting — both required, or omit both and type the keystore password:
+export MULTISIG_TOOL_ALLOW_ENV_PWD=1
+export MULTISIG_TOOL_PWD='local-dev-only'                      # unlocks ~/.multisig-tool/identities.dat
+
+# Shared collector (if you use one) — password is the nginx htpasswd you handed out:
+export MULTISIG_COLLECTOR_URL=https://collector.nocturne-standards.org
+export MULTISIG_COLLECTOR_USER=demo                # or per-person user
+export MULTISIG_COLLECTOR_PASSWORD='***REMOVED-LEAKED-COLLECTOR-PASSWORD***'
+
+./scripts/multisig-first-run.sh --serve
+# or: cd multisig && cargo run -p multisig-tool -- serve --bind 127.0.0.1:8877
+```
+
+Open the printed `http://127.0.0.1:8877/` URL (API bearer token is printed once
+and embedded in the page). Re-running `multisig-first-run.sh` / `init` against
+an existing store only unlocks + summarizes — it does not wipe identities.
+
+| Env | Purpose |
+|---|---|
+| `RUSK_WALLET_PWD` | Gas-paying `rusk-wallet` unlock (chain writes) |
+| `MULTISIG_TOOL_PWD` + `MULTISIG_TOOL_ALLOW_ENV_PWD=1` | Local identity keystore; refuse env pwd without the latch |
+| `MULTISIG_COLLECTOR_*` | Optional HTTP Basic Auth client → shared relay |
+
+**Share the collector with co-signers:** give them the three `MULTISIG_COLLECTOR_*`
+values (out of band). They run the same Quick start on their laptop — keys never
+leave their machine. Ops detail (htpasswd, nginx, participant checklist):
+[`docs/multisig/multisig-collector-deploy-runbook.md`](../../../docs/multisig/multisig-collector-deploy-runbook.md)
+§4–§5.
+
+**PM dispute council (after registry `create_account` in the UI):** still wire
+with `scripts/wire-contract.sh prediction-market init_dispute_council …` — see
+[`prediction-market/docs/council-resolve-testing.md`](../../../prediction-market/docs/council-resolve-testing.md)
+§4b. Standalone resolve UI: `multisig-tool pm-resolve ui`.
+
 ## Scope
 
 This tool owns both ends of the wire — the contract's own source
@@ -88,7 +128,11 @@ submission goes two ways:
   in the blob intent. Preview/confirm required (`GET …/preview`, then
   `confirm:true` / CLI `--confirm`). **`pm-resolve ui`** (alias: `demo`) opens
   a **standalone** local browser UI (not the Multisig Lab treasury walkthrough);
-  chapter 8 on `serve` remains for the full demo. Prefills via query string.
+  chapter 8 on `serve` remains for the full demo. Both UIs refresh on-chain
+  councils (`GET /api/registry/accounts`) and markets (`GET /api/pm/markets`)
+  plus `GET /api/deployments/pm` so operators rarely type contract/account ids.
+  CLI mirrors: `pm-resolve deployments`, `pm-resolve markets`, `account list`.
+  Prefills via query string.
   Local AC: `cargo test -p multisig-tool` (blob gate/partial helpers) and
   `cargo test -p multisig-tool --test collector_roundtrip` (PM push/pull/append).
   End-to-end / OPS steps:

@@ -438,6 +438,29 @@
           <p class="lede">Collect M-of-N secure BLS partials for a prediction-market <code>resolve</code> over the collector, then submit when the threshold is met. Digest is <code>council-resolve.v2</code> (binds PM contract id, registry account, threshold, market, outcome) — never trust the summary alone.</p>
         </header>
         <div class="values">
+          <h4>On-chain pickers</h4>
+          <div class="actions">
+            <button type="button" class="ghost" onclick="pmRefreshChain()">refresh councils &amp; markets</button>
+          </div>
+          <p class="pane-hint" id="pm-chain-hint">Loads PM contract id, registry accounts, and markets from testnet.</p>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Council account</span>
+              <span class="value-hint">From multisig-registry free-read.</span>
+            </span>
+            <select id="pm-council-pick" onchange="pmOnCouncilPick()">
+              <option value="">— refresh to load —</option>
+            </select>
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Market</span>
+              <span class="value-hint">★ = Under review.</span>
+            </span>
+            <select id="pm-market-pick" onchange="pmOnMarketPick()">
+              <option value="">— refresh to load —</option>
+            </select>
+          </div>
           <h4>Init + push</h4>
           <div class="value-field">
             <span class="value-meta">

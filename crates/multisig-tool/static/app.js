@@ -826,6 +826,89 @@ async function pmResolveInit() {
   }
 }
 
+async function pmRefreshChain() {
+  const hint = document.getElementById("pm-chain-hint");
+  if (hint) hint.textContent = "Loading from testnet…";
+  try {
+    const [dep, accounts, markets] = await Promise.all([
+      api("/api/deployments/pm"),
+      api("/api/registry/accounts?limit=64"),
+      api("/api/pm/markets?limit=50"),
+    ]);
+    const pmEl = document.getElementById("pm-contract");
+    if (pmEl && !pmEl.value.trim()) {
+      pmEl.value = dep.pm_contract_id;
+    }
+
+    const council = document.getElementById("pm-council-pick");
+    if (council) {
+      const prev = council.value;
+      council.innerHTML = "";
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = accounts.length ? "— pick council —" : "— no accounts —";
+      council.appendChild(blank);
+      for (const a of accounts) {
+        const opt = document.createElement("option");
+        opt.value = String(a.id);
+        opt.textContent = a.label;
+        opt.dataset.threshold = String(a.threshold);
+        council.appendChild(opt);
+      }
+      if (prev && [...council.options].some((o) => o.value === prev)) council.value = prev;
+    }
+
+    const marketPick = document.getElementById("pm-market-pick");
+    if (marketPick) {
+      const prev = marketPick.value;
+      marketPick.innerHTML = "";
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = markets.length ? "— pick market —" : "— no markets —";
+      marketPick.appendChild(blank);
+      const sorted = [...markets].sort(
+        (a, b) => Number(b.under_review) - Number(a.under_review) || a.id - b.id
+      );
+      for (const m of sorted) {
+        const opt = document.createElement("option");
+        opt.value = String(m.id);
+        opt.textContent = (m.under_review ? "★ " : "") + m.label;
+        marketPick.appendChild(opt);
+      }
+      if (prev && [...marketPick.options].some((o) => o.value === prev)) marketPick.value = prev;
+    }
+
+    const under = markets.filter((m) => m.under_review).length;
+    if (hint) {
+      hint.textContent = `PM ${dep.pm_contract_id.slice(0, 10)}… · ${accounts.length} account(s) · ${markets.length} market(s) (${under} under review)`;
+    }
+  } catch (e) {
+    if (hint) hint.textContent = e.message;
+    setLog("pm-log", e.message, false);
+  }
+}
+
+function pmOnCouncilPick() {
+  const sel = document.getElementById("pm-council-pick");
+  const opt = sel && sel.selectedOptions[0];
+  if (!opt || !opt.value) return;
+  document.getElementById("pm-account").value = opt.value;
+  if (opt.dataset.threshold) {
+    document.getElementById("pm-threshold").value = opt.dataset.threshold;
+  }
+}
+
+function pmOnMarketPick() {
+  const sel = document.getElementById("pm-market-pick");
+  const opt = sel && sel.selectedOptions[0];
+  if (!opt || !opt.value) return;
+  document.getElementById("pm-market").value = opt.value;
+  const summary = document.getElementById("pm-summary");
+  if (summary && !summary.value.trim()) {
+    summary.value = `resolve market ${opt.value}`;
+  }
+}
+
 async function pmResolveList() {
   try {
     const items = await api("/api/pm-resolve/list");
@@ -999,7 +1082,10 @@ function activateTab(name, opts = {}) {
   }
   if (name === "setup") refreshSetupStatus().catch((e) => console.error(e));
   if (name === "party") refreshParty().catch((e) => console.error(e));
-  if (name === "pm-resolve") pmResolveList().catch((e) => console.error(e));
+  if (name === "pm-resolve") {
+    pmRefreshChain().catch((e) => console.error(e));
+    pmResolveList().catch((e) => console.error(e));
+  }
   syncGuideForTab(name);
 }
 

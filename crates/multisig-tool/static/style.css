@@ -319,7 +319,7 @@ code {
   padding-top: 0.15rem;
 }
 
-input, textarea {
+input, textarea, select {
   width: 100%;
   background: #fff;
   border: 1px solid var(--line);
