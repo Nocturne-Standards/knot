@@ -25,9 +25,9 @@ portal web→CLI handoff).
 **2026-07-24 — audit remediation live on testnet:** registry **v0.1.3**
 (`66d763b2…`), proposals **v0.3.0** (`6b8ba51c…`, `init_registry` +
 `init_chain_id=2` wired), PM monolith **v0.3.1** (`1c095ae2…`,
-`council-resolve.v2` + `init_treasury` re-wired). **Dispute council account
-still unwired** (`init_dispute_council` + portal `accountId`) — OPS
-`create_account` on the new registry, then wire.
+`council-resolve.v2` + `init_treasury` re-wired). **Dispute council wired**
+to registry account **0** (`init_dispute_council` tx `b7f02c0c…`; portal
+`accountId: 0`).
 
 | Surface | License | Notes |
 |---|---|---|
