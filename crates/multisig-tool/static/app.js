@@ -89,6 +89,10 @@ const BROWSE = {
     step: "Chapter 7 — Multi-person",
     text: "Propose → each machine approves → finalize. Coordination is the chain, not a file handoff.",
   },
+  "pm-resolve": {
+    step: "Chapter 8 — PM resolve",
+    text: "Init a council-resolve blob, collect secure BLS partials via the collector, then submit prediction-market.resolve when partials ≥ threshold.",
+  },
   party: {
     step: "Party finder",
     text: "Sign up your local identity's public key on the shared roster, then pick members to prefill Form council.",
@@ -266,7 +270,7 @@ function applyAccountIds(id) {
   if (id === null || id === undefined || Number.isNaN(id)) return;
   storyAccountId = id;
   const s = String(id);
-  ["query-account-id", "quorum-account-id", "agg-account-id", "change-account-id", "prop-account-id"]
+  ["query-account-id", "quorum-account-id", "agg-account-id", "change-account-id", "prop-account-id", "pm-account"]
     .forEach((fid) => {
       const el = document.getElementById(fid);
       if (el) el.value = s;
@@ -780,6 +784,150 @@ async function proposalFinalize() {
   }
 }
 
+async function pmResolveInit() {
+  const body = {
+    market_id: Number(document.getElementById("pm-market").value),
+    winning_outcome: Number(document.getElementById("pm-outcome").value),
+    pm_contract_id: document.getElementById("pm-contract").value.trim(),
+    registry_account_id: Number(document.getElementById("pm-account").value),
+    threshold: Number(document.getElementById("pm-threshold").value),
+    summary: document.getElementById("pm-summary").value.trim() || null,
+    push: true,
+  };
+  setLog("pm-log", "init + push...");
+  try {
+    const out = await api("/api/pm-resolve/init", { method: "POST", body: JSON.stringify(body) });
+    document.getElementById("pm-id").value = out.id;
+    setLog(
+      "pm-log",
+      `init ok\nid: ${out.id}\ndigest: ${out.signed_digest}\npushed: ${out.pushed}\npartials: 0/${out.blob.threshold}`,
+      true
+    );
+    await pmResolveList();
+  } catch (e) {
+    setLog("pm-log", e.message, false);
+  }
+}
+
+async function pmResolveList() {
+  try {
+    const items = await api("/api/pm-resolve/list");
+    const list = document.getElementById("pm-list");
+    if (!items.length) {
+      list.innerHTML = "<p class=\"pane-hint\">No pm_council_resolve blobs on the collector yet.</p>";
+      return;
+    }
+    list.innerHTML = "";
+    for (const it of items) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "id-row";
+      row.innerHTML =
+        `<strong>${it.id.slice(0, 16)}…</strong> ` +
+        `<span class="pill">${it.partials_count}/${it.threshold}</span>`;
+      row.addEventListener("click", () => {
+        document.getElementById("pm-id").value = it.id;
+        pmResolveStatus();
+      });
+      list.appendChild(row);
+    }
+  } catch (e) {
+    setLog("pm-log", e.message, false);
+  }
+}
+
+async function pmResolveStatus() {
+  const id = document.getElementById("pm-id").value.trim();
+  if (!id) {
+    setLog("pm-log", "set blob id first", false);
+    return;
+  }
+  setLog("pm-log", "status...");
+  try {
+    const out = await api(`/api/pm-resolve/${encodeURIComponent(id)}`);
+    document.getElementById("pm-market").value = out.market_id;
+    document.getElementById("pm-outcome").value = out.winning_outcome;
+    document.getElementById("pm-contract").value = out.pm_contract_id;
+    document.getElementById("pm-account").value = out.registry_account_id;
+    document.getElementById("pm-threshold").value = out.threshold;
+    if (out.human_summary) document.getElementById("pm-summary").value = out.human_summary;
+    let text =
+      `status\nmarket=${out.market_id} outcome=${out.winning_outcome}\n` +
+      `partials=${out.partials_count}/${out.threshold} ready=${out.ready}\n` +
+      `digest=${out.signed_digest}\npm=${out.pm_contract_id}\naccount=${out.registry_account_id}`;
+    if (out.registry_warn) text += `\n${out.registry_warn}`;
+    setLog("pm-log", text, true);
+  } catch (e) {
+    setLog("pm-log", e.message, false);
+  }
+}
+
+async function pmResolveSign() {
+  const id = document.getElementById("pm-id").value.trim();
+  const signer = document.getElementById("pm-signer").value.trim();
+  if (!id || !signer) {
+    setLog("pm-log", "need blob id and signer", false);
+    return;
+  }
+  setLog("pm-log", "signing...");
+  try {
+    const out = await api(`/api/pm-resolve/${encodeURIComponent(id)}/sign`, {
+      method: "POST",
+      body: JSON.stringify({ signer }),
+    });
+    setLog(
+      "pm-log",
+      `signed as ${signer}\npartials=${out.partials_count}/${out.threshold}`,
+      true
+    );
+    await pmResolveList();
+  } catch (e) {
+    setLog("pm-log", e.message, false);
+  }
+}
+
+async function pmResolveSubmit() {
+  const id = document.getElementById("pm-id").value.trim();
+  if (!id) {
+    setLog("pm-log", "set blob id first", false);
+    return;
+  }
+  setLog("pm-log", "submitting resolve...");
+  try {
+    const out = await api(`/api/pm-resolve/${encodeURIComponent(id)}/submit`, {
+      method: "POST",
+      body: "{}",
+    });
+    showSubmit("pm-log", out);
+  } catch (e) {
+    showError("pm-log", e.message);
+  }
+}
+
+function applyPmPrefillsFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const setIf = (id, key) => {
+    if (!params.has(key)) return;
+    const el = document.getElementById(id);
+    if (el) el.value = params.get(key);
+  };
+  setIf("pm-market", "market");
+  setIf("pm-outcome", "outcome");
+  setIf("pm-contract", "pm");
+  setIf("pm-account", "account");
+  setIf("pm-threshold", "threshold");
+  setIf("pm-summary", "summary");
+}
+
+function tabFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const q = params.get("tab");
+  if (q) return q;
+  const hash = (location.hash || "").replace(/^#/, "");
+  if (hash) return hash;
+  return null;
+}
+
 function activateTab(name, opts = {}) {
   document.querySelectorAll(".tab").forEach((btn) => {
     const on = btn.dataset.tab === name;
@@ -799,10 +947,12 @@ function activateTab(name, opts = {}) {
   }
   if (name === "setup") refreshSetupStatus().catch((e) => console.error(e));
   if (name === "party") refreshParty().catch((e) => console.error(e));
+  if (name === "pm-resolve") pmResolveList().catch((e) => console.error(e));
   syncGuideForTab(name);
 }
 
 wireNameTargets();
+applyPmPrefillsFromUrl();
 refreshIdentities().catch((e) => console.error(e));
 refreshSetupStatus().catch((e) => console.error(e));
 
@@ -818,6 +968,11 @@ document.getElementById("setup-my-pk-copy").addEventListener("click", async () =
 document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => activateTab(btn.dataset.tab));
 });
+
+const initialTab = tabFromUrl();
+if (initialTab) {
+  activateTab(initialTab);
+}
 
 document.getElementById("btn-walkthrough").addEventListener("click", () => {
   startWalkthrough();

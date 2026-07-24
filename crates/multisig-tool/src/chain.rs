@@ -269,6 +269,21 @@ pub fn extract_tx_hash(log: &str) -> Option<String> {
 
 pub fn submit_call_to(which: Contract, fn_name: &str, args_bytes: &[u8]) -> Result<WriteResult> {
     let id = contract_id_hex(which)?;
+    submit_call_to_contract_id(&id, fn_name, args_bytes)
+}
+
+/// Shell `rusk-wallet contract-call` against an arbitrary 32-byte ContractId
+/// hex (with or without `0x`). Used by `pm-resolve submit` for the PM id
+/// stored in the blob intent.
+pub fn submit_call_to_contract_id(
+    contract_id_hex: &str,
+    fn_name: &str,
+    args_bytes: &[u8],
+) -> Result<WriteResult> {
+    let id = contract_id_hex.trim_start_matches("0x").to_ascii_lowercase();
+    if id.len() != 64 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!("contract id must be 32-byte hex, got len={}", id.len());
+    }
     let args_hex = hex::encode(args_bytes);
 
     if std::env::var("RUSK_WALLET_PWD").is_err() {

@@ -59,7 +59,8 @@
       <button type="button" class="tab" role="tab" aria-selected="false" data-tab="aggregate">5 · Cheaper verify</button>
       <button type="button" class="tab" role="tab" aria-selected="false" data-tab="rotate">6 · Rotate members</button>
       <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal">7 · Multi-person</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="party">8 · Party finder</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="pm-resolve">8 · PM resolve</button>
+      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="party">9 · Party finder</button>
     </div>
 
     <!-- 0 Setup -->
@@ -422,7 +423,89 @@
       </div>
     </div>
 
-    <!-- 8 Party finder -->
+    <!-- 8 PM resolve -->
+    <div class="tab-panel" id="panel-pm-resolve" role="tabpanel" hidden>
+      <div class="pane">
+        <header class="pane-head">
+          <p class="pane-role">Chapter 8</p>
+          <h3>PM council resolve</h3>
+          <p class="lede">Collect M-of-N secure BLS partials for a prediction-market <code>resolve</code> over the collector, then submit when the threshold is met. Digest is <code>council-resolve.v1</code> — never trust the summary alone.</p>
+        </header>
+        <div class="values">
+          <h4>Init + push</h4>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Market id</span>
+              <span class="value-hint">On-chain market under review.</span>
+            </span>
+            <input id="pm-market" type="number" value="0" />
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Winning outcome</span>
+              <span class="value-hint">0 or 1.</span>
+            </span>
+            <input id="pm-outcome" type="number" min="0" max="1" value="1" />
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">PM ContractId</span>
+              <span class="value-hint">Legacy prediction-market 32-byte hex.</span>
+            </span>
+            <input id="pm-contract" placeholder="0x…" spellcheck="false" />
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Registry account</span>
+              <span class="value-hint">Dispute-council account id.</span>
+            </span>
+            <input id="pm-account" type="number" />
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Threshold</span>
+              <span class="value-hint">Client-side gate before submit (usually account threshold).</span>
+            </span>
+            <input id="pm-threshold" type="number" value="2" />
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Summary (untrusted)</span>
+              <span class="value-hint">Human hint only — signers must check market + outcome.</span>
+            </span>
+            <input id="pm-summary" placeholder="resolve market N → YES" />
+          </div>
+          <div class="actions">
+            <button type="button" class="primary" onclick="pmResolveInit()">init + push</button>
+            <button type="button" class="ghost" onclick="pmResolveList()">list PM blobs</button>
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Blob id (digest hex)</span>
+              <span class="value-hint">From init, or pick from the list below.</span>
+            </span>
+            <input id="pm-id" placeholder="64 hex chars" spellcheck="false" />
+          </div>
+          <div class="value-field">
+            <span class="value-meta">
+              <span class="value-name">Sign as</span>
+              <span class="value-hint">Local signing identity that is a council member.</span>
+            </span>
+            <input id="pm-signer" class="name-target" placeholder="alice" />
+          </div>
+          <div class="actions">
+            <button type="button" class="primary" onclick="pmResolveSign()">sign</button>
+            <button type="button" class="ghost" onclick="pmResolveStatus()">status</button>
+            <button type="button" class="primary" onclick="pmResolveSubmit()">submit resolve</button>
+          </div>
+          <div id="pm-list" class="identities-list"></div>
+          <p class="pane-hint">Reuse Setup for collector status and Cast for identities. Gas payer need not be a council member.</p>
+        </div>
+        <pre class="log" id="pm-log"></pre>
+      </div>
+    </div>
+
+    <!-- 9 Party finder -->
     <div class="tab-panel" id="panel-party" role="tabpanel" hidden>
       <div class="pane">
         <header class="pane-head">

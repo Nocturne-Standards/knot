@@ -7,3 +7,4 @@
 pub mod blob;
 pub mod bls;
 pub mod collector_client;
+pub mod pm_resolve_types;

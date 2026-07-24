@@ -89,6 +89,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: BlobCmd,
     },
+    /// Prediction-market council resolve (legacy monolith `resolve`).
+    PmResolve {
+        #[command(subcommand)]
+        cmd: PmResolveCmd,
+    },
     /// Party-finder roster on the collector (off-chain rendezvous only).
     Party {
         #[command(subcommand)]
@@ -341,6 +346,103 @@ enum BlobCmd {
         out: PathBuf,
         #[arg(long)]
         collector: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum PmResolveCmd {
+    /// Create a local v2 `pm_council_resolve` blob (no partials yet).
+    Init {
+        #[arg(long)]
+        market: u64,
+        /// Winning outcome: 0 or 1.
+        #[arg(long)]
+        outcome: u8,
+        /// Prediction-market ContractId (32-byte hex).
+        #[arg(long)]
+        pm: String,
+        /// Registry account id wired as dispute council.
+        #[arg(long)]
+        account: u64,
+        #[arg(long)]
+        threshold: u32,
+        #[arg(long)]
+        summary: Option<String>,
+        #[arg(long, default_value = "pm-resolve.json")]
+        out: PathBuf,
+    },
+    /// Gate + secure-sign one partial (collector `--id` or local `--file`).
+    Sign {
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long)]
+        file: Option<PathBuf>,
+        #[arg(long = "as")]
+        signer: String,
+        #[arg(long)]
+        expect_digest: Option<String>,
+        #[arg(long)]
+        collector: Option<String>,
+        /// Local mode: write updated blob here (defaults to `--file`).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Print partials vs threshold; optional registry free-read warn.
+    Status {
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long)]
+        file: Option<PathBuf>,
+        #[arg(long)]
+        collector: Option<String>,
+    },
+    /// Build `ResolveArgs` and submit `prediction-market.resolve` via rusk-wallet.
+    Submit {
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long)]
+        file: Option<PathBuf>,
+        #[arg(long)]
+        collector: Option<String>,
+    },
+    /// Start the standalone PM council-resolve UI (local browser; not the treasury demo).
+    Ui {
+        #[arg(long, default_value = "127.0.0.1:8877")]
+        bind: String,
+        #[arg(long)]
+        market: Option<u64>,
+        #[arg(long)]
+        outcome: Option<u8>,
+        #[arg(long)]
+        pm: Option<String>,
+        #[arg(long)]
+        account: Option<u64>,
+        #[arg(long)]
+        threshold: Option<u32>,
+        #[arg(long)]
+        summary: Option<String>,
+        /// Do not open the browser automatically.
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// Alias for `pm-resolve ui` (standalone council UI).
+    Demo {
+        #[arg(long, default_value = "127.0.0.1:8877")]
+        bind: String,
+        #[arg(long)]
+        market: Option<u64>,
+        #[arg(long)]
+        outcome: Option<u8>,
+        #[arg(long)]
+        pm: Option<String>,
+        #[arg(long)]
+        account: Option<u64>,
+        #[arg(long)]
+        threshold: Option<u32>,
+        #[arg(long)]
+        summary: Option<String>,
+        #[arg(long)]
+        no_open: bool,
     },
 }
 
@@ -1037,8 +1139,8 @@ async fn main() -> Result<()> {
             BlobCmd::Push { file, collector } => {
                 let file_blob = blob::read_file(&file)?;
                 // Gate locally first — refuse to push a blob whose stored
-                // digest doesn't match its own intent, same check `show` does.
-                blob::print_canonical_intent(&file_blob.to_proposal_blob()?)?;
+                // digest doesn't match its own intent (kind-appropriate).
+                blob::gate_blob_file_for_push(&file_blob)?;
                 let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
                 let resp = client.push(&file_blob).await?;
                 println!("pushed: id={} signed_digest={}", resp.id, resp.signed_digest);
@@ -1046,10 +1148,225 @@ async fn main() -> Result<()> {
             BlobCmd::Pull { id, out, collector } => {
                 let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
                 let file_blob = client.pull(&id).await?;
-                let proposal = file_blob.to_proposal_blob()?;
-                blob::print_canonical_intent(&proposal)?;
+                blob::gate_blob_file_for_push(&file_blob)?;
                 blob::write_file(&out, &file_blob)?;
                 println!("wrote {}", out.display());
+            }
+        },
+
+        Cmd::PmResolve { cmd } => match cmd {
+            PmResolveCmd::Init {
+                market,
+                outcome,
+                pm,
+                account,
+                threshold,
+                summary,
+                out,
+            } => {
+                if outcome > 1 {
+                    bail!("--outcome must be 0 or 1");
+                }
+                let pm_bytes: [u8; 32] = hex::decode(pm.trim_start_matches("0x"))?
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| anyhow::anyhow!("--pm must be 32-byte hex ContractId"))?;
+                let file =
+                    blob::create_pm_blob_file(market, outcome, pm_bytes, account, threshold, summary);
+                blob::print_pm_canonical_intent(&file)?;
+                blob::write_file(&out, &file)?;
+                println!("wrote {}", out.display());
+                println!("collector id: {}", blob::digest_id(&file.signed_digest));
+            }
+            PmResolveCmd::Sign {
+                id,
+                file,
+                signer,
+                expect_digest,
+                collector,
+                out,
+            } => {
+                let (identities, _) = load_store(&store_path)?;
+                let identity = find_identity(&identities, &signer)?;
+                let sk = identity.require_sk()?;
+
+                let use_collector = id.is_some()
+                    || collector.is_some()
+                    || std::env::var(collector_client::URL_ENV).is_ok() && file.is_none();
+
+                if let Some(id) = id {
+                    let client =
+                        collector_client::CollectorClient::resolve(collector.as_deref())?;
+                    let mut pulled = client.pull(&id).await?;
+                    let digest = blob::gate_pm_blob_for_signing(&pulled)?;
+                    if let Some(expected) = expect_digest {
+                        let want = hex::decode(expected.trim_start_matches("0x"))?;
+                        if want.as_slice() != digest.as_slice() {
+                            bail!("REFUSING TO SIGN: digest does not match --expect-digest");
+                        }
+                    }
+                    blob::add_pm_partial(&mut pulled, sk, &identity.pk)?;
+                    let new_partial = pulled
+                        .partials
+                        .last()
+                        .expect("add_pm_partial just pushed one")
+                        .clone();
+                    let updated = client.append_partial(&id, &new_partial).await?;
+                    println!(
+                        "added partial from {signer} via collector; partials={}/{}",
+                        updated.partials.len(),
+                        updated.threshold
+                    );
+                    if let Some(out) = out {
+                        blob::write_file(&out, &updated)?;
+                        println!("wrote {}", out.display());
+                    }
+                } else if use_collector && file.is_none() {
+                    bail!("--id is required in collector mode (or pass --file for local)");
+                } else {
+                    let file = file.ok_or_else(|| {
+                        anyhow::anyhow!("--file or --id is required")
+                    })?;
+                    let out_path = out.unwrap_or_else(|| file.clone());
+                    let mut file_blob = blob::read_file(&file)?;
+                    let digest = blob::gate_pm_blob_for_signing(&file_blob)?;
+                    if let Some(expected) = expect_digest {
+                        let want = hex::decode(expected.trim_start_matches("0x"))?;
+                        if want.as_slice() != digest.as_slice() {
+                            bail!("REFUSING TO SIGN: digest does not match --expect-digest");
+                        }
+                    }
+                    blob::add_pm_partial(&mut file_blob, sk, &identity.pk)?;
+                    blob::write_file(&out_path, &file_blob)?;
+                    println!(
+                        "added partial from {signer}; partials={}/{}",
+                        file_blob.partials.len(),
+                        file_blob.threshold
+                    );
+                    println!("wrote {}", out_path.display());
+                }
+            }
+            PmResolveCmd::Status {
+                id,
+                file,
+                collector,
+            } => {
+                let file_blob = load_pm_blob(id.as_deref(), file.as_deref(), collector.as_deref()).await?;
+                blob::print_pm_canonical_intent(&file_blob)?;
+                let ready = (file_blob.partials.len() as u32) >= file_blob.threshold;
+                println!(
+                    "status: partials={}/{} ready={}",
+                    file_blob.partials.len(),
+                    file_blob.threshold,
+                    ready
+                );
+                for (i, p) in file_blob.partials.iter().enumerate() {
+                    println!("  partial[{i}]: {}", p.signer_pk);
+                }
+                if let blob::IntentFile::PmCouncilResolve(intent) = &file_blob.intent {
+                    match chain::query::<Option<registry_types::call_types::MultisigAccountView>>(
+                        "account",
+                        chain::encode(&intent.registry_account_id)?,
+                    )
+                    .await
+                    {
+                        Ok(Some(view)) => {
+                            let member_hexs: Vec<String> = view
+                                .members
+                                .iter()
+                                .map(|pk| {
+                                    use dusk_bytes::Serializable;
+                                    hex::encode(pk.to_bytes())
+                                })
+                                .collect();
+                            for p in &file_blob.partials {
+                                let pk = p.signer_pk.trim_start_matches("0x").to_ascii_lowercase();
+                                if !member_hexs.iter().any(|m| m.eq_ignore_ascii_case(&pk)) {
+                                    eprintln!(
+                                        "warning: partial signer {pk} not in registry account {} free-read (chain is source of truth)",
+                                        intent.registry_account_id
+                                    );
+                                }
+                            }
+                        }
+                        Ok(None) => eprintln!(
+                            "warning: registry account {} not found on free-read",
+                            intent.registry_account_id
+                        ),
+                        Err(e) => eprintln!("warning: registry free-read failed: {e}"),
+                    }
+                }
+            }
+            PmResolveCmd::Submit {
+                id,
+                file,
+                collector,
+            } => {
+                let file_blob =
+                    load_pm_blob(id.as_deref(), file.as_deref(), collector.as_deref()).await?;
+                blob::print_pm_canonical_intent(&file_blob)?;
+                let args = blob::build_pm_resolve_args(&file_blob)?;
+                let blob::IntentFile::PmCouncilResolve(intent) = &file_blob.intent else {
+                    bail!("not a pm_council_resolve blob");
+                };
+                let bytes = chain::encode(&args)?;
+                let result = chain::submit_call_to_contract_id(
+                    &intent.pm_contract_id,
+                    "resolve",
+                    &bytes,
+                )?;
+                print_write_result("prediction-market.resolve", result);
+            }
+            PmResolveCmd::Ui {
+                bind,
+                market,
+                outcome,
+                pm,
+                account,
+                threshold,
+                summary,
+                no_open,
+            }
+            | PmResolveCmd::Demo {
+                bind,
+                market,
+                outcome,
+                pm,
+                account,
+                threshold,
+                summary,
+                no_open,
+            } => {
+                let mut extras = Vec::new();
+                if let Some(m) = market {
+                    extras.push(format!("market={m}"));
+                }
+                if let Some(o) = outcome {
+                    extras.push(format!("outcome={o}"));
+                }
+                if let Some(p) = pm {
+                    extras.push(format!("pm={}", urlencoding_lite(&p)));
+                }
+                if let Some(a) = account {
+                    extras.push(format!("account={a}"));
+                }
+                if let Some(t) = threshold {
+                    extras.push(format!("threshold={t}"));
+                }
+                if let Some(s) = summary {
+                    extras.push(format!("summary={}", urlencoding_lite(&s)));
+                }
+                let opts = rpc::ServeOptions {
+                    open_tab: None,
+                    query_extra: if extras.is_empty() {
+                        None
+                    } else {
+                        Some(extras.join("&"))
+                    },
+                    standalone_pm_resolve: true,
+                    open_browser: !no_open,
+                };
+                rpc::serve_with_options(&bind, store_path, opts).await?;
             }
         },
 
@@ -1086,6 +1403,39 @@ async fn main() -> Result<()> {
 fn bs58_pk(pk: &BlsPublicKey) -> String {
     use dusk_bytes::Serializable;
     bs58::encode(pk.to_bytes()).into_string()
+}
+
+/// Minimal query-string escape for demo prefills (no extra crate).
+fn urlencoding_lite(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+async fn load_pm_blob(
+    id: Option<&str>,
+    file: Option<&std::path::Path>,
+    collector: Option<&str>,
+) -> Result<blob::BlobFile> {
+    if let Some(id) = id {
+        let client = collector_client::CollectorClient::resolve(collector)?;
+        let file_blob = client.pull(id).await?;
+        blob::gate_pm_blob_for_signing(&file_blob)?;
+        Ok(file_blob)
+    } else if let Some(path) = file {
+        let file_blob = blob::read_file(path)?;
+        blob::gate_pm_blob_for_signing(&file_blob)?;
+        Ok(file_blob)
+    } else {
+        bail!("--id or --file is required")
+    }
 }
 
 fn signer_pk_hexs(identities: &[keystore::Identity], signers: &[String]) -> Result<Vec<String>> {

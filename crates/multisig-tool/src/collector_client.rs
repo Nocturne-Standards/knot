@@ -41,6 +41,8 @@ pub struct PushResponse {
 pub struct ProposalSummary {
     pub id: String,
     pub signed_digest: String,
+    #[serde(default)]
+    pub kind: crate::blob::BlobKind,
     pub threshold: u32,
     pub partials_count: usize,
     pub created_at: i64,

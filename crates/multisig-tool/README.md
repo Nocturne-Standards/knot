@@ -76,6 +76,17 @@ submission goes two ways:
 
 ## Status
 
+- **PM council resolve CLI + standalone UI (2026-07-24)** — `pm-resolve init|sign|status|submit|ui`
+  builds v2 `kind=pm_council_resolve` blobs, gates the council-resolve digest,
+  collects secure `sign` (not `sign_multisig`) partials via collector or file,
+  and submits `prediction-market.resolve` to the ContractId in the blob intent
+  (`chain::submit_call_to_contract_id`). **`pm-resolve ui`** (alias: `demo`) opens
+  a **standalone** local browser UI (not the Multisig Lab treasury walkthrough);
+  chapter 8 on `serve` remains for the full demo. Prefills via query string.
+  Local AC: `cargo test -p multisig-tool` (blob gate/partial helpers) and
+  `cargo test -p multisig-tool --test collector_roundtrip` (PM push/pull/append).
+  End-to-end / OPS steps:
+  [`prediction-market/docs/council-resolve-testing.md`](../../../prediction-market/docs/council-resolve-testing.md).
 - **`init` + first-run script (2026-07-23)** — `multisig-tool init [--name
   alice] [--store path]` creates the local identity store if missing
   (prompts for a new password twice, refuses on mismatch), optionally with

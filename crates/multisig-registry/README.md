@@ -11,10 +11,11 @@ Dusk or any token — unlike Dusk's own [`multisig-contract` example]
 (`references/repos/multisig-contract`), which deposits/transfers Dusk to
 Moonlight accounts. This contract answers one question: *did enough of this
 account's members sign this message?* Callers build authorization on top of
-that answer — e.g. `prediction-market`'s dispute council (`dispute_council`
-field in `prediction-market/src/state.rs`, currently parked/unused by its v2
-resolve path — a candidate to wire through this registry), or a future
-`compliance-gate` operator council.
+that answer — e.g. `prediction-market`'s dispute council
+(`init_dispute_council(registry, account_id)` + `resolve` → `verify_quorum`
+over `council-resolve.v1`; lab green 2026-07-24, live redeploy/wire still
+open — see `prediction-market/crates/prediction-market/README.md`), or a
+future `compliance-gate` operator council.
 
 [`multisig-contract` example]: ../../../references/repos/multisig-contract
 

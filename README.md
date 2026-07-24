@@ -16,13 +16,18 @@ suite itself.
 preserved beyond the `git mv`; see root `docs/roadmap.md` Track 7 for
 per-crate deploy status).
 
+**2026-07-24 — first product consumer path:** prediction-market dispute
+council resolve (`multisig-tool pm-resolve`, collector `kind=pm_council_resolve`,
+portal web→CLI handoff). Live PM redeploy/wire still open — see
+`prediction-market/crates/prediction-market/README.md`.
+
 | Surface | License | Notes |
 |---|---|---|
 | `crates/multisig-encoding` | Apache-2.0 | Canonical §4a digest + §4b blob + M3 fingerprint |
 | `crates/multisig-registry` | Apache-2.0 | On-chain BLS M-of-N quorum registry — testnet v0.1.2 |
 | `crates/multisig-proposals` | Apache-2.0 | On-chain propose→approve→finalize `call_raw` — testnet v0.2.0 |
-| `crates/multisig-tool` | Apache-2.0 | Local signing CLI + web UI (M1–M3) — testnet only |
-| `crates/multisig-collector` | AGPL-3.0-only | Untrusted off-chain relay — proposals, partials, and party finder live; **VPS deploy operator TODO** (runbook below) |
+| `crates/multisig-tool` | Apache-2.0 | Local signing CLI + web UI (M1–M3) + **PM council resolve** — testnet only |
+| `crates/multisig-collector` | AGPL-3.0-only | Untrusted off-chain relay — proposals, partials, party finder, `pm_council_resolve` blobs; **VPS deploy operator TODO** (runbook below) |
 
 - Contract IDs (testnet): `deployments/testnet.json` at the sme_platform root
   (`multisig-registry` / `multisig-proposals` entries).
