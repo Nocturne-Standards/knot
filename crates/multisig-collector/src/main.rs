@@ -8,7 +8,9 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use multisig_collector::{store::Store, AppState, BIND_ENV, DB_ENV, DEFAULT_BIND, DEFAULT_DB_PATH};
+use multisig_collector::{
+    assert_bind_allowed, store::Store, AppState, BIND_ENV, DB_ENV, DEFAULT_BIND, DEFAULT_DB_PATH,
+};
 use tracing::info;
 
 #[tokio::main]
@@ -16,6 +18,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let bind = std::env::var(BIND_ENV).unwrap_or_else(|_| DEFAULT_BIND.to_string());
+    assert_bind_allowed(&bind).map_err(anyhow::Error::msg)?;
     let db_path = std::env::var(DB_ENV)
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_DB_PATH));

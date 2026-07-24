@@ -119,7 +119,7 @@ async fn proposal_lifecycle_over_real_http() {
 }
 
 /// Real-listener coverage for the party-finder roster: signup, upsert-by-pk,
-/// list, and leave — same "actual HTTP, not `oneshot`" rationale as above.
+/// list — DELETE is intentionally absent (operator clears DB if needed).
 #[tokio::test]
 async fn party_roster_lifecycle_over_real_http() {
     let store = Store::open_in_memory().expect("open in-memory sqlite store");
@@ -172,15 +172,9 @@ async fn party_roster_lifecycle_over_real_http() {
         .send()
         .await
         .expect("DELETE /v1/party/:pk");
-    assert_eq!(delete_resp.status(), reqwest::StatusCode::NO_CONTENT);
-
-    let list_after_delete: serde_json::Value = client
-        .get(format!("{base}/v1/party"))
-        .send()
-        .await
-        .expect("GET /v1/party after delete")
-        .json()
-        .await
-        .expect("parse party list body");
-    assert!(list_after_delete.as_array().unwrap().is_empty());
+    assert_eq!(
+        delete_resp.status(),
+        reqwest::StatusCode::NOT_FOUND,
+        "DELETE route must be absent"
+    );
 }

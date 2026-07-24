@@ -152,8 +152,9 @@ impl CollectorClient {
         Self::into_ok(resp).await?.json().await.context("parse proposal list")
     }
 
-    /// `POST /v1/proposals/:id/partials` — returns the full updated blob
-    /// (all partials so far, digest unchanged).
+    /// `POST /v1/proposals/:id/partials` — appends or **replaces** the partial
+    /// for `signer_pk` (collector last-write-wins; never 409 on duplicate pk).
+    /// Returns the full updated blob (digest unchanged).
     pub async fn append_partial(&self, id: &str, partial: &PartialFile) -> Result<BlobFile> {
         let resp = self
             .auth(self.http.post(format!("{}/v1/proposals/{id}/partials", self.base_url)))
@@ -175,6 +176,7 @@ impl CollectorClient {
     }
 
     /// `POST /v1/party` — signup, or upsert-by-`pk` if already present.
+    /// Collector has no DELETE roster route; clear the DB to remove a row.
     pub async fn signup_party(&self, name: &str, pk: &str, note: Option<&str>) -> Result<PartyMember> {
         let resp = self
             .auth(self.http.post(format!("{}/v1/party", self.base_url)))
@@ -183,16 +185,5 @@ impl CollectorClient {
             .await
             .context("POST /v1/party")?;
         Self::into_ok(resp).await?.json().await.context("parse party signup response")
-    }
-
-    /// `DELETE /v1/party/:pk` — removes one roster row.
-    pub async fn leave_party(&self, pk: &str) -> Result<()> {
-        let resp = self
-            .auth(self.http.delete(format!("{}/v1/party/{pk}", self.base_url)))
-            .send()
-            .await
-            .context("DELETE /v1/party/:pk")?;
-        Self::into_ok(resp).await?;
-        Ok(())
     }
 }

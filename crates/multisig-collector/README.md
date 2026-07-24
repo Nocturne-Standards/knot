@@ -9,6 +9,12 @@ never submits on-chain. See
 
 ## Status
 
+**2026-07-24 — availability hardening (audit I8/I9/I10/M10):** last-write-wins
+partial replace (same `signer_pk`); sig capped at 48 bytes (BLS); max 32
+partials / proposal; max 512-char note/summary; 64 KiB body limit; GET id must
+be 64 hex; `DELETE /v1/party/:pk` removed; non-loopback bind requires
+`MULTISIG_COLLECTOR_ALLOW_NON_LOOPBACK=1`.
+
 **2026-07-24 — `kind` on proposal summaries** (`proposals` | `pm_council_resolve`) so
 clients can filter PM council-resolve blobs without pulling every body.
 
@@ -18,27 +24,33 @@ only; VPS deploy is an operator TODO (see deploy runbook).
 | Method | Path | Behavior |
 |---|---|---|
 | `GET` | `/v1/health` | Liveness |
-| `POST` | `/v1/proposals` | Create; body = blob JSON, `partials` ignored → `{ "id", "signed_digest" }` |
+| `POST` | `/v1/proposals` | Create; body = blob JSON, `partials` ignored → `{ "id", "signed_digest" }`; `human_summary` ≤ 512 chars |
 | `GET` | `/v1/proposals` | List summaries (`id`, `signed_digest`, `kind`, `threshold`, `partials_count`, `created_at`) |
-| `GET` | `/v1/proposals/:id` | Full blob |
-| `POST` | `/v1/proposals/:id/partials` | Append one `{ signer_pk, sig }`; rejects duplicate `signer_pk` (409) and unknown id (404) |
+| `GET` | `/v1/proposals/:id` | Full blob; `:id` must be exactly 64 hex chars (else 400) |
+| `POST` | `/v1/proposals/:id/partials` | Append or **replace** `{ signer_pk, sig }` for that pk (last-write-wins, never 409 on duplicate); `sig` must decode to 48 bytes; max 32 distinct pks (400 if a *new* pk would exceed); never mutates `signed_digest` |
 | `GET` | `/v1/party` | Party finder roster |
-| `POST` | `/v1/party` | Sign up / upsert by pk (`{ name, pk, note? }`) |
-| `DELETE` | `/v1/party/:pk` | Leave roster |
+| `POST` | `/v1/party` | Sign up / upsert by pk (`{ name, pk, note? }`); `note` ≤ 512 chars |
+
+There is **no** `DELETE /v1/party/:pk` — roster is upsert-only; operators clear
+the SQLite DB if a row must go.
 
 `id` = lowercase hex of `signed_digest` (32 bytes → 64 hex chars, no `0x`
 prefix) — content-addressed. Re-creating a proposal with the same identity
 (version/intent/digest/threshold) is idempotent even after partials have been
 appended; a different identity under the same digest id is a 409.
-Partials are appended by rewriting the proposal's whole `body_json` column
+Partials are stored by rewriting the proposal's whole `body_json` column
 under the store's connection mutex (never a separate `partials` table) —
-this makes "append only, `signed_digest` never mutates" a structural
-property: the append code path has no way to touch that field.
+`signed_digest` never mutates on that path.
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `MULTISIG_COLLECTOR_BIND` | `127.0.0.1:8899` | HTTP listen address |
+| `MULTISIG_COLLECTOR_BIND` | `127.0.0.1:8899` | HTTP listen address (loopback only unless escape hatch below) |
 | `MULTISIG_COLLECTOR_DB` | `./collector.sqlite` | SQLite database path |
+| `MULTISIG_COLLECTOR_ALLOW_NON_LOOPBACK` | unset | Set to `1` to allow binding outside `127.0.0.1` / `localhost` (prefer reverse-proxy → loopback) |
+
+Request bodies are capped at **64 KiB** (`DefaultBodyLimit`). The binary does
+not verify BLS signatures — length/shape only; on-chain quorum still filters
+junk.
 
 No `dusk_core` / BLS secret-key dependency anywhere in this crate — see
 `src/lib.rs` module doc for the trust rationale. Correspondingly, this
@@ -62,9 +74,9 @@ together.
 
 Unlike `BlobFile`, the collector never hex-decodes `target_contract_id`,
 `function_name`, `call_args`, or `human_summary` — those pass through as
-opaque strings. Only `signed_digest` (32 bytes, drives the `id`) and
-`signer_pk` (96 bytes, drives partial de-duplication) are hex-validated and
-normalized to lowercase.
+opaque strings. Only `signed_digest` (32 bytes, drives the `id`),
+`signer_pk` (96 bytes, drives partial replace), and `sig` (48 bytes) are
+length-validated and normalized to lowercase hex where applicable.
 
 ## Run
 

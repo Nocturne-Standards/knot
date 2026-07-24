@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) 2026 Leon Frenzel
 
-//! SQLite-backed store: health scaffold (Task 4), the `proposals` table
-//! (Task 5), and the `party` roster table (Task 6).
+//! SQLite-backed store: proposals + party roster.
 //!
 //! `proposals` holds one row per content-addressed proposal id. Partials
-//! are **not** a separate table — per the task brief we keep the whole
-//! `ProposalDto` (intent + signed_digest + threshold + partials) as a single
-//! `body_json` column, rewritten atomically (single `UPDATE`, under the same
-//! connection mutex) on every partial append. This makes "append only,
-//! never mutate `signed_digest`" trivial to guarantee: the append path
-//! deserializes the stored blob, pushes one partial, and re-serializes —
-//! there is no code path that touches `signed_digest` or `intent`.
+//! are **not** a separate table — the whole `ProposalDto` (intent +
+//! signed_digest + threshold + partials) lives in a single `body_json`
+//! column, rewritten atomically (single `UPDATE`, under the same connection
+//! mutex) on every partial append/replace. This makes "never mutate
+//! `signed_digest`" trivial: the append path deserializes the stored blob,
+//! updates `partials` only, and re-serializes — there is no code path that
+//! touches `signed_digest` or `intent`.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -21,6 +20,7 @@ use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::dto::{PartialDto, PartyMemberDto, ProposalDto, ProposalSummary};
+use crate::MAX_PARTIALS;
 
 /// Wraps a single `rusqlite::Connection` behind a mutex — `Connection` is
 /// `Send` but not `Sync`, and axum handlers need a `Sync` shared state.
@@ -46,12 +46,13 @@ pub enum CreateOutcome {
 
 /// Result of `Store::append_partial`.
 pub enum AppendOutcome {
-    /// Partial appended; carries the full updated blob.
+    /// Partial appended or replaced; carries the full updated blob.
     Appended(ProposalDto),
     /// No proposal exists under this id.
     NotFound,
-    /// `signer_pk` already has a partial on this proposal.
-    DuplicatePk,
+    /// A *new* `signer_pk` would push past [`crate::MAX_PARTIALS`].
+    /// Replacing an existing pk never hits this.
+    TooManyPartials,
 }
 
 impl Store {
@@ -190,9 +191,10 @@ impl Store {
         Ok(out)
     }
 
-    /// Appends one partial to the proposal's `partials` list — read,
-    /// dedup-check, push, rewrite `body_json`, all under the same lock so
-    /// two concurrent appends can't race and lose one.
+    /// Appends one partial, or **replaces** the existing entry for the same
+    /// `signer_pk` (last-write-wins). Never mutates `signed_digest` /
+    /// `intent`. Cap: a *new* pk is rejected once [`MAX_PARTIALS`] are
+    /// already stored; replacing an existing pk is always allowed.
     pub fn append_partial(&self, id: &str, partial: PartialDto) -> Result<AppendOutcome> {
         let conn = self.conn.lock().expect("db mutex poisoned");
         let body: Option<String> = conn
@@ -210,15 +212,20 @@ impl Store {
             serde_json::from_str(&body_json).context("parse stored proposal body")?;
 
         let new_pk_norm = partial.signer_pk.trim_start_matches("0x").to_ascii_lowercase();
-        let duplicate = dto.partials.iter().any(|p| {
+        let digest_before = dto.signed_digest.clone();
+
+        if let Some(existing) = dto.partials.iter_mut().find(|p| {
             p.signer_pk.trim_start_matches("0x").to_ascii_lowercase() == new_pk_norm
-        });
-        if duplicate {
-            return Ok(AppendOutcome::DuplicatePk);
+        }) {
+            existing.sig = partial.sig;
+            // Keep stored signer_pk as already-normalized from the first insert.
+        } else {
+            if dto.partials.len() >= MAX_PARTIALS {
+                return Ok(AppendOutcome::TooManyPartials);
+            }
+            dto.partials.push(partial);
         }
 
-        let digest_before = dto.signed_digest.clone();
-        dto.partials.push(partial);
         debug_assert_eq!(
             dto.signed_digest, digest_before,
             "append_partial must never touch signed_digest"
@@ -388,19 +395,86 @@ mod tests {
 
         let dup = PartialDto {
             signer_pk: pk,
-            sig,
+            sig: "0x".to_string() + &"33".repeat(48),
         };
-        matches!(
-            store.append_partial(&id, dup).unwrap(),
-            AppendOutcome::DuplicatePk
-        )
-        .then_some(())
-        .expect("expected DuplicatePk");
+        match store.append_partial(&id, dup).unwrap() {
+            AppendOutcome::Appended(dto) => {
+                assert_eq!(dto.partials.len(), 1, "replace must not add a second row");
+                assert_eq!(dto.partials[0].sig, "0x".to_string() + &"33".repeat(48));
+                assert_eq!(dto.signed_digest, digest);
+            }
+            _ => panic!("expected Appended (last-write-wins replace)"),
+        }
 
         let summaries = store.list_proposals().unwrap();
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].partials_count, 1);
         assert_eq!(summaries[0].id, id);
+    }
+
+    #[test]
+    fn append_rejects_33rd_distinct_pk() {
+        let store = Store::open_in_memory().expect("open store");
+        let digest = "0x".to_string() + &"aa".repeat(32);
+        let id = digest.trim_start_matches("0x").to_string();
+        let dto = sample_dto(&digest);
+        store.create_proposal(&id, &digest, &dto).unwrap();
+
+        for i in 0..crate::MAX_PARTIALS {
+            let pk = format!("0x{}", hex::encode(vec![i as u8; 96]));
+            let sig = format!("0x{}", hex::encode(vec![0x22u8; 48]));
+            match store
+                .append_partial(
+                    &id,
+                    PartialDto {
+                        signer_pk: pk,
+                        sig,
+                    },
+                )
+                .unwrap()
+            {
+                AppendOutcome::Appended(_) => {}
+                _ => panic!("expected Appended for pk #{i}"),
+            }
+        }
+
+        let overflow_pk = format!("0x{}", hex::encode(vec![0xffu8; 96]));
+        matches!(
+            store
+                .append_partial(
+                    &id,
+                    PartialDto {
+                        signer_pk: overflow_pk,
+                        sig: format!("0x{}", hex::encode(vec![0x22u8; 48])),
+                    },
+                )
+                .unwrap(),
+            AppendOutcome::TooManyPartials
+        )
+        .then_some(())
+        .expect("33rd distinct pk must be TooManyPartials");
+
+        // Replacing an existing pk still works at the cap.
+        let first_pk = format!("0x{}", hex::encode(vec![0u8; 96]));
+        match store
+            .append_partial(
+                &id,
+                PartialDto {
+                    signer_pk: first_pk,
+                    sig: format!("0x{}", hex::encode(vec![0x44u8; 48])),
+                },
+            )
+            .unwrap()
+        {
+            AppendOutcome::Appended(dto) => {
+                assert_eq!(dto.partials.len(), crate::MAX_PARTIALS);
+                assert_eq!(
+                    dto.partials[0].sig,
+                    format!("0x{}", hex::encode(vec![0x44u8; 48]))
+                );
+            }
+            _ => panic!("replace at cap must succeed"),
+        }
     }
 
     fn sample_pm_dto(digest: &str) -> ProposalDto {

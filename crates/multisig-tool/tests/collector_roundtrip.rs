@@ -185,8 +185,8 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
     assert!(key_bytes.contains(&pk_alice.to_bytes()));
     assert!(key_bytes.contains(&pk_bob.to_bytes()));
 
-    // Re-signing with the same identity must be rejected (duplicate signer_pk).
-    let dup = client
+    // Re-posting the same signer_pk replaces (last-write-wins), does not 409.
+    let replaced = client
         .append_partial(
             &pushed.id,
             &PartialFile {
@@ -194,10 +194,18 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
                 sig: format!("0x{}", "00".repeat(48)),
             },
         )
-        .await;
-    assert!(dup.is_err(), "duplicate signer_pk must be rejected by the collector");
+        .await
+        .expect("duplicate signer_pk must replace, not 409");
+    assert_eq!(replaced.partials.len(), 2, "replace must not add a third partial");
+    let alice_pk_hex = format!("0x{}", hex::encode(pk_alice.to_bytes()));
+    let alice_partial = replaced
+        .partials
+        .iter()
+        .find(|p| p.signer_pk.trim_start_matches("0x").eq_ignore_ascii_case(alice_pk_hex.trim_start_matches("0x")))
+        .expect("alice partial present");
+    assert_eq!(alice_partial.sig, format!("0x{}", "00".repeat(48)));
 
-    // Party-finder roster roundtrip: signup -> list -> leave.
+    // Party-finder roster roundtrip: signup -> list (no DELETE — upsert-only).
     let pk_hex = format!("0x{}", hex::encode(pk_alice.to_bytes()));
     let member = client
         .signup_party("alice", &pk_hex, Some("roundtrip test"))
@@ -209,10 +217,6 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
     let roster = client.list_party().await.expect("party list");
     assert_eq!(roster.len(), 1);
     assert_eq!(roster[0].pk, pk_hex);
-
-    client.leave_party(&pk_hex).await.expect("party leave");
-    let roster_after = client.list_party().await.expect("party list after leave");
-    assert!(roster_after.is_empty());
 
     let _ = std::fs::remove_file(&db_path);
 }
