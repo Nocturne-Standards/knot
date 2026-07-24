@@ -13,6 +13,9 @@ mod multisig_proposals {
         SignatureEntry, VerifyQuorumArgs,
     };
 
+    const MAX_FUNCTION_NAME_LEN: usize = 64;
+    const MAX_CALL_ARGS_LEN: usize = 4096;
+
     struct Proposal {
         registry_account_id: u64,
         chain_id: u64,
@@ -31,8 +34,8 @@ mod multisig_proposals {
         registry: Option<ContractId>,
         /// Network binding folded into §4a digests (configurable).
         chain_id: u64,
-        /// How long executed proposals stay Tombstoned (blocks). 0 = no tombstone phase.
-        tombstone_ttl: u64,
+        /// When true, successful finalize marks `Tombstoned`; else `Executed`.
+        tombstone: bool,
         /// Default proposal deadline offset from propose height; 0 = require explicit deadline.
         proposal_ttl: u64,
         /// Per-committee monotonic nonce (option A).
@@ -48,7 +51,7 @@ mod multisig_proposals {
             Self {
                 registry: None,
                 chain_id: 0,
-                tombstone_ttl: 100,
+                tombstone: false,
                 proposal_ttl: 1000,
                 committee_nonces: BTreeMap::new(),
                 by_digest: BTreeMap::new(),
@@ -78,9 +81,11 @@ mod multisig_proposals {
             abi::emit("registry_set", ());
         }
 
-        /// Owner-only. Bind §4a digests to a chain id.
+        /// Owner-only. Bind §4a digests to a chain id. Wipes open proposals
+        /// (digest domain changes).
         pub fn init_chain_id(&mut self, chain_id: u64) {
             Self::require_owner();
+            self.wipe_open_proposals();
             self.chain_id = chain_id;
             abi::emit("chain_id_set", chain_id);
         }
@@ -92,9 +97,11 @@ mod multisig_proposals {
             self.proposal_ttl = blocks;
         }
 
-        pub fn set_tombstone_ttl(&mut self, blocks: u64) {
+        /// Owner-only. When `true`, successful finalize marks `Tombstoned`
+        /// instead of `Executed`. Does **not** wipe open proposals.
+        pub fn set_tombstone(&mut self, tombstone: bool) {
             Self::require_owner();
-            self.tombstone_ttl = blocks;
+            self.tombstone = tombstone;
         }
 
         pub fn chain_id(&self) -> u64 {
@@ -106,9 +113,19 @@ mod multisig_proposals {
         }
 
         /// Open a structured proposal. Digest = §4a Keccak; nonce = current
-        /// per-committee counter (not bumped until execute).
+        /// per-committee counter (not bumped until finalize effects).
         pub fn propose(&mut self, args: ProposeArgs) -> u64 {
             let _ = self.require_registry();
+            if self.chain_id == 0 {
+                panic!("call init_chain_id before propose");
+            }
+            if args.function_name.len() > MAX_FUNCTION_NAME_LEN {
+                panic!("function_name exceeds max length");
+            }
+            if args.call_args.len() > MAX_CALL_ARGS_LEN {
+                panic!("call_args exceeds max length");
+            }
+
             let nonce = self.committee_nonce(args.registry_account_id);
             let deadline = if args.deadline == 0 {
                 if self.proposal_ttl == 0 {
@@ -121,6 +138,9 @@ mod multisig_proposals {
             } else {
                 args.deadline
             };
+            if deadline != 0 && deadline <= block_height() {
+                panic!("proposal deadline is in the past");
+            }
 
             let digest = proposal_digest(
                 self.chain_id,
@@ -227,8 +247,11 @@ mod multisig_proposals {
             self.next_id
         }
 
-        /// At threshold: verify quorum, `call_raw` the target, bump committee
-        /// nonce, mark Executed (then Tombstoned after optional TTL bookkeeping).
+        /// At threshold: verify quorum, then CEI — mark terminal status, bump
+        /// committee nonce, emit — **then** `call_raw` the target.
+        ///
+        /// A failed `call_raw` still panics (tx reverts), so the proposal stays
+        /// `Open` and the nonce is unchanged for retry.
         pub fn finalize(&mut self, proposal_id: u64) {
             let registry = self.require_registry();
 
@@ -285,22 +308,20 @@ mod multisig_proposals {
             let fn_name = proposal.function_name.clone();
             let call_args = proposal.call_args.clone();
             let committee = proposal.registry_account_id;
-            let digest = proposal.signed_digest;
 
-            // Execute first; only then consume nonce / mark status.
-            let _ = abi::call_raw(target, &fn_name, &call_args)
-                .expect("finalize: call_raw to target failed");
-
+            // Effects first (CEI): consume proposal before external call.
             let proposal = self.proposals.get_mut(&proposal_id).unwrap();
-            proposal.status = if self.tombstone_ttl == 0 {
-                ProposalStatus::Executed
-            } else {
+            proposal.status = if self.tombstone {
                 ProposalStatus::Tombstoned
+            } else {
+                ProposalStatus::Executed
             };
             self.committee_nonces.insert(committee, current_nonce + 1);
-            // Keep digest mapped while tombstoned to block immediate identical re-propose.
-            let _ = digest;
             abi::emit("proposal_finalized", proposal_id);
+
+            // Interaction last.
+            let _ = abi::call_raw(target, &fn_name, &call_args)
+                .expect("finalize: call_raw to target failed");
         }
 
         fn wipe_open_proposals(&mut self) {

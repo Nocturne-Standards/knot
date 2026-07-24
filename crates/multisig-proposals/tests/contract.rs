@@ -1,5 +1,5 @@
-//! Tests for `multisig-proposals` v0.2 (M1): structured propose, digest
-//! signing, execute via `call_raw`, per-committee nonce, merge/tombstone.
+//! Tests for `multisig-proposals` v0.3: structured propose, digest signing,
+//! CEI finalize via `call_raw`, per-committee nonce, caps, tombstone bool.
 
 extern crate alloc;
 
@@ -51,6 +51,12 @@ fn set_sender(session: &mut Session, sender: Option<&BlsPublicKey>) {
     session
         .set_meta(Metadata::PUBLIC_SENDER, sender.copied())
         .expect("setting public_sender metadata should succeed");
+}
+
+fn set_block_height(session: &mut Session, height: u64) {
+    session
+        .set_meta(Metadata::BLOCK_HEIGHT, Some(height))
+        .expect("setting block_height metadata should succeed");
 }
 
 fn rkyv_bytes<T>(value: &T) -> Vec<u8>
@@ -107,10 +113,10 @@ fn init_proposals(session: &mut Session, owner_pk: &BlsPublicKey) {
     session
         .call::<u64, ()>(PROPOSALS_ID, "init_chain_id", &DIGEST_CHAIN_ID, POINT_LIMIT)
         .expect("init_chain_id");
-    // Lab: skip tombstone delay so status is Executed after finalize.
+    // Default tombstone=false → Executed; keep explicit for lab clarity.
     session
-        .call::<u64, ()>(PROPOSALS_ID, "set_tombstone_ttl", &0u64, POINT_LIMIT)
-        .expect("set_tombstone_ttl");
+        .call::<bool, ()>(PROPOSALS_ID, "set_tombstone", &false, POINT_LIMIT)
+        .expect("set_tombstone");
     set_sender(session, None);
 }
 
@@ -131,10 +137,19 @@ fn create_account(
 }
 
 fn propose_set_value(session: &mut Session, account_id: u64, value: u64) -> (u64, [u8; 32]) {
+    propose_fn(session, account_id, "set_value", value)
+}
+
+fn propose_fn(
+    session: &mut Session,
+    account_id: u64,
+    function_name: &str,
+    value: u64,
+) -> (u64, [u8; 32]) {
     let args = ProposeArgs {
         registry_account_id: account_id,
         target: TARGET_ID,
-        function_name: String::from("set_value"),
+        function_name: String::from(function_name),
         call_args: rkyv_bytes(&value),
         deadline: 0,
     };
@@ -348,6 +363,29 @@ fn propose_fails_before_init_registry() {
 }
 
 #[test]
+fn propose_fails_before_init_chain_id() {
+    let rng = &mut StdRng::seed_from_u64(16);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+
+    set_sender(&mut session, Some(&owner_pk));
+    session
+        .call::<ContractId, ()>(PROPOSALS_ID, "init_registry", &REGISTRY_ID, POINT_LIMIT)
+        .expect("init_registry");
+    set_sender(&mut session, None);
+
+    let args = ProposeArgs {
+        registry_account_id: 0,
+        target: TARGET_ID,
+        function_name: String::from("set_value"),
+        call_args: rkyv_bytes(&1u64),
+        deadline: 0,
+    };
+    let result = session.call::<ProposeArgs, u64>(PROPOSALS_ID, "propose", &args, POINT_LIMIT);
+    assert!(result.is_err(), "propose before init_chain_id must fail");
+}
+
+#[test]
 fn identical_open_digest_merges() {
     let rng = &mut StdRng::seed_from_u64(7);
     let (_owner_sk, owner_pk) = keypair(rng);
@@ -401,4 +439,239 @@ fn free_reads_roundtrip() {
     assert_eq!(view.approvals, alloc::vec![pk1]);
     assert_eq!(view.status, ProposalStatus::Open);
     assert_eq!(view.signed_digest, digest);
+}
+
+#[test]
+fn finalize_reentrancy_runs_target_once() {
+    let rng = &mut StdRng::seed_from_u64(9);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+
+    let (proposal_id, digest) =
+        propose_fn(&mut session, account_id, "set_value_reenter_finalize", 77);
+
+    // Wire target to call back into finalize(same id) during execute.
+    session
+        .call::<(ContractId, u64), ()>(
+            TARGET_ID,
+            "configure_reenter",
+            &(PROPOSALS_ID, proposal_id),
+            POINT_LIMIT,
+        )
+        .expect("configure_reenter");
+
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    approve(&mut session, proposal_id, &sk2, &pk2, &digest);
+
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .expect("finalize with reentrant target should succeed under CEI");
+
+    let view = session
+        .call::<u64, Option<ProposalView>>(PROPOSALS_ID, "proposal", &proposal_id, POINT_LIMIT)
+        .expect("proposal query")
+        .data
+        .expect("exists");
+    assert_eq!(view.status, ProposalStatus::Executed);
+
+    let hits = session
+        .call::<(), u64>(TARGET_ID, "hit_count", &(), POINT_LIMIT)
+        .expect("hit_count")
+        .data;
+    assert_eq!(hits, 1, "reentrant finalize must not double-execute target");
+
+    let target_value = session
+        .call::<(), u64>(TARGET_ID, "value", &(), POINT_LIMIT)
+        .expect("value")
+        .data;
+    assert_eq!(target_value, 77);
+
+    let nonce = session
+        .call::<u64, u64>(PROPOSALS_ID, "committee_nonce", &account_id, POINT_LIMIT)
+        .expect("nonce")
+        .data;
+    assert_eq!(nonce, 1, "committee nonce must bump exactly once");
+}
+
+#[test]
+fn finalize_failed_call_raw_leaves_proposal_open() {
+    let rng = &mut StdRng::seed_from_u64(10);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+
+    let (proposal_id, digest) = propose_fn(&mut session, account_id, "fail_set", 1);
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    approve(&mut session, proposal_id, &sk2, &pk2, &digest);
+
+    assert!(
+        session
+            .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+            .is_err(),
+        "finalize must fail when call_raw target panics"
+    );
+
+    let status = session
+        .call::<u64, Option<ProposalStatus>>(PROPOSALS_ID, "status", &proposal_id, POINT_LIMIT)
+        .expect("status")
+        .data
+        .expect("exists");
+    assert_eq!(status, ProposalStatus::Open);
+
+    let nonce = session
+        .call::<u64, u64>(PROPOSALS_ID, "committee_nonce", &account_id, POINT_LIMIT)
+        .expect("nonce")
+        .data;
+    assert_eq!(nonce, 0, "failed finalize must not bump nonce");
+}
+
+#[test]
+fn set_tombstone_true_marks_tombstoned() {
+    let rng = &mut StdRng::seed_from_u64(11);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    set_sender(&mut session, Some(&owner_pk));
+    session
+        .call::<bool, ()>(PROPOSALS_ID, "set_tombstone", &true, POINT_LIMIT)
+        .expect("set_tombstone(true)");
+    set_sender(&mut session, None);
+
+    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let (proposal_id, digest) = propose_set_value(&mut session, account_id, 5);
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .expect("finalize");
+
+    let status = session
+        .call::<u64, Option<ProposalStatus>>(PROPOSALS_ID, "status", &proposal_id, POINT_LIMIT)
+        .expect("status")
+        .data
+        .expect("exists");
+    assert_eq!(status, ProposalStatus::Tombstoned);
+}
+
+#[test]
+fn propose_rejects_oversized_function_name() {
+    let rng = &mut StdRng::seed_from_u64(12);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (_sk1, pk1) = keypair(rng);
+
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+
+    let name: String = (0..65).map(|_| 'a').collect();
+    let args = ProposeArgs {
+        registry_account_id: account_id,
+        target: TARGET_ID,
+        function_name: name,
+        call_args: rkyv_bytes(&1u64),
+        deadline: 0,
+    };
+    assert!(
+        session
+            .call::<ProposeArgs, u64>(PROPOSALS_ID, "propose", &args, POINT_LIMIT)
+            .is_err(),
+        "function_name len 65 must fail"
+    );
+}
+
+#[test]
+fn propose_rejects_past_deadline() {
+    let rng = &mut StdRng::seed_from_u64(13);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (_sk1, pk1) = keypair(rng);
+
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+
+    set_block_height(&mut session, 100);
+    let args = ProposeArgs {
+        registry_account_id: account_id,
+        target: TARGET_ID,
+        function_name: String::from("set_value"),
+        call_args: rkyv_bytes(&1u64),
+        deadline: 100, // == block_height → reject
+    };
+    assert!(
+        session
+            .call::<ProposeArgs, u64>(PROPOSALS_ID, "propose", &args, POINT_LIMIT)
+            .is_err(),
+        "deadline == block_height must fail at propose"
+    );
+}
+
+#[test]
+fn init_chain_id_wipes_open_proposals() {
+    let rng = &mut StdRng::seed_from_u64(14);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (_sk1, pk1) = keypair(rng);
+
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let (proposal_id, _) = propose_set_value(&mut session, account_id, 3);
+
+    set_sender(&mut session, Some(&owner_pk));
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "init_chain_id", &99u64, POINT_LIMIT)
+        .expect("init_chain_id wipe");
+    set_sender(&mut session, None);
+
+    let status = session
+        .call::<u64, Option<ProposalStatus>>(PROPOSALS_ID, "status", &proposal_id, POINT_LIMIT)
+        .expect("status")
+        .data
+        .expect("exists");
+    assert_eq!(status, ProposalStatus::Tombstoned);
+
+    // Same payload can be re-proposed under the new chain_id (digest domain changed;
+    // wiped entry removed from by_digest).
+    let (id2, _) = propose_set_value(&mut session, account_id, 3);
+    assert_ne!(id2, proposal_id);
+    let status2 = session
+        .call::<u64, Option<ProposalStatus>>(PROPOSALS_ID, "status", &id2, POINT_LIMIT)
+        .expect("status")
+        .data
+        .expect("exists");
+    assert_eq!(status2, ProposalStatus::Open);
+}
+
+#[test]
+fn propose_rejects_oversized_call_args() {
+    let rng = &mut StdRng::seed_from_u64(15);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (_sk1, pk1) = keypair(rng);
+
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+
+    let args = ProposeArgs {
+        registry_account_id: account_id,
+        target: TARGET_ID,
+        function_name: String::from("set_value"),
+        call_args: alloc::vec![0u8; 4097],
+        deadline: 0,
+    };
+    assert!(
+        session
+            .call::<ProposeArgs, u64>(PROPOSALS_ID, "propose", &args, POINT_LIMIT)
+            .is_err(),
+        "call_args len 4097 must fail"
+    );
 }

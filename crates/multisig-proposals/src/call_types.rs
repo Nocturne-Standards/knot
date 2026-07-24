@@ -1,4 +1,4 @@
-//! Call argument / return types for `multisig-proposals` (v0.2 — M1).
+//! Call argument / return types for `multisig-proposals` (v0.3).
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -15,9 +15,9 @@ use rkyv::{Archive, Deserialize, Serialize};
 #[repr(u8)]
 pub enum ProposalStatus {
     Open = 0,
-    /// Threshold met and `call_raw` succeeded.
+    /// Threshold met and `call_raw` succeeded (`tombstone` config false).
     Executed = 1,
-    /// Consumed / blocked from immediate re-propose (tombstone TTL).
+    /// Consumed / blocked from immediate re-propose (`tombstone` true, or wiped).
     Tombstoned = 2,
 }
 

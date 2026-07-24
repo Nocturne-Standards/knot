@@ -2185,7 +2185,7 @@ dependencies = [
 
 [[package]]
 name = "multisig-proposals"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bytecheck",
  "dusk-bls12_381",
@@ -2211,10 +2211,10 @@ dependencies = [
  "dusk-data-driver",
  "dusk-forge",
  "dusk-vm",
+ "multisig-encoding",
  "rand 0.8.7",
  "rkyv",
  "serde",
- "tiny-keccak",
 ]
 
 [[package]]
