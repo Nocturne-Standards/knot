@@ -34,7 +34,11 @@ use registry_types::call_types::{
 };
 
 #[derive(Parser)]
-#[command(name = "multisig-tool", about = "Local signing tool for multisig-registry (testnet only)")]
+#[command(
+    name = "multisig-tool",
+    about = "Local signing tool for multisig-registry (testnet only)",
+    version
+)]
 struct Cli {
     /// Identity store path.
     #[arg(long, global = true)]

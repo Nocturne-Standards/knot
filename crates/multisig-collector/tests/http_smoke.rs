@@ -28,7 +28,8 @@ async fn health_endpoint_returns_ok_true() {
     assert_eq!(resp.status(), reqwest::StatusCode::OK);
 
     let body: serde_json::Value = resp.json().await.expect("parse json body");
-    assert_eq!(body, serde_json::json!({ "ok": true }));
+    assert_eq!(body["ok"], true);
+    assert_eq!(body["version"], env!("CARGO_PKG_VERSION"));
 }
 
 /// Same real-listener setup as above, but exercises the full

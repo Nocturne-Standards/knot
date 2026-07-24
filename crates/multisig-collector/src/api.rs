@@ -43,11 +43,18 @@ async fn health(State(state): State<AppState>) -> Response {
     if !state.store.is_alive() {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "ok": false })),
+            Json(json!({
+                "ok": false,
+                "version": env!("CARGO_PKG_VERSION"),
+            })),
         )
             .into_response();
     }
-    Json(json!({ "ok": true })).into_response()
+    Json(json!({
+        "ok": true,
+        "version": env!("CARGO_PKG_VERSION"),
+    }))
+    .into_response()
 }
 
 fn error_response(status: StatusCode, message: impl Into<String>) -> Response {
@@ -243,6 +250,12 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["ok"], true);
+        assert_eq!(json["version"], env!("CARGO_PKG_VERSION"));
     }
 
     fn sample_dto(digest: &str) -> ProposalDto {
