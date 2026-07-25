@@ -136,6 +136,12 @@ submission goes two ways:
   Prefills via query string.
   Local AC: `cargo test -p multisig-tool` (blob gate/partial helpers) and
   `cargo test -p multisig-tool --test collector_roundtrip` (PM push/pull/append).
+  **PM-focused UIs in the nest:** owner ops
+  [`pm-admin-tool`](../../../prediction-market/crates/pm-admin-tool/README.md)
+  (`:8798`); council workstation
+  [`pm-council-tool`](../../../prediction-market/crates/pm-council-tool/README.md)
+  (`:8879`) — preferred day-to-day council path; this crate stays the Multisig Lab
+  + scriptable `pm-resolve` CLI.
   End-to-end / OPS steps:
   [`prediction-market/docs/council-resolve-testing.md`](../../../prediction-market/docs/council-resolve-testing.md).
 - **Signing preview/confirm (2026-07-24)** — proposal approve and PM/blob sign
