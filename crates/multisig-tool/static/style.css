@@ -18,7 +18,6 @@
 
 * { box-sizing: border-box; }
 
-html, body { height: 100%; }
 html { scroll-behavior: smooth; }
 
 body {
@@ -27,6 +26,13 @@ body {
   font-family: var(--font-body);
   font-size: 16px;
   line-height: 1.5;
+  /* Do not lock overflow here — standalone pages (pm-resolve.html) must scroll. */
+}
+
+/* Lab full-page slides shell: viewport locked; .slides owns scroll */
+html:has(.slides),
+html:has(.slides) body {
+  height: 100%;
   overflow: hidden;
 }
 
@@ -52,7 +58,18 @@ code {
   padding: 0;
 }
 
-/* —— Mode banner (softened; JS may flip mock/testnet) —— */
+/* —— Standalone TESTNET strip (pm-resolve.html uses class="banner") —— */
+.banner {
+  background: var(--danger);
+  color: #fff8f6;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.55rem 1rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+}
+
+/* —— Mode banner (Lab; softened; JS may flip mock/testnet) —— */
 .mode-banner {
   position: fixed;
   top: 0;
@@ -456,6 +473,14 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+.drawer-stage {
+  margin-top: 0.85rem;
+}
+.drawer-stage .tab-panel[hidden] { display: none; }
+.drawer-stage .tab-panel.active {
+  display: block;
+  animation: rise 0.45s var(--ease) both;
 }
 
 /* Pane / form chrome */
