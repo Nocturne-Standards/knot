@@ -10,5 +10,5 @@ modified, closed deployment). The commercial license grants the same code
 under proprietary terms and is a separate agreement — it does not include
 support, maintenance, or hosting unless separately contracted.
 
-Contact: info@nocturne-standards.org · Copyright (c) 2026 Leon Frenzel
-(trading as Nocturne Standards). All rights reserved.
+Contact: info@nocturne-standards.org · Copyright (c) 2026 Nocturne Standards.
+All rights reserved.
