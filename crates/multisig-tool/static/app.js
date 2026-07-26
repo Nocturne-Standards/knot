@@ -183,13 +183,9 @@ function applyDemoMode(mode) {
 function updateYouChip() {
   const chip = el("status-you");
   if (!chip) return;
-  if (youIdentity) {
-    chip.hidden = false;
-    chip.textContent = `You: ${youIdentity}`;
-  } else {
-    chip.hidden = true;
-    chip.textContent = "You: —";
-  }
+  chip.hidden = false;
+  chip.textContent = youIdentity ? `You: ${youIdentity}` : "You: —";
+  chip.classList.toggle("is-set", !!youIdentity);
 }
 
 function updateHeaderCouncil({ animate } = {}) {
@@ -254,10 +250,17 @@ function syncPropApproveGate() {
 }
 
 function setYouIdentity(name) {
-  youIdentity = name;
-  activePropSigner = name;
-  const signer = el("prop-signer");
-  if (signer) signer.value = name;
+  // Toggle off when clicking the same cast member again.
+  if (name && youIdentity === name) {
+    youIdentity = null;
+  } else {
+    youIdentity = name || null;
+  }
+  if (youIdentity) {
+    activePropSigner = youIdentity;
+    const signer = el("prop-signer");
+    if (signer) signer.value = youIdentity;
+  }
   updateYouChip();
   renderCastList(cachedIdentities);
   renderPropSignerList(cachedIdentities);
@@ -380,13 +383,18 @@ function renderCastList(identities) {
         youSelected: isYou,
         deselected: !!youIdentity && !isYou,
         onClick: (ident) => {
+          const wasYou = youIdentity === ident.name;
           setYouIdentity(ident.name);
-          // Soft-select for council if not yet forming.
-          if (!councilSelected.has(ident.name)) {
-            councilSelected.add(ident.name);
+          if (!wasYou) {
+            // Soft-select for council when choosing “you”.
+            if (!councilSelected.has(ident.name)) {
+              councilSelected.add(ident.name);
+            }
+            renderCouncilPickList(cachedIdentities);
+            showToast(`You are ${ident.name}`);
+          } else {
+            showToast(`${ident.name} deselected`);
           }
-          renderCouncilPickList(cachedIdentities);
-          showToast(`You are ${ident.name}`);
         },
       })
     );
@@ -447,10 +455,8 @@ function renderCouncilCard(c, { onSelect, showDetail } = {}) {
     : "";
   card.innerHTML =
     detailBtn +
-    `<span class="council-card-top">` +
     `<span class="council-card-icon">${COUNCIL_ICON_SVG}</span>` +
     `<span class="council-card-id">Council #${c.id}</span>` +
-    `</span>` +
     `<span class="council-card-meta">Threshold ${c.threshold}-of-${c.members.length || "?"}</span>`;
   card.addEventListener("click", (ev) => {
     if (ev.target.closest("[data-detail]")) return;
