@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (c) 2026 Leon Frenzel
+// Copyright (c) 2026 Nocturne Standards
 
 //! HTTP routes: `GET /v1/health`, the proposal/partial relay surface
 //! (`/v1/proposals`, `/v1/proposals/:id`, `/v1/proposals/:id/partials`), and

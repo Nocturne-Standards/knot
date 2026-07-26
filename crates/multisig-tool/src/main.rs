@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) 2026 Leon Frenzel
+// Copyright (c) 2026 Nocturne Standards
 
 //! `multisig-tool` — local signing tool + web UI for exercising
 //! `multisig-registry` against the real Dusk testnet. See README.md.

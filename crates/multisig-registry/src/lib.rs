@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) 2026 Leon Frenzel
+// Copyright (c) 2026 Nocturne Standards
 
 //! Multisig registry: BLS M-of-N quorum accounts other contracts can point
 //! at instead of re-implementing committee/threshold logic themselves.
