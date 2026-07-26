@@ -29,6 +29,13 @@ portal web→CLI handoff).
 to registry account **0** (`init_dispute_council` tx `b7f02c0c…`; portal
 `accountId: 0`).
 
+**2026-07-26 — Multisig Lab website demo:** `DEMO_MODE=mock` default /
+`DEMO_MODE=testnet` optional; slide Lab (cover / demo studio / use cases) +
+five-beat walkthrough + developer drawer on `:8877`; public docs at
+[`/docs/multisig.html`](../nocturne-standards-site/public/docs/multisig.html)
+(no hosted signing). Canonical ports/modes:
+[`crates/multisig-tool/README.md`](crates/multisig-tool/README.md) Status.
+
 | Surface | License | Notes |
 |---|---|---|
 | `crates/multisig-encoding` | Apache-2.0 | Canonical §4a digest + blob helpers + M3 fingerprint |

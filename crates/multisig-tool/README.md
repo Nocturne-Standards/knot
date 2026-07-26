@@ -121,6 +121,19 @@ submission goes two ways:
 ## Status
 
 - **Package version `0.2.0`** — see [CHANGELOG.md](CHANGELOG.md). Policy: [docs/versioning.md](../../../docs/versioning.md). `multisig-tool --version` prints the same string.
+- **Website demo Lab (2026-07-26)** — `DEMO_MODE=mock` (**default**) uses an
+  in-process `MockLedger` for account/proposal APIs (approve still signs the
+  digest with real local BLS; chain submit is skipped in mock only).
+  `DEMO_MODE=testnet` keeps the live chain path. Lab UI on **`:8877`**: cover /
+  demo studio / use cases slides; default path is a **five-beat** proposals
+  walkthrough (Cast → Form council → Look up → Propose & first approve →
+  Threshold & finalize); advanced panels (Setup, Aggregate, Rotate, Unsafe
+  UTF-8, Party finder, PM resolve) live in the **developer drawer** (501 in
+  mock — set `DEMO_MODE=testnet` and restart). Public story (no hosted
+  signing):
+  [`/docs/multisig.html`](../../../nocturne-standards-site/public/docs/multisig.html).
+  Design (frozen):
+  [`docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md`](../../../docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md).
 - **PM council resolve CLI + standalone UI (2026-07-24)** — `pm-resolve init|sign|status|submit|ui`
   builds `kind=pm_council_resolve` blobs over **`council-resolve.v2`**
   (`DOMAIN || pm_contract_id || registry_account_id || threshold || market_id ||
@@ -128,8 +141,8 @@ submission goes two ways:
   collector or file, and submits `prediction-market.resolve` to the ContractId
   in the blob intent. Preview/confirm required (`GET …/preview`, then
   `confirm:true` / CLI `--confirm`). **`pm-resolve ui`** (alias: `demo`) opens
-  a **standalone** local browser UI (not the Multisig Lab treasury walkthrough);
-  chapter 8 on `serve` remains for the full demo. Both UIs refresh on-chain
+  a **standalone** local browser UI (not the Multisig Lab five-beat walkthrough);
+  Party finder / PM resolve also appear in the Lab **developer drawer**. Both UIs refresh on-chain
   councils (`GET /api/registry/accounts`) and markets (`GET /api/pm/markets`)
   plus `GET /api/deployments/pm` so operators rarely type contract/account ids.
   CLI mirrors: `pm-resolve deployments`, `pm-resolve markets`, `account list`.
@@ -148,8 +161,8 @@ submission goes two ways:
   print the fingerprint first; CLI requires `--confirm`; HTTP sign endpoints
   require `"confirm": true` (400 otherwise). UI: Preview → show mnemonic →
   checkbox → Sign. Quorum “type any message” lab panels remain an **unsafe
-  demo** (arbitrary UTF-8, not a canonical intent) — use Multi-person / PM
-  resolve for real authorizations.
+  demo** (arbitrary UTF-8, not a canonical intent) — use the five-beat
+  proposals path / PM resolve for real authorizations.
 - **`init` + first-run script (2026-07-23)** — `multisig-tool init [--name
   alice] [--store path]` creates the local identity store if missing
   (prompts for a new password twice, refuses on mismatch), optionally with
@@ -197,7 +210,7 @@ submission goes two ways:
 |---|---|
 | Registry create/query/change_account | Pass |
 | Quorum submit + outcome / diagnose surfacing | Pass (free-read verify still untrusted) |
-| Scenario web UI (treasury story + walkthrough) | Pass |
+| Scenario web UI (slide Lab + five-beat mock walkthrough) | Pass |
 | Proposal create / approve (canonical intent) / finalize+execute | Lab green; live proposals **v0.2.0** deployed+wired 2026-07-23 |
 | Adversarial digest mismatch refuse | Pass (`multisig-encoding` `gate_blob_for_signing`) |
 | Pk-only import + refuse as signer | Pass |
@@ -365,29 +378,31 @@ URL — it is injected into the served HTML only. Or via this repo's preview con
 (`MULTISIG_TOOL_ALLOW_ENV_PWD=1` + `MULTISIG_TOOL_PWD=local-dev-only`), fine for local dev only.
 
 The UI matches the Agent Pay demo visual language (Literata/Sora, cream/sky)
-framed as a **treasury payout story**: Cast → Form council → Look it up →
-Approve payout → Cheaper verify → Rotate members → Multi-person. A shared
-narrator updates per chapter; **Start example walkthrough** creates
-alice/bob/carol, prefills fields, and steps through the plot. Each chapter
-has a green “Values to enter” card with the field + explanation combined.
+as **three slides**: cover → demo studio → use cases. Default mode is
+`DEMO_MODE=mock`; set `DEMO_MODE=testnet` for live chain writes. In the
+studio, **Start walkthrough** runs the **five-beat** proposals path
+(Cast → Form council → Look up → Propose & first approve → Threshold &
+finalize) — creates alice/bob/carol, prefills fields, and advances on
+success. A shared narrator updates per beat; each beat has a green
+“Values to enter” card.
 
-Two chapters sit outside the one-machine walkthrough, for the real
-multi-person path: **Setup** (chapter 0, the default landing tab) shows
-keystore-unlocked status and the configured collector URL (from
-`MULTISIG_COLLECTOR_*` in the server process's own env — the browser never
-sees the Basic Auth password) and lets you create your first signing
-identity. **Party finder** (chapter 8) signs a local identity's *public* key
-up to the collector's off-chain roster (`/v1/party`, proxied through
-`serve`'s `/api/party`), lists who else has signed up, and lets a council
-leader multi-select roster rows to prefill Form council's members field
-(importing new ones as pk-only identities first). The roster authorizes
-nothing on-chain — it's discovery only; `create_account` is still the real
-governance step.
+Advanced panels live in the **developer drawer** (not the default path):
+**Setup** (keystore unlock status + collector URL from server-side
+`MULTISIG_COLLECTOR_*` — browser never sees the Basic Auth password —
+and first identity create), Aggregate verify, Rotate, Unsafe UTF-8,
+**Party finder** (signs a local identity's *public* key up to the
+collector roster via `/api/party`; multi-select prefills Form council;
+roster is discovery only), and PM resolve. Drawer endpoints return 501
+in mock.
+
+*(Historical: the Lab used to be ten chapter tabs with Setup as the
+default landing tab and Party finder as “chapter 8”; that tab strip is
+gone — beats + drawer replaced it.)*
 
 ## Explicitly out of scope (this pass)
 
-- Marketing/docs static website explaining the tool — separate, later, no
-  signing capability of its own.
+- Hosted / public Multisig Lab or signing subdomain (public docs only:
+  [`/docs/multisig.html`](../../../nocturne-standards-site/public/docs/multisig.html)).
 - Dusk Wallet Extension / Dusk Connect `dusk_signMessage` integration as an
   alternative signer — still unverified whether the real extension
   implements it and in what byte format.
