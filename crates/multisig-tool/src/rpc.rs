@@ -11,7 +11,7 @@ use std::sync::Arc;
 use anyhow::{bail, Result};
 use axum::extract::{Path as AxPath, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use dusk_bytes::Serializable;
@@ -220,13 +220,20 @@ async fn require_token(
     next.run(request).await
 }
 
-async fn index(State(state): State<Arc<AppState>>) -> Html<String> {
+async fn index(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let template = if state.standalone_pm_resolve {
         include_str!("../static/pm-resolve.html")
     } else {
         include_str!("../static/index.html")
     };
-    Html(template.replace("__TOKEN__", &state.token))
+    // Token is process-scoped; never cache HTML across restarts.
+    (
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        template.replace("__TOKEN__", &state.token),
+    )
 }
 
 async fn app_js() -> impl IntoResponse {
