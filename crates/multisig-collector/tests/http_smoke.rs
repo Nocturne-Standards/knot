@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (c) 2026 Leon Frenzel
+// Copyright (c) 2026 Nocturne Standards
 
 //! Smoke test: spin the real axum router on an ephemeral port backed by an
 //! in-memory SQLite store, then hit `GET /v1/health` over a real HTTP

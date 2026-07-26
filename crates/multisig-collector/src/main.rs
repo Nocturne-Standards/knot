@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (c) 2026 Leon Frenzel
+// Copyright (c) 2026 Nocturne Standards
 
 //! `multisig-collector` binary entry: reads `MULTISIG_COLLECTOR_BIND` /
 //! `MULTISIG_COLLECTOR_DB`, opens the SQLite store, and serves the axum
