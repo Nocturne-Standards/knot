@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright (c) 2026 Leon Frenzel
+// Copyright (c) 2026 Nocturne Standards
 
 //! Multisig proposals: on-chain propose → approve → finalize+execute
 //! (`call_raw`) using `multisig-registry` for membership/threshold.
