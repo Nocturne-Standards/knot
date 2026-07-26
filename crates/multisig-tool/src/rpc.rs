@@ -135,6 +135,7 @@ pub async fn serve_with_options(
     let app = Router::new()
         .route("/", get(index))
         .route("/app.js", get(app_js))
+        .route("/mock-ledger.js", get(mock_ledger_js))
         .route("/pm-resolve-app.js", get(pm_resolve_app_js))
         .route("/style.css", get(style_css))
         .route("/fonts.css", get(fonts_css))
@@ -240,6 +241,13 @@ async fn app_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "application/javascript")],
         include_str!("../static/app.js"),
+    )
+}
+
+async fn mock_ledger_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/javascript")],
+        include_str!("../static/mock-ledger.js"),
     )
 }
 

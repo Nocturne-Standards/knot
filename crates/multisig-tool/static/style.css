@@ -229,14 +229,66 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   min-height: 0;
   max-height: 100%;
   gap: 0.85rem;
+  padding-top: 2.75rem; /* room for pop-in banner above header */
 }
 
 .demo-header {
+  position: relative;
   padding: 0.7rem 0.9rem 0.8rem;
   background: color-mix(in srgb, var(--paper) 70%, #fff);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   flex: 0 0 auto;
+}
+
+.demo-banner-slot {
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: calc(100% + 0.45rem);
+  z-index: 12;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  min-height: 0;
+}
+
+.lab-banner {
+  pointer-events: auto;
+  max-width: min(36rem, 100%);
+  width: auto;
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(28, 36, 48, 0.12);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  animation: banner-in 0.32s var(--ease) both;
+}
+.lab-banner.status-ok {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+  background: color-mix(in srgb, var(--ok) 6%, #fff);
+}
+.lab-banner.status-err {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background: color-mix(in srgb, var(--danger) 6%, #fff);
+}
+.lab-banner.fly-out {
+  animation: banner-out 0.28s var(--ease) both;
+}
+
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes banner-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-18px) scale(0.96); }
 }
 .demo-header-top {
   display: flex;
@@ -251,6 +303,22 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   align-items: center;
   gap: 0.45rem;
   justify-content: flex-end;
+}
+
+.demo-header-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem 0.75rem;
+  margin-top: 0.65rem;
+}
+
+.demo-header-nav .beat-dots {
+  margin-top: 0;
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 12rem;
 }
 
 /* Docs control — same chrome as beat tabs, sea accent */
@@ -299,6 +367,33 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   letter-spacing: 0.04em;
   color: var(--ink-soft);
 }
+.approvals-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.approvals-state {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.35rem;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+}
+.approvals-state.open {
+  color: var(--sea);
+  border-color: color-mix(in srgb, var(--sea) 40%, var(--line));
+  background: color-mix(in srgb, var(--sky) 40%, #fff);
+}
+.approvals-state.finalized {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+  background: color-mix(in srgb, var(--ok) 10%, #fff);
+}
+.approvals-text {
+  font-weight: 600;
+}
 
 .header-council {
   display: inline-flex;
@@ -310,6 +405,12 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   background: color-mix(in srgb, var(--sky) 50%, #fff);
   color: var(--sea);
   box-shadow: 0 1px 0 color-mix(in srgb, var(--sea) 12%, transparent);
+  cursor: pointer;
+  font: inherit;
+}
+.header-council:hover {
+  border-color: var(--sea);
+  filter: brightness(1.03);
 }
 .header-council.pop {
   animation: council-pop 0.55s var(--ease) both;
@@ -489,9 +590,11 @@ input, textarea, select {
   font: inherit;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 0.84rem;
-  direction: ltr;
-  unicode-bidi: isolate;
-  text-align: left;
+  /* Force LTR even after RTL selection gestures */
+  direction: ltr !important;
+  unicode-bidi: isolate !important;
+  text-align: left !important;
+  writing-mode: horizontal-tb;
 }
 textarea {
   min-height: 2.8rem;
@@ -856,6 +959,18 @@ textarea {
   color: var(--sea);
   font-weight: 600;
 }
+.proposal-card-desc {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.proposal-card.confirmed {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+}
 
 /* Review intent (beat 5) */
 .intent-card {
@@ -866,6 +981,69 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+}
+.intent-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+}
+.intent-head .section-label {
+  margin: 0;
+}
+.fp-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.fp-word {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sea);
+}
+.tip-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--sea) 35%, var(--line));
+  background: #fff;
+  color: var(--sea);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+}
+.tip-icon svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  display: block;
+}
+.tip-icon:hover,
+.tip-icon[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--sky) 45%, #fff);
+  border-color: var(--sea);
+}
+.tip-pop {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  width: min(16.5rem, 70vw);
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.35;
+  box-shadow: 0 8px 22px rgba(28, 36, 48, 0.12);
 }
 .intent-body {
   display: flex;
@@ -883,24 +1061,11 @@ textarea {
   font-size: 0.82rem;
   line-height: 1.4;
 }
-.fingerprint-details {
-  font-size: 0.75rem;
-  color: var(--ink-soft);
-}
-.fingerprint-details summary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--sea);
-}
-.fingerprint-soft {
-  margin-top: 0.35rem;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 0.7rem;
-  word-break: break-word;
-  color: var(--ink-soft);
-  padding: 0.4rem 0.5rem;
-  background: color-mix(in srgb, var(--paper-2) 40%, #fff);
-  border-radius: 6px;
+
+.approve-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 /* Single status card (beat 5) */

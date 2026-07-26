@@ -17,7 +17,7 @@
         <p class="hero-lede">
           Multisig Lab lets an M-of-N council share authority: propose an intent,
           collect approvals to threshold, then finalize — without a server holding
-          anyone’s secret keys. Try the local demo below; signing stays in this process.
+          anyone’s secret keys.
         </p>
         <div class="hero-cta">
           <a class="btn primary" href="#demo">Try the demo</a>
@@ -30,23 +30,29 @@
     <section class="slide demo-slide" id="demo">
       <div class="demo-inner">
         <header class="demo-header" id="status-strip">
+          <div class="demo-banner-slot" id="demo-banner-slot" aria-live="polite"></div>
           <div class="demo-header-top">
-            <span class="you-chip" id="status-you">You: —</span>
+            <a class="docs-tab" href="https://nocturne-standards.org/docs/multisig.html" target="_blank" rel="noopener noreferrer">Docs</a>
             <div class="demo-header-badges">
-              <a class="docs-tab" href="https://nocturne-standards.org/docs/multisig.html" target="_blank" rel="noopener noreferrer">Docs</a>
-              <span class="pill" id="status-approvals">Approvals —</span>
-              <span class="header-council" id="header-council" hidden aria-hidden="true">
+              <span class="you-chip" id="status-you">You: —</span>
+              <span class="pill approvals-pill" id="status-approvals">
+                <span class="approvals-state" id="status-prop-state" hidden></span>
+                <span class="approvals-text" id="status-approvals-text">Approvals —</span>
+              </span>
+              <button type="button" class="header-council" id="header-council" hidden aria-hidden="true" title="Look up this council">
                 <span class="header-council-icon" id="header-council-icon"></span>
                 <span class="header-council-id" id="header-council-id"></span>
-              </span>
+              </button>
             </div>
           </div>
-          <div class="beat-dots" id="beat-dots" role="tablist" aria-label="Demo beats">
-            <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="cast" data-beat="1">1 · Cast</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council" data-beat="2">2 · Council</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check" data-beat="3">3 · Look up</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="4">4 · Propose</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="finalize" data-beat="5">5 · Finalize</button>
+          <div class="demo-header-nav">
+            <div class="beat-dots" id="beat-dots" role="tablist" aria-label="Demo beats">
+              <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="cast" data-beat="1">1 · Cast</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council" data-beat="2">2 · Council</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check" data-beat="3">3 · Look up</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="4">4 · Propose</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="finalize" data-beat="5">5 · Finalize</button>
+            </div>
           </div>
         </header>
 
@@ -71,7 +77,7 @@
                   <div class="popover" id="identity-popover" role="dialog" aria-label="Create identity" hidden>
                     <label class="popover-field">
                       <span class="value-name">Name</span>
-                      <input id="new-identity-name" placeholder="alice" autocomplete="off" />
+                      <input id="new-identity-name" placeholder="alice" autocomplete="off" dir="ltr" />
                     </label>
                     <div class="actions actions-center">
                       <button type="button" class="primary" id="btn-create-identity">Create</button>
@@ -94,7 +100,7 @@
                 <div class="council-form-row">
                   <label class="compact-field">
                     <span class="value-name">Threshold</span>
-                    <input id="create-threshold" type="number" min="1" value="2" />
+                    <input id="create-threshold" type="number" min="1" value="2" dir="ltr" />
                   </label>
                   <div class="actions actions-center">
                     <button type="button" class="primary" id="btn-create-account" onclick="submitCreateAccount()">Form council</button>
@@ -145,7 +151,7 @@
 
                 <label class="field-block">
                   <span class="value-name">Description</span>
-                  <textarea id="prop-description" rows="2" placeholder="e.g. Pay vendor invoice #4821 for Q2 tooling"></textarea>
+                  <textarea id="prop-description" rows="2" dir="ltr" placeholder="e.g. Pay vendor invoice #4821 for Q2 tooling"></textarea>
                 </label>
 
                 <input id="prop-account-id" type="hidden" />
@@ -170,7 +176,22 @@
                 <div id="proposals-list" class="proposals-grid"></div>
 
                 <div class="intent-card" id="intent-card" hidden>
-                  <p class="section-label">Review intent</p>
+                  <div class="intent-head">
+                    <span class="section-label">Review intent</span>
+                    <span class="fp-hint">
+                      <span class="fp-word">Fingerprint</span>
+                      <button type="button" class="tip-icon" id="btn-fp-tip" aria-label="What is a fingerprint?" aria-expanded="false" aria-controls="fp-tip">
+                        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4"/>
+                          <path d="M8 7.2v3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                          <circle cx="8" cy="5.1" r="0.85" fill="currentColor"/>
+                        </svg>
+                      </button>
+                      <span class="tip-pop" id="fp-tip" role="tooltip" hidden>
+                        A short check-code for this proposal so co-signers can compare intent. In this Lab the digest is a simulated stand-in — not a production BIP39 fingerprint.
+                      </span>
+                    </span>
+                  </div>
                   <div class="intent-body">
                     <p class="intent-purpose" id="intent-purpose"></p>
                     <p class="intent-description" id="intent-description"></p>
@@ -178,28 +199,19 @@
                   <div class="actions actions-center">
                     <button type="button" class="primary" id="btn-intent-confirm" onclick="confirmIntent()">Looks right — continue</button>
                   </div>
-                  <details class="fingerprint-details" id="fingerprint-details">
-                    <summary>Show fingerprint</summary>
-                    <div id="prop-preview" class="fingerprint-soft"></div>
-                  </details>
                 </div>
 
-                <p class="section-label">Approve as <span class="muted">(one at a time)</span></p>
-                <div id="prop-signer-list" class="identities-grid"></div>
-                <input id="prop-signer" type="hidden" />
-                <input id="prop-id" type="hidden" />
-                <input id="prop-confirm" type="checkbox" hidden />
+                <div id="approve-section" class="approve-section" hidden>
+                  <p class="section-label">Approve as <span class="muted">(one at a time)</span></p>
+                  <div id="prop-signer-list" class="identities-grid"></div>
+                  <input id="prop-signer" type="hidden" />
+                  <input id="prop-id" type="hidden" />
 
-                <div class="status-card" id="prop-status-card" hidden>
-                  <span class="status-chip" id="prop-status-chip">Open</span>
-                  <span class="status-approvals" id="prop-status-approvals">Approvals —</span>
+                  <div class="actions actions-center">
+                    <button type="button" class="primary" id="prop-approve-btn" onclick="proposalApprove()" disabled>Approve</button>
+                    <button type="button" class="primary" id="prop-finalize-btn" onclick="proposalFinalize()">Finalize</button>
+                  </div>
                 </div>
-
-                <div class="actions actions-center">
-                  <button type="button" class="primary" id="prop-approve-btn" onclick="proposalApprove()" disabled>Approve</button>
-                  <button type="button" class="primary" id="prop-finalize-btn" onclick="proposalFinalize()">Finalize</button>
-                </div>
-                <div class="outcome outcome-row" id="finalize-outcome" hidden></div>
               </div>
             </div>
           </div>
@@ -250,8 +262,8 @@
               </svg>
             </div>
             <div class="use-case-copy">
-              <h3>Keys never leave the machine</h3>
-              <p>Identities and BLS signing stay in this local process — the server never sees a secret key.</p>
+              <h3>Keys stay local</h3>
+              <p>Named identities live in this Lab session. When you run the real tool binary, signing stays in-process — the server never sees a secret key.</p>
             </div>
           </article>
         </div>
@@ -266,6 +278,7 @@
   </nav>
 
   <script>window.MULTISIG_TOOL_TOKEN = "__TOKEN__";</script>
+  <script src="/mock-ledger.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
