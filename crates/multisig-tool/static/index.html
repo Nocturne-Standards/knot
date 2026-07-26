@@ -249,6 +249,31 @@
               </div>
             </div>
 
+          </div>
+
+          <button type="button" class="slide-arrow" id="btn-beat-next" aria-label="Next beat">›</button>
+        </div>
+
+        <div class="beat-dots" id="beat-dots" role="tablist" aria-label="Walkthrough beats">
+          <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="cast" data-beat="1">1 · Cast</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council" data-beat="2">2 · Council</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check" data-beat="3">3 · Look up</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="4">4 · Propose</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="5" data-beat-phase="finalize">5 · Finalize</button>
+        </div>
+
+        <details class="dev-drawer" id="dev-drawer">
+          <summary>Developer drawer</summary>
+          <p class="drawer-lede">Advanced panels — not on the default five-beat path. Aggregate, rotate, and unsafe UTF-8 need testnet (or mock stubs when Task 4 wires them).</p>
+          <div class="drawer-tabs" role="tablist" aria-label="Developer panels">
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="setup">Setup</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="aggregate">Aggregate verify</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="rotate">Rotate</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="payout">Unsafe UTF-8</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="party">Party finder</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="pm-resolve">PM resolve</button>
+          </div>
+          <div class="drawer-stage" id="drawer-stage">
             <!-- Drawer panels (still tab-panels for app.js activateTab) -->
             <div class="tab-panel" id="panel-setup" role="tabpanel" hidden>
               <div class="pane">
@@ -572,29 +597,6 @@
                 <pre class="log" id="pm-log"></pre>
               </div>
             </div>
-          </div>
-
-          <button type="button" class="slide-arrow" id="btn-beat-next" aria-label="Next beat">›</button>
-        </div>
-
-        <div class="beat-dots" id="beat-dots" role="tablist" aria-label="Walkthrough beats">
-          <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="cast" data-beat="1">1 · Cast</button>
-          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council" data-beat="2">2 · Council</button>
-          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check" data-beat="3">3 · Look up</button>
-          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="4">4 · Propose</button>
-          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="5" data-beat-phase="finalize">5 · Finalize</button>
-        </div>
-
-        <details class="dev-drawer" id="dev-drawer">
-          <summary>Developer drawer</summary>
-          <p class="drawer-lede">Advanced panels — not on the default five-beat path. Aggregate, rotate, and unsafe UTF-8 need testnet (or mock stubs when Task 4 wires them).</p>
-          <div class="drawer-tabs" role="tablist" aria-label="Developer panels">
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="setup">Setup</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="aggregate">Aggregate verify</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="rotate">Rotate</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="payout">Unsafe UTF-8</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="party">Party finder</button>
-            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="pm-resolve">PM resolve</button>
           </div>
         </details>
       </div>
