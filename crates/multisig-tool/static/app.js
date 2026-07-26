@@ -1,6 +1,12 @@
-// Plain JS, no build step. Token from index.html; signing is server-side.
+// Plain JS, no build step. Token from index.html.
+// When TOKEN is still "__TOKEN__" (static Lab / Cloudflare), use in-browser MockLedger.
+// When multisig-tool serve injects a real token, call the live /api/* mock or testnet backend.
 
 const TOKEN = window.MULTISIG_TOOL_TOKEN;
+const USE_FRONTEND_MOCK =
+  window.MULTISIG_FRONTEND_MOCK === true ||
+  !TOKEN ||
+  TOKEN === "__TOKEN__";
 
 const STORY = {
   cast: ["alice", "bob", "carol"],
@@ -61,6 +67,12 @@ let youIdentity = null;
 let cachedIdentities = [];
 
 async function api(path, opts = {}) {
+  if (USE_FRONTEND_MOCK) {
+    if (!window.MockLab || typeof window.MockLab.mockApi !== "function") {
+      throw new Error("Frontend MockLedger missing — load /mock-ledger.js before app.js");
+    }
+    return window.MockLab.mockApi(path, opts);
+  }
   const res = await fetch(path, {
     ...opts,
     headers: {
@@ -87,45 +99,51 @@ function submitOk(out) {
   return out && out.outcome !== "panic" && out.tx_status !== "failed";
 }
 
-function showToast(message) {
-  let toast = el("lab-toast");
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "lab-toast";
-    toast.setAttribute("role", "status");
-    Object.assign(toast.style, {
-      position: "fixed",
-      bottom: "1.25rem",
-      left: "50%",
-      transform: "translateX(-50%)",
-      zIndex: "40",
-      maxWidth: "min(32rem, calc(100vw - 2rem))",
-      padding: "0.65rem 1rem",
-      borderRadius: "8px",
-      background: "#1c2a33",
-      color: "#f4f7f9",
-      fontSize: "0.85rem",
-      boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
-      transition: "opacity 200ms ease",
-    });
-    document.body.appendChild(toast);
+const BANNER_MS = 10000;
+
+function showLabBanner(html, ok = true) {
+  const slot = el("demo-banner-slot");
+  if (!slot) return;
+  const existing = slot.querySelector(".lab-banner");
+  const mount = () => {
+    slot.innerHTML = "";
+    const banner = document.createElement("div");
+    banner.className = "lab-banner " + (ok ? "status-ok" : "status-err");
+    banner.setAttribute("role", "status");
+    banner.innerHTML = html;
+    slot.appendChild(banner);
+    clearTimeout(showLabBanner._t);
+    showLabBanner._t = setTimeout(() => {
+      banner.classList.add("fly-out");
+      setTimeout(() => {
+        if (banner.parentNode === slot) banner.remove();
+      }, 280);
+    }, BANNER_MS);
+  };
+  if (existing) {
+    existing.classList.add("fly-out");
+    clearTimeout(showLabBanner._t);
+    setTimeout(mount, 260);
+  } else {
+    mount();
   }
-  toast.textContent = message;
-  toast.style.opacity = "1";
-  toast.hidden = false;
-  clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => {
-    toast.style.opacity = "0";
-    setTimeout(() => { toast.hidden = true; }, 220);
-  }, 4800);
 }
 
-function setOutcome(id, html, ok = true) {
-  const node = el(id);
-  if (!node) return;
-  node.hidden = false;
-  node.className = "outcome outcome-row " + (ok ? "status-ok" : "status-err");
-  node.innerHTML = html;
+function showToast(message) {
+  showLabBanner(`<span class="outcome-meta">${escapeHtml(message)}</span>`, true);
+}
+
+function setOutcome(_id, html, ok = true) {
+  // Success/failure (and progress notes) pop in above the demo header.
+  showLabBanner(html, ok);
+  // Hide any legacy in-pane outcome nodes so they don't steal space.
+  if (_id) {
+    const node = el(_id);
+    if (node) {
+      node.hidden = true;
+      node.innerHTML = "";
+    }
+  }
 }
 
 function outcomeChip(ok) {
@@ -211,7 +229,7 @@ function updateHeaderCouncil({ animate } = {}) {
   }
 }
 
-function updateStatusStrip({ account, threshold, approvals } = {}) {
+function updateStatusStrip({ account, threshold, approvals, proposal } = {}) {
   if (account !== undefined && account !== null) {
     const node = el("status-account");
     if (node) node.textContent = `Account ${account}`;
@@ -223,11 +241,44 @@ function updateStatusStrip({ account, threshold, approvals } = {}) {
   }
   if (approvals !== undefined && approvals !== null) {
     statusApprovals = approvals;
-    const node = el("status-approvals");
-    if (node) {
-      const t = statusThreshold != null ? `/${statusThreshold}` : "";
-      node.textContent = `Approvals ${approvals}${t}`;
-    }
+  }
+  if (proposal !== undefined) {
+    updateHeaderApprovals(proposal);
+    return;
+  }
+  const p = selectedProposalId != null
+    ? demoProposals.find((x) => String(x.id) === String(selectedProposalId))
+    : null;
+  updateHeaderApprovals(p || null);
+}
+
+function updateHeaderApprovals(p) {
+  const text = el("status-approvals-text");
+  const state = el("status-prop-state");
+  const n = statusApprovals != null ? statusApprovals : 0;
+  const thr = statusThreshold;
+  if (text) {
+    text.textContent = thr != null ? `Approvals ${n}/${thr}` : `Approvals ${n}`;
+  }
+  if (!state) return;
+  const onFinalize = !!document.querySelector("#panel-finalize.active");
+  // Open/Finalized only while a proposal is selected on Finalize.
+  if (!p || !onFinalize) {
+    state.hidden = true;
+    state.textContent = "";
+    state.className = "approvals-state";
+    return;
+  }
+  const finalized = p.status === "finalized" || p.finalized === true;
+  state.hidden = false;
+  state.textContent = finalized ? "Finalized" : "Open";
+  state.className = "approvals-state " + (finalized ? "finalized" : "open");
+  const count = p.approvals != null ? p.approvals : n;
+  statusApprovals = count;
+  const council = demoCouncils.find((c) => c.id === p.accountId);
+  const t = thr != null ? thr : (council && council.threshold);
+  if (text) {
+    text.textContent = t != null ? `Approvals ${count}/${t}` : `Approvals ${count}`;
   }
 }
 
@@ -246,7 +297,8 @@ function applyAccountIds(id) {
 function syncPropApproveGate() {
   const propBtn = el("prop-approve-btn");
   if (!propBtn) return;
-  propBtn.disabled = !intentConfirmed || !selectedProposalId;
+  // Proposal id 0 is valid — don't treat it as falsy.
+  propBtn.disabled = !intentConfirmed || selectedProposalId == null;
 }
 
 function setYouIdentity(name) {
@@ -513,13 +565,21 @@ function renderProposalsList() {
   // Newest first for visual priority; latest stays selected by default.
   const ordered = [...demoProposals].sort((a, b) => Number(b.id) - Number(a.id));
   for (const p of ordered) {
+    const selected = String(selectedProposalId) === String(p.id);
+    const confirmed = !!(selected && (p.intentConfirmed || intentConfirmed));
     const card = document.createElement("div");
-    card.className = "proposal-card" + (String(selectedProposalId) === String(p.id) ? " selected" : "");
+    card.className = "proposal-card"
+      + (selected ? " selected" : "")
+      + (confirmed ? " confirmed" : "");
     card.dataset.id = String(p.id);
-    card.innerHTML =
+    let html =
       `<span class="proposal-card-council">Council #${escapeHtml(String(p.accountId))}</span>` +
       `<span class="proposal-card-id">Proposal #${escapeHtml(String(p.id))}</span>` +
       `<span class="proposal-card-purpose">${escapeHtml(p.purpose || "Intent")}</span>`;
+    if (confirmed && p.description) {
+      html += `<span class="proposal-card-desc">${escapeHtml(p.description)}</span>`;
+    }
+    card.innerHTML = html;
     card.addEventListener("click", () => selectProposal(p.id));
     list.appendChild(card);
   }
@@ -533,60 +593,64 @@ function selectProposal(id) {
   const propId = el("prop-id");
   if (propId) propId.value = String(p.id);
   if (p.accountId != null) applyAccountIds(p.accountId);
-  intentConfirmed = false;
+  intentConfirmed = !!p.intentConfirmed;
   syncPropApproveGate();
   renderProposalsList();
   refreshIntentCard();
   updateStatusCard(p);
+  updateApproveSection();
 }
 
 function refreshIntentCard() {
   const card = el("intent-card");
   const purposeEl = el("intent-purpose");
   const descEl = el("intent-description");
-  const preview = el("prop-preview");
   if (!card) return;
-  const p = demoProposals.find((x) => x.id === selectedProposalId);
-  if (!p) {
+  const p = demoProposals.find((x) => x.id === selectedProposalId || String(x.id) === String(selectedProposalId));
+  if (!p || selectedProposalId == null) {
     card.hidden = true;
+    updateApproveSection();
+    return;
+  }
+  // After confirm, collapse intent into the proposal tile.
+  if (p.intentConfirmed || intentConfirmed) {
+    card.hidden = true;
+    updateApproveSection();
     return;
   }
   card.hidden = false;
   if (purposeEl) purposeEl.textContent = p.purpose || "Intent";
   if (descEl) descEl.textContent = p.description || "(no description)";
-  if (preview) {
-    preview.innerHTML = intentConfirmed && p.fingerprintHtml
-      ? p.fingerprintHtml
-      : `<span class="value-hint">Confirm intent to load the fingerprint (optional).</span>`;
-  }
   const confirmBtn = el("btn-intent-confirm");
   if (confirmBtn) {
-    confirmBtn.disabled = intentConfirmed;
-    confirmBtn.textContent = intentConfirmed ? "Intent confirmed" : "Looks right — continue";
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "Looks right — continue";
+  }
+  updateApproveSection();
+}
+
+function updateApproveSection() {
+  const section = el("approve-section");
+  if (!section) return;
+  const show = selectedProposalId != null && intentConfirmed;
+  section.hidden = !show;
+  if (show) {
+    renderPropSignerList(cachedIdentities);
+    const p = demoProposals.find((x) => x.id === selectedProposalId || String(x.id) === String(selectedProposalId));
+    if (p) updateStatusCard(p);
   }
 }
 
 function updateStatusCard(p) {
-  const card = el("prop-status-card");
-  const chip = el("prop-status-chip");
-  const appr = el("prop-status-approvals");
-  if (!card) return;
+  // Status lives in the header Approvals pill (Open / Finalized).
   if (!p) {
-    card.hidden = true;
+    updateHeaderApprovals(null);
     return;
   }
-  card.hidden = false;
-  const finalized = p.status === "finalized" || p.finalized === true;
-  if (chip) {
-    chip.textContent = finalized ? "Finalized" : "Open";
-    chip.className = "status-chip " + (finalized ? "finalized" : "open");
-  }
+  if (p.approvals != null) statusApprovals = p.approvals;
   const council = demoCouncils.find((c) => c.id === p.accountId);
-  const thr = council ? council.threshold : statusThreshold;
-  const n = p.approvals != null ? p.approvals : 0;
-  if (appr) {
-    appr.textContent = thr != null ? `Approvals ${n}-of-${thr}` : `Approvals ${n}`;
-  }
+  if (council && council.threshold != null) statusThreshold = council.threshold;
+  updateHeaderApprovals(p);
 }
 
 function openCouncilDetail(c) {
@@ -786,11 +850,13 @@ async function proposalCreate() {
       status: "open",
       approvals: 0,
       finalized: false,
+      intentConfirmed: false,
       fingerprintHtml: null,
     });
     updateStatusStrip({ approvals: 0 });
     intentConfirmed = false;
     syncPropApproveGate();
+    updateApproveSection();
     if (submitOk(submit)) {
       setOutcome(
         "prop-outcome",
@@ -808,27 +874,31 @@ async function proposalCreate() {
 
 async function confirmIntent() {
   const id = selectedProposalId != null ? selectedProposalId : (el("prop-id") && el("prop-id").value);
-  if (!id && id !== 0) {
+  if (id == null || id === "") {
     showErrorOutcome("finalize-outcome", "Select a proposal first.");
     return;
   }
-  const preview = el("prop-preview");
   try {
+    // Still hit preview so approve has a confirmed digest under the hood.
     const out = await api(`/api/proposal/${id}/preview`);
     const html =
-      `mnemonic: ${escapeHtml(out.digest_mnemonic)}<br>` +
-      `safety: ${escapeHtml(String(out.digest_safety_number))}<br>` +
-      `digest: ${escapeHtml(String(out.digest_hex).slice(0, 24))}…`;
-    if (preview) preview.innerHTML = html;
+      `mnemonic: ${escapeHtml(out.digest_mnemonic)} · ` +
+      `digest: ${escapeHtml(String(out.digest_hex).slice(0, 16))}…`;
     const p = demoProposals.find((x) => x.id === id || String(x.id) === String(id));
-    if (p) p.fingerprintHtml = html;
+    if (p) {
+      p.fingerprintHtml = html;
+      p.intentConfirmed = true;
+    }
     intentConfirmed = true;
     syncPropApproveGate();
+    renderProposalsList();
     refreshIntentCard();
+    updateApproveSection();
     showToast("Intent confirmed — Approve unlocked");
   } catch (e) {
     intentConfirmed = false;
     syncPropApproveGate();
+    updateApproveSection();
     showErrorOutcome("finalize-outcome", e.message);
   }
 }
@@ -932,11 +1002,14 @@ function prepareBeatEntry(index) {
     }
     const signer = el("prop-signer");
     if (signer) signer.value = activePropSigner;
-    intentConfirmed = false;
+    // Restore confirm state from the selected proposal (don't wipe it).
+    const p = demoProposals.find((x) => x.id === selectedProposalId || String(x.id) === String(selectedProposalId));
+    intentConfirmed = !!(p && p.intentConfirmed);
     syncPropApproveGate();
     renderPropSignerList(cachedIdentities);
     renderProposalsList();
     refreshIntentCard();
+    updateApproveSection();
   }
 }
 
@@ -952,16 +1025,11 @@ function tabFromUrl() {
   return null;
 }
 
-function goBeat(delta) {
-  const active = document.querySelector(".beat-dots .tab.active");
-  let i = 0;
-  if (active && active.dataset.beat) {
-    const b = parseInt(active.dataset.beat, 10);
-    if (!Number.isNaN(b)) i = b - 1;
-  }
-  const target = Math.max(0, Math.min(BEATS.length - 1, i + delta));
-  const beat = BEATS[target];
-  const dot = document.querySelector(`.beat-dots .tab[data-beat="${target + 1}"]`);
+function goToBeatIndex(target) {
+  const idx = Math.max(0, Math.min(BEATS.length - 1, target));
+  const beat = BEATS[idx];
+  if (!beat) return;
+  const dot = document.querySelector(`.beat-dots .tab[data-beat="${idx + 1}"]`);
   if (dot) {
     document.querySelectorAll(".beat-dots .tab").forEach((btn) => {
       const on = btn === dot;
@@ -969,8 +1037,18 @@ function goBeat(delta) {
       btn.setAttribute("aria-selected", on ? "true" : "false");
     });
   }
-  prepareBeatEntry(target);
+  prepareBeatEntry(idx);
   activateTab(beat.tab, { fromBeatNav: true });
+}
+
+function goBeat(delta) {
+  const active = document.querySelector(".beat-dots .tab.active");
+  let i = 0;
+  if (active && active.dataset.beat) {
+    const b = parseInt(active.dataset.beat, 10);
+    if (!Number.isNaN(b)) i = b - 1;
+  }
+  goToBeatIndex(i + delta);
 }
 
 function activateTab(name, opts = {}) {
@@ -1001,6 +1079,14 @@ function activateTab(name, opts = {}) {
     renderProposalsList();
     renderPropSignerList(cachedIdentities);
     refreshIntentCard();
+    updateApproveSection();
+    const p = selectedProposalId != null
+      ? demoProposals.find((x) => String(x.id) === String(selectedProposalId))
+      : null;
+    updateStatusCard(p || null);
+  } else {
+    // Open/Finalized chip is finalize-only.
+    updateHeaderApprovals(null);
   }
   if (name === "council") renderCouncilPickList(cachedIdentities);
   if (name === "cast") renderCastList(cachedIdentities);
@@ -1088,16 +1174,70 @@ function wireBeatTabs() {
   sync();
 })();
 
+function wireFingerprintTip() {
+  const btn = el("btn-fp-tip");
+  const tip = el("fp-tip");
+  if (!btn || !tip) return;
+  btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const open = tip.hidden;
+    tip.hidden = !open;
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.addEventListener("click", (ev) => {
+    if (tip.hidden) return;
+    if (btn.contains(ev.target) || tip.contains(ev.target)) return;
+    tip.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+function wireLtrInputs() {
+  document.querySelectorAll("input, textarea").forEach((node) => {
+    node.setAttribute("dir", "ltr");
+    const force = () => {
+      node.setAttribute("dir", "ltr");
+      if (node.style) {
+        node.style.direction = "ltr";
+        node.style.unicodeBidi = "isolate";
+        node.style.textAlign = "left";
+      }
+    };
+    node.addEventListener("focus", force);
+    node.addEventListener("input", force);
+    node.addEventListener("keyup", force);
+  });
+}
+
+function wireHeaderCouncil() {
+  on("header-council", "click", () => {
+    // Beat 3 · Look up
+    goToBeatIndex(2);
+    if (selectedCouncilId != null) fetchCouncilOutcome(selectedCouncilId);
+  });
+}
+
 // Init
 prefillStoryFields();
 wireIdentityPopover();
 wirePurposeChips();
 wireBeatTabs();
+wireFingerprintTip();
+wireLtrInputs();
+wireHeaderCouncil();
 on("btn-beat-prev", "click", () => goBeat(-1));
 on("btn-beat-next", "click", () => goBeat(1));
 on("btn-close-council-detail", "click", () => closeCouncilDetail());
 
 (async function boot() {
+  if (USE_FRONTEND_MOCK) {
+    try {
+      if (window.MockLab && window.MockLab.selfTest) window.MockLab.selfTest();
+      console.info("Lab: frontend MockLedger active (static demo)");
+    } catch (e) {
+      console.error("MockLedger selfTest failed", e);
+    }
+  }
   try {
     const status = await api("/api/setup/status");
     if (status && status.demo_mode) applyDemoMode(status.demo_mode);
