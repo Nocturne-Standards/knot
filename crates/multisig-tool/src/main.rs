@@ -23,7 +23,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-use multisig_tool::{blob, bls, collector_client};
+use multisig_tool::{blob, bls, collector_client, mock_ledger};
 
 use proposals_types::call_types::{
     ApproveArgs, ProposalStatus, ProposalView, ProposeArgs,
@@ -105,6 +105,9 @@ enum Cmd {
         cmd: PartyCmd,
     },
     /// Serve the local web UI + RPC on 127.0.0.1.
+    ///
+    /// Mode: `DEMO_MODE=mock` (default) uses an in-process MockLedger for
+    /// account/proposal APIs; `DEMO_MODE=testnet` keeps the live chain path.
     Serve {
         #[arg(long, default_value = "127.0.0.1:8877")]
         bind: String,
@@ -1491,6 +1494,11 @@ async fn main() -> Result<()> {
         },
 
         Cmd::Serve { bind } => {
+            let mode = mock_ledger::DemoMode::from_env();
+            eprintln!(
+                "starting serve (DEMO_MODE={}) — mock skips rusk-wallet for account/proposal APIs",
+                mode.as_str()
+            );
             rpc::serve(&bind, store_path).await?;
         }
     }
