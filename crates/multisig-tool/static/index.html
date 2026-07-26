@@ -3,586 +3,660 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multisig Lab — Dusk testnet</title>
+  <title>Multisig Lab — Dusk</title>
   <link rel="stylesheet" href="/fonts.css" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div class="banner">TESTNET ONLY — never use with mainnet keys or funds</div>
+  <div class="mode-banner" id="mode-banner" data-mode="mock">MOCK · local ledger</div>
 
-  <nav class="nav">
-    <a class="nav-brand" href="#top">Multisig Lab</a>
-    <div class="nav-links">
-      <span class="nav-muted">local · registry + proposals</span>
-    </div>
-  </nav>
-
-  <header class="hero" id="top">
-    <div class="hero-copy">
-      <p class="hero-brand">Multisig Lab</p>
-      <h1>A 2-of-3 treasury on real Dusk testnet.</h1>
-    </div>
-  </header>
-
-  <section class="section demo-section" id="lab">
-    <div class="section-head">
-      <h2>Treasury payout story</h2>
-      <p>
-        Alice, Bob, and Carol run a treasury. They form a council, approve a
-        payout, rotate a member, then finish with a multi-person proposal —
-        all against live <code>multisig-registry</code> / <code>multisig-proposals</code>.
-      </p>
-      <div class="story-actions">
-        <button type="button" class="primary" id="btn-walkthrough">Start example walkthrough</button>
-        <button type="button" class="ghost" id="btn-walkthrough-exit" hidden>Exit walkthrough</button>
-      </div>
-    </div>
-
-    <div class="guide" id="story-guide">
-      <p class="guide-step" id="guide-step">Browse freely</p>
-      <p class="guide-narrator" id="guide-narrator">
-        Pick a chapter below, or start the example walkthrough to load Alice,
-        Bob, and Carol and step through a complete payout story.
-      </p>
-      <div class="walk-nav" id="walk-nav" hidden>
-        <button type="button" class="ghost" id="btn-walk-prev">← Previous</button>
-        <button type="button" class="primary" id="btn-walk-next">Next chapter →</button>
-      </div>
-    </div>
-
-    <div class="tabs" role="tablist" aria-label="Story chapters">
-      <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="setup">0 · Setup</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="cast">1 · Cast</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council">2 · Form council</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check">3 · Look it up</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="payout">4 · Approve payout</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="aggregate">5 · Cheaper verify</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="rotate">6 · Rotate members</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal">7 · Multi-person</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="pm-resolve">8 · PM resolve</button>
-      <button type="button" class="tab" role="tab" aria-selected="false" data-tab="party">9 · Party finder</button>
-    </div>
-
-    <!-- 0 Setup -->
-    <div class="tab-panel active" id="panel-setup" role="tabpanel">
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Chapter 0</p>
-          <h3>Setup</h3>
-          <p class="lede">This server unlocked your identity store once, at startup — every identity below only ever lives in this local process. Create a signing identity, then head to Party finder to find co-signers on a shared roster.</p>
-        </header>
-        <div class="values" id="setup-status-card">
-          <h4>Status</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Keystore</span>
-              <span class="value-hint" id="setup-store-status">loading…</span>
-            </span>
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Collector</span>
-              <span class="value-hint" id="setup-collector-status">loading…</span>
-            </span>
-          </div>
+  <main class="slides" id="slides">
+    <!-- 1 · Cover -->
+    <header class="slide hero" id="top">
+      <div class="hero-copy">
+        <p class="hero-brand">Multisig Lab</p>
+        <h1>M-of-N without the server holding keys.</h1>
+        <p class="hero-lede">
+          Form a council, propose an intent, collect approvals to threshold —
+          signing stays in this process. Mock ledger by default; flip to testnet when you want gas.
+        </p>
+        <div class="hero-cta">
+          <a class="btn primary" href="#demo">Walk the demo</a>
+          <a class="btn ghost" href="#use-cases">Use cases</a>
         </div>
-        <div class="values">
-          <h4>Create your signing identity</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Name</span>
-              <span class="value-hint">Short label used everywhere as a signer/member reference.</span>
-            </span>
-            <input id="setup-identity-name" placeholder="alice" />
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="createSetupIdentity()">New signing identity</button>
-          </div>
-          <div class="pk-callout" id="setup-my-pk" hidden>
-            <span class="value-name">Your shareable public key</span>
-            <div class="id-row">
-              <span class="pk" id="setup-my-pk-value"></span>
-              <button type="button" class="secondary tiny" id="setup-my-pk-copy">copy pk</button>
+      </div>
+    </header>
+
+    <!-- 2 · Demo studio -->
+    <section class="slide demo-slide" id="demo">
+      <div class="demo-inner">
+        <header class="demo-header" id="status-strip">
+          <div class="demo-header-top">
+            <span class="demo-session" id="status-account">Account —</span>
+            <div class="demo-header-badges">
+              <span class="mode-badge" id="status-mode" data-mode="mock">Mock</span>
+              <span class="pill" id="status-approvals">Approvals —</span>
             </div>
           </div>
-        </div>
-        <div class="actions">
-          <button type="button" class="ghost" onclick="activateTab('party')">Go to Party finder →</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 1 Cast -->
-    <div class="tab-panel" id="panel-cast" role="tabpanel" hidden>
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Chapter 1</p>
-          <h3>Meet the cast</h3>
-          <p class="lede">Named BLS keys stay in this process. Foreign members can be pk-only — they sit on a council, but only a signing identity can approve.</p>
+          <div class="demo-header-stats">
+            <span class="stat" id="status-threshold">Threshold —</span>
+            <span class="stat-sep" aria-hidden="true">·</span>
+            <span class="stat" id="status-beat-label">Beat 1 · Cast</span>
+          </div>
         </header>
-        <div id="identities-list" class="identities-list"></div>
-        <p class="pane-hint">Click a row to append its name to a focused member/signer field on later chapters.</p>
-        <div class="values">
-          <h4>Values to enter</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Name</span>
-              <span class="value-hint">Short label (<code>alice</code>). Used everywhere as a signer/member reference.</span>
-            </span>
-            <input id="new-identity-name" placeholder="alice" />
+
+        <div class="guide" id="story-guide">
+          <p class="guide-step" id="guide-step">Browse freely</p>
+          <p class="guide-narrator" id="guide-narrator">
+            Step through the five-beat proposals walkthrough, or open the developer
+            drawer for aggregate verify, rotate, unsafe UTF-8, party finder, and PM resolve.
+          </p>
+          <div class="story-actions">
+            <button type="button" class="primary" id="btn-walkthrough">Start walkthrough</button>
+            <button type="button" class="ghost" id="btn-walkthrough-exit" hidden>Exit walkthrough</button>
           </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="createIdentity()">New signing identity</button>
+          <div class="walk-nav" id="walk-nav" hidden>
+            <button type="button" class="ghost" id="btn-walk-prev">← Previous</button>
+            <button type="button" class="primary" id="btn-walk-next">Next beat →</button>
           </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Import name</span>
-              <span class="value-hint">Label for a foreign member that only has a public key.</span>
-            </span>
-            <input id="import-pk-name" placeholder="bob-remote" />
+        </div>
+
+        <div class="beat-slideshow" aria-roledescription="carousel" aria-label="Walkthrough beats">
+          <button type="button" class="slide-arrow" id="btn-beat-prev" aria-label="Previous beat">‹</button>
+
+          <div class="beat-viewport" id="beat-stage">
+            <!-- Beat 1 · Cast (also walkthrough / browse) -->
+            <div class="tab-panel active" id="panel-cast" role="tabpanel" data-beat="1">
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Beat 1 · Cast</p>
+                  <h3>Meet the cast</h3>
+                  <p class="lede">Named BLS keys stay in this process. Foreign members can be pk-only — they sit on a council, but only a signing identity can approve.</p>
+                </header>
+                <div id="identities-list" class="identities-list"></div>
+                <p class="pane-hint">Click a row to append its name to a focused member/signer field on later beats.</p>
+                <div class="values">
+                  <h4>Values to enter</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Name</span>
+                      <span class="value-hint">Short label (<code>alice</code>). Used everywhere as a signer/member reference.</span>
+                    </span>
+                    <input id="new-identity-name" placeholder="alice" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="createIdentity()">New signing identity</button>
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Import name</span>
+                      <span class="value-hint">Label for a foreign member that only has a public key.</span>
+                    </span>
+                    <input id="import-pk-name" placeholder="bob-remote" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Public key</span>
+                      <span class="value-hint">Base58 or 96-byte hex from another machine’s <code>identity export</code>.</span>
+                    </span>
+                    <input id="import-pk-value" placeholder="paste pk from export" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="ghost" onclick="importPk()">Import pk-only</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Beat 2 · Form council -->
+            <div class="tab-panel" id="panel-council" role="tabpanel" hidden data-beat="2">
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Beat 2 · Form council</p>
+                  <h3>Form the treasury</h3>
+                  <p class="lede">Register an M-of-N member set. Anyone may create the account — naming keys grants the creator no special power.</p>
+                </header>
+                <div class="values">
+                  <h4>Values to enter</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Members</span>
+                      <span class="value-hint">Comma-separated identity names that already exist (or pk-only imports).</span>
+                    </span>
+                    <input id="create-members" class="name-target" placeholder="alice,bob,carol" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Threshold</span>
+                      <span class="value-hint">How many must sign later (e.g. <code>2</code> for 2-of-3).</span>
+                    </span>
+                    <input id="create-threshold" type="number" min="1" value="2" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="submitCreateAccount()">create_account</button>
+                    <button type="button" class="ghost" onclick="refreshNextId()">next_account_id</button>
+                  </div>
+                  <p class="pane-hint">After success, note <code>next_id − 1</code> as your account id for later beats.</p>
+                </div>
+                <pre class="log" id="create-log"></pre>
+              </div>
+            </div>
+
+            <!-- Beat 3 · Look it up -->
+            <div class="tab-panel" id="panel-check" role="tabpanel" hidden data-beat="3">
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Beat 3 · Look it up</p>
+                  <h3>Look up the council</h3>
+                  <p class="lede">Free reads — confirm members, threshold, and nonce after creates or rotations. No gas.</p>
+                </header>
+                <div class="values">
+                  <h4>Values to enter</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Account id</span>
+                      <span class="value-hint">The <code>u64</code> from Form council (often <code>0</code>, <code>1</code>, <code>2</code>…).</span>
+                    </span>
+                    <input id="query-account-id" type="number" placeholder="2" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="queryAccount()">query</button>
+                    <button type="button" class="ghost" onclick="queryMeta()">meta</button>
+                    <button type="button" class="ghost" onclick="queryKeys()">keys</button>
+                  </div>
+                </div>
+                <pre class="log" id="query-log"></pre>
+              </div>
+            </div>
+
+            <!-- Beat 4–5 · Propose / threshold & finalize (same panel; Task 4 splits narrator) -->
+            <div class="tab-panel" id="panel-proposal" role="tabpanel" hidden data-beat="4">
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Beats 4–5 · Propose &amp; finalize</p>
+                  <h3>Multi-person approve</h3>
+                  <p class="lede">Propose an intent, each signer approves with their own keystore, then finalize when approvals ≥ threshold. Coordination is the chain — no signature files.</p>
+                </header>
+                <div class="values">
+                  <h4>Values to enter</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Registry account id</span>
+                      <span class="value-hint">The treasury council.</span>
+                    </span>
+                    <input id="prop-account-id" type="number" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Target ContractId</span>
+                      <span class="value-hint">32-byte hex of the contract <code>finalize</code> will <code>call_raw</code>.</span>
+                    </span>
+                    <input id="prop-target" placeholder="0x…" spellcheck="false" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Function</span>
+                      <span class="value-hint">Exported method name on the target.</span>
+                    </span>
+                    <input id="prop-function" placeholder="set_value" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Call args (hex)</span>
+                      <span class="value-hint">Opaque rkyv payload; empty allowed. Canonical display on approve — never trust a free-text summary.</span>
+                    </span>
+                    <input id="prop-args-hex" placeholder="(optional hex)" spellcheck="false" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Deadline (block)</span>
+                      <span class="value-hint">0 = contract default TTL from propose height.</span>
+                    </span>
+                    <input id="prop-deadline" type="number" value="0" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="proposalCreate()">propose</button>
+                    <button type="button" class="ghost" onclick="proposalNextId()">next id</button>
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Proposal id</span>
+                      <span class="value-hint">From create hint / next id (usually <code>0</code> for the first).</span>
+                    </span>
+                    <input id="prop-id" type="number" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Approve as</span>
+                      <span class="value-hint">One local <em>signing</em> identity that is a member.</span>
+                    </span>
+                    <input id="prop-signer" class="name-target" placeholder="alice" />
+                  </div>
+                  <div id="prop-preview" class="pane-hint" hidden></div>
+                  <label class="value-field confirm-row">
+                    <input id="prop-confirm" type="checkbox" />
+                    <span class="value-hint">I compared the fingerprint with co-signers and confirm these canonical fields.</span>
+                  </label>
+                  <div class="actions">
+                    <button type="button" class="ghost" onclick="proposalPreview()">preview</button>
+                    <button type="button" class="primary" id="prop-approve-btn" onclick="proposalApprove()" disabled>approve</button>
+                    <button type="button" class="ghost" onclick="proposalStatus()">status</button>
+                    <button type="button" class="primary" onclick="proposalFinalize()">finalize</button>
+                  </div>
+                  <p class="pane-hint">Beat 4: propose + Alice approves. Beat 5: Bob approves → finalize.</p>
+                </div>
+                <pre class="log" id="prop-log"></pre>
+              </div>
+            </div>
+
+            <!-- Drawer panels (still tab-panels for app.js activateTab) -->
+            <div class="tab-panel" id="panel-setup" role="tabpanel" hidden>
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Developer · Setup</p>
+                  <h3>Setup</h3>
+                  <p class="lede">This server unlocked your identity store once, at startup — every identity below only ever lives in this local process.</p>
+                </header>
+                <div class="values" id="setup-status-card">
+                  <h4>Status</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Keystore</span>
+                      <span class="value-hint" id="setup-store-status">loading…</span>
+                    </span>
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Collector</span>
+                      <span class="value-hint" id="setup-collector-status">loading…</span>
+                    </span>
+                  </div>
+                </div>
+                <div class="values">
+                  <h4>Create your signing identity</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Name</span>
+                      <span class="value-hint">Short label used everywhere as a signer/member reference.</span>
+                    </span>
+                    <input id="setup-identity-name" placeholder="alice" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="createSetupIdentity()">New signing identity</button>
+                  </div>
+                  <div class="pk-callout" id="setup-my-pk" hidden>
+                    <span class="value-name">Your shareable public key</span>
+                    <div class="id-row">
+                      <span class="pk" id="setup-my-pk-value"></span>
+                      <button type="button" class="secondary tiny" id="setup-my-pk-copy">copy pk</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-panel" id="panel-aggregate" role="tabpanel" hidden>
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Developer · Aggregate</p>
+                  <h3>Same payout, cheaper verify</h3>
+                  <p class="lede">Signers use <code>sign_multisig</code>; the tool aggregates; on-chain one <code>verify_bls_multisig</code> — the Dusk-native win over N pairing checks.</p>
+                </header>
+                <div class="values">
+                  <h4>Values to enter</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Account id</span>
+                      <span class="value-hint">Same treasury.</span>
+                    </span>
+                    <input id="agg-account-id" type="number" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Message</span>
+                      <span class="value-hint">Must match what every signer signs (byte-identical).</span>
+                    </span>
+                    <textarea id="agg-msg" placeholder="approve payout #42"></textarea>
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Signers</span>
+                      <span class="value-hint">The subset that actually signs (≥ threshold).</span>
+                    </span>
+                    <input id="agg-signers" class="name-target" placeholder="alice,bob" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="submitQuorumAgg()">submit</button>
+                    <button type="button" class="ghost" onclick="checkQuorumAgg()">check</button>
+                  </div>
+                </div>
+                <pre class="log" id="agg-log"></pre>
+              </div>
+            </div>
+
+            <div class="tab-panel" id="panel-rotate" role="tabpanel" hidden>
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Developer · Rotate</p>
+                  <h3>Rotate the council</h3>
+                  <p class="lede">Current members authorize a new set over a registry-owned nonce digest. Panic strings include <code>member_matches</code> / <code>sigs_ok</code>.</p>
+                </header>
+                <div class="values">
+                  <h4>Values to enter</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Account id</span>
+                      <span class="value-hint">Treasury to govern.</span>
+                    </span>
+                    <input id="change-account-id" type="number" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">New members</span>
+                      <span class="value-hint">Desired post-change set (story: drop Bob → <code>alice,carol</code>).</span>
+                    </span>
+                    <input id="change-new-members" class="name-target" placeholder="alice,carol" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">New threshold</span>
+                      <span class="value-hint">How many of the new set must sign after the change.</span>
+                    </span>
+                    <input id="change-new-threshold" type="number" min="1" value="2" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Signers</span>
+                      <span class="value-hint">Quorum of the <em>current</em> members (before the change).</span>
+                    </span>
+                    <input id="change-signers" class="name-target" placeholder="alice,bob" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="submitChangeAccount()">change_account</button>
+                  </div>
+                  <ul class="scenario-tips">
+                    <li><strong>Under-threshold</strong> — one signer when threshold is 2 → panic <code>sigs_ok=1</code>.</li>
+                    <li><strong>Happy rotate</strong> — enough current signers → members update, nonce++.</li>
+                    <li><strong>Stale nonce</strong> — after a rotate, a stale digest fails (<code>sigs_ok=0</code>).</li>
+                    <li><strong>Ex-member</strong> — removed member as signer → <code>member_matches</code> drops.</li>
+                  </ul>
+                </div>
+                <pre class="log" id="change-log"></pre>
+              </div>
+            </div>
+
+            <!-- Unsafe UTF-8 = former payout / quorum panel -->
+            <div class="tab-panel" id="panel-payout" role="tabpanel" hidden>
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Developer · Unsafe UTF-8</p>
+                  <h3>Lab-only UTF-8 quorum</h3>
+                  <p class="lede">Each signer does <code>sk.sign(msg)</code> over arbitrary text. Not real authorization — prefer the proposals path on the main beats.</p>
+                </header>
+                <div class="values">
+                  <h4>Values to enter</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Account id</span>
+                      <span class="value-hint">Treasury from Form council.</span>
+                    </span>
+                    <input id="quorum-account-id" type="number" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Message</span>
+                      <span class="value-hint">UTF-8 text the signers agree on (e.g. <code>approve payout #42</code>).</span>
+                    </span>
+                    <textarea id="quorum-msg" placeholder="approve payout #42"></textarea>
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Signers</span>
+                      <span class="value-hint">At least <em>threshold</em> local signing names.</span>
+                    </span>
+                    <input id="quorum-signers" class="name-target" placeholder="alice,bob" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="submitQuorum()">submit</button>
+                    <button type="button" class="ghost" onclick="checkQuorum()">check / diagnose</button>
+                  </div>
+                  <p class="pane-hint">If diagnose shows members matched but <code>sigs_ok=0</code>, treat free-read as untrusted.</p>
+                </div>
+                <pre class="log" id="quorum-log"></pre>
+              </div>
+            </div>
+
+            <div class="tab-panel" id="panel-party" role="tabpanel" hidden>
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Developer · Party finder</p>
+                  <h3>Find co-signers</h3>
+                  <p class="lede">Off-chain rendezvous on the collector — display name + public key only, never a secret key.</p>
+                </header>
+                <div class="values">
+                  <h4>Sign up on the roster</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Your identity</span>
+                      <span class="value-hint">A local signing identity. Publishes its public key only.</span>
+                    </span>
+                    <input id="party-signup-name" class="name-target" placeholder="alice" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Note (optional)</span>
+                      <span class="value-hint">Shown to others on the roster, e.g. “council lead”.</span>
+                    </span>
+                    <input id="party-signup-note" placeholder="council lead" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="partySignup()">Sign up</button>
+                    <button type="button" class="ghost" onclick="refreshParty()">Refresh roster</button>
+                  </div>
+                </div>
+                <div id="party-list" class="identities-list"></div>
+                <p class="pane-hint">Check members below, then prefill Form council with their public keys.</p>
+                <div class="actions">
+                  <button type="button" class="primary" onclick="usePartyForCouncil()">Use selected → prefill Form council</button>
+                </div>
+                <pre class="log" id="party-log"></pre>
+              </div>
+            </div>
+
+            <div class="tab-panel" id="panel-pm-resolve" role="tabpanel" hidden>
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Developer · PM / WEN</p>
+                  <h3>PM council resolve</h3>
+                  <p class="lede">Collect M-of-N secure BLS partials for a prediction-market <code>resolve</code> over the collector, then submit when the threshold is met. Digest is <code>council-resolve.v2</code>.</p>
+                </header>
+                <div class="values">
+                  <h4>On-chain pickers</h4>
+                  <div class="actions">
+                    <button type="button" class="ghost" onclick="pmRefreshChain()">refresh councils &amp; markets</button>
+                  </div>
+                  <p class="pane-hint" id="pm-chain-hint">Loads PM contract id, registry accounts, and markets from testnet.</p>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Council account</span>
+                      <span class="value-hint">From multisig-registry free-read.</span>
+                    </span>
+                    <select id="pm-council-pick" onchange="pmOnCouncilPick()">
+                      <option value="">— refresh to load —</option>
+                    </select>
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Market</span>
+                      <span class="value-hint">★ = Under review.</span>
+                    </span>
+                    <select id="pm-market-pick" onchange="pmOnMarketPick()">
+                      <option value="">— refresh to load —</option>
+                    </select>
+                  </div>
+                  <h4>Init + push</h4>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Market id</span>
+                      <span class="value-hint">On-chain market under review.</span>
+                    </span>
+                    <input id="pm-market" type="number" value="0" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Winning outcome</span>
+                      <span class="value-hint">0 or 1.</span>
+                    </span>
+                    <input id="pm-outcome" type="number" min="0" max="1" value="1" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">PM ContractId</span>
+                      <span class="value-hint">Legacy prediction-market 32-byte hex.</span>
+                    </span>
+                    <input id="pm-contract" placeholder="0x…" spellcheck="false" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Registry account</span>
+                      <span class="value-hint">Dispute-council account id.</span>
+                    </span>
+                    <input id="pm-account" type="number" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Threshold</span>
+                      <span class="value-hint">Client-side gate before submit (usually account threshold).</span>
+                    </span>
+                    <input id="pm-threshold" type="number" value="2" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Summary (untrusted)</span>
+                      <span class="value-hint">Human hint only — signers must check market + outcome.</span>
+                    </span>
+                    <input id="pm-summary" placeholder="resolve market N → YES" />
+                  </div>
+                  <div class="actions">
+                    <button type="button" class="primary" onclick="pmResolveInit()">init + push</button>
+                    <button type="button" class="ghost" onclick="pmResolveList()">list PM blobs</button>
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Blob id (digest hex)</span>
+                      <span class="value-hint">From init, or pick from the list below.</span>
+                    </span>
+                    <input id="pm-id" placeholder="64 hex chars" spellcheck="false" />
+                  </div>
+                  <div class="value-field">
+                    <span class="value-meta">
+                      <span class="value-name">Sign as</span>
+                      <span class="value-hint">Local signing identity that is a council member.</span>
+                    </span>
+                    <input id="pm-signer" class="name-target" placeholder="alice" />
+                  </div>
+                  <div id="pm-preview" class="pane-hint" hidden></div>
+                  <label class="value-field confirm-row">
+                    <input id="pm-confirm" type="checkbox" />
+                    <span class="value-hint">I compared the fingerprint (mnemonic / safety number) with co-signers.</span>
+                  </label>
+                  <div class="actions">
+                    <button type="button" class="ghost" onclick="pmResolvePreview()">preview</button>
+                    <button type="button" class="primary" id="pm-sign-btn" onclick="pmResolveSign()" disabled>sign</button>
+                    <button type="button" class="ghost" onclick="pmResolveStatus()">status</button>
+                    <button type="button" class="primary" onclick="pmResolveSubmit()">submit resolve</button>
+                  </div>
+                  <div id="pm-list" class="identities-list"></div>
+                  <p class="pane-hint">Standalone <code>pm-resolve.html</code> remains available for day-to-day council work.</p>
+                </div>
+                <pre class="log" id="pm-log"></pre>
+              </div>
+            </div>
           </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Public key</span>
-              <span class="value-hint">Base58 or 96-byte hex from another machine’s <code>identity export</code>.</span>
-            </span>
-            <input id="import-pk-value" placeholder="paste pk from export" />
+
+          <button type="button" class="slide-arrow" id="btn-beat-next" aria-label="Next beat">›</button>
+        </div>
+
+        <div class="beat-dots" id="beat-dots" role="tablist" aria-label="Walkthrough beats">
+          <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="cast" data-beat="1">1 · Cast</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council" data-beat="2">2 · Council</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check" data-beat="3">3 · Look up</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="4">4 · Propose</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="5" data-beat-phase="finalize">5 · Finalize</button>
+        </div>
+
+        <details class="dev-drawer" id="dev-drawer">
+          <summary>Developer drawer</summary>
+          <p class="drawer-lede">Advanced panels — not on the default five-beat path. Aggregate, rotate, and unsafe UTF-8 need testnet (or mock stubs when Task 4 wires them).</p>
+          <div class="drawer-tabs" role="tablist" aria-label="Developer panels">
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="setup">Setup</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="aggregate">Aggregate verify</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="rotate">Rotate</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="payout">Unsafe UTF-8</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="party">Party finder</button>
+            <button type="button" class="tab" role="tab" aria-selected="false" data-tab="pm-resolve">PM resolve</button>
           </div>
-          <div class="actions">
-            <button type="button" class="ghost" onclick="importPk()">Import pk-only</button>
-          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- 3 · Use cases -->
+    <section class="slide use-cases-slide" id="use-cases">
+      <div class="section-pad">
+        <div class="section-head">
+          <h2>What councils are for</h2>
+          <p>Same M-of-N rails — different jobs.</p>
+        </div>
+        <div class="use-case-grid">
+          <article class="use-case-card">
+            <div class="use-case-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                <rect x="3" y="6" width="18" height="13" rx="2"/>
+                <path d="M3 10h18" stroke-linecap="round"/>
+                <path d="M8 14h3" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="use-case-copy">
+              <h3>Treasury / DAO payout</h3>
+              <p>Propose a transfer, collect M approvals, finalize — no one machine holds the spending key.</p>
+            </div>
+          </article>
+          <article class="use-case-card">
+            <div class="use-case-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                <circle cx="12" cy="12" r="8"/>
+                <path d="M12 8v4l2.5 2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="use-case-copy">
+              <h3>Dispute council (WEN)</h3>
+              <p>Prediction-market resolve with a fingerprint-bound digest — portal handoff stays the public path.</p>
+            </div>
+          </article>
+          <article class="use-case-card">
+            <div class="use-case-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                <rect x="5" y="11" width="14" height="10" rx="2"/>
+                <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="use-case-copy">
+              <h3>Keys never leave the laptop</h3>
+              <p>Identities and BLS signing stay in this local process — the server never sees a secret key.</p>
+            </div>
+          </article>
         </div>
       </div>
-    </div>
+    </section>
+  </main>
 
-    <!-- 2 Form council -->
-    <div class="tab-panel" id="panel-council" role="tabpanel" hidden>
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Chapter 2</p>
-          <h3>Form the treasury</h3>
-          <p class="lede">Register an M-of-N member set on-chain. Anyone may create the account — naming keys grants the creator no special power.</p>
-        </header>
-        <div class="values">
-          <h4>Values to enter</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Members</span>
-              <span class="value-hint">Comma-separated identity names that already exist (or pk-only imports).</span>
-            </span>
-            <input id="create-members" class="name-target" placeholder="alice,bob,carol" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Threshold</span>
-              <span class="value-hint">How many must sign later (e.g. <code>2</code> for 2-of-3).</span>
-            </span>
-            <input id="create-threshold" type="number" min="1" value="2" />
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="submitCreateAccount()">create_account</button>
-            <button type="button" class="ghost" onclick="refreshNextId()">next_account_id</button>
-          </div>
-          <p class="pane-hint">After success, note <code>next_id − 1</code> as your account id for the other chapters.</p>
-        </div>
-        <pre class="log" id="create-log"></pre>
-      </div>
-    </div>
+  <nav class="dots" aria-label="Page navigation">
+    <a href="#top" class="dot active" data-slide="top" aria-label="Cover"></a>
+    <a href="#demo" class="dot" data-slide="demo" aria-label="Demo"></a>
+    <a href="#use-cases" class="dot" data-slide="use-cases" aria-label="Use cases"></a>
+  </nav>
 
-    <!-- 3 Look it up -->
-    <div class="tab-panel" id="panel-check" role="tabpanel" hidden>
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Chapter 3</p>
-          <h3>Look up the council</h3>
-          <p class="lede">Free reads — confirm members, threshold, and nonce after creates or rotations. No gas.</p>
-        </header>
-        <div class="values">
-          <h4>Values to enter</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Account id</span>
-              <span class="value-hint">The <code>u64</code> from Form council (often <code>0</code>, <code>1</code>, <code>2</code>…).</span>
-            </span>
-            <input id="query-account-id" type="number" placeholder="2" />
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="queryAccount()">query</button>
-            <button type="button" class="ghost" onclick="queryMeta()">meta</button>
-            <button type="button" class="ghost" onclick="queryKeys()">keys</button>
-          </div>
-        </div>
-        <pre class="log" id="query-log"></pre>
-      </div>
-    </div>
-
-    <!-- 4 Approve payout -->
-    <div class="tab-panel" id="panel-payout" role="tabpanel" hidden>
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Chapter 4</p>
-          <h3>Approve a payout</h3>
-          <p class="lede">Each signer does <code>sk.sign(msg)</code>. On-chain: one <code>verify_bls</code> per signer. Prefer Rotate or Multi-person for crisp pass/fail.</p>
-        </header>
-        <div class="values">
-          <h4>Values to enter</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Account id</span>
-              <span class="value-hint">Treasury from Form council.</span>
-            </span>
-            <input id="quorum-account-id" type="number" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Message</span>
-              <span class="value-hint">UTF-8 text the signers agree on (e.g. <code>approve payout #42</code>).</span>
-            </span>
-            <textarea id="quorum-msg" placeholder="approve payout #42"></textarea>
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Signers</span>
-              <span class="value-hint">At least <em>threshold</em> local signing names.</span>
-            </span>
-            <input id="quorum-signers" class="name-target" placeholder="alice,bob" />
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="submitQuorum()">submit</button>
-            <button type="button" class="ghost" onclick="checkQuorum()">check / diagnose</button>
-          </div>
-          <p class="pane-hint">If diagnose shows members matched but <code>sigs_ok=0</code>, treat free-read as untrusted.</p>
-        </div>
-        <pre class="log" id="quorum-log"></pre>
-      </div>
-    </div>
-
-    <!-- 5 Cheaper verify -->
-    <div class="tab-panel" id="panel-aggregate" role="tabpanel" hidden>
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Chapter 5 · optional</p>
-          <h3>Same payout, cheaper verify</h3>
-          <p class="lede">Signers use <code>sign_multisig</code>; the tool aggregates; on-chain one <code>verify_bls_multisig</code> — the Dusk-native win over N pairing checks.</p>
-        </header>
-        <div class="values">
-          <h4>Values to enter</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Account id</span>
-              <span class="value-hint">Same treasury.</span>
-            </span>
-            <input id="agg-account-id" type="number" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Message</span>
-              <span class="value-hint">Must match what every signer signs (byte-identical).</span>
-            </span>
-            <textarea id="agg-msg" placeholder="approve payout #42"></textarea>
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Signers</span>
-              <span class="value-hint">The subset that actually signs (≥ threshold).</span>
-            </span>
-            <input id="agg-signers" class="name-target" placeholder="alice,bob" />
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="submitQuorumAgg()">submit</button>
-            <button type="button" class="ghost" onclick="checkQuorumAgg()">check</button>
-          </div>
-        </div>
-        <pre class="log" id="agg-log"></pre>
-      </div>
-    </div>
-
-    <!-- 6 Rotate -->
-    <div class="tab-panel" id="panel-rotate" role="tabpanel" hidden>
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Chapter 6</p>
-          <h3>Rotate the council</h3>
-          <p class="lede">Current members authorize a new set over a registry-owned nonce digest. Panic strings include <code>member_matches</code> / <code>sigs_ok</code>.</p>
-        </header>
-        <div class="values">
-          <h4>Values to enter</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Account id</span>
-              <span class="value-hint">Treasury to govern.</span>
-            </span>
-            <input id="change-account-id" type="number" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">New members</span>
-              <span class="value-hint">Desired post-change set (story: drop Bob → <code>alice,carol</code>).</span>
-            </span>
-            <input id="change-new-members" class="name-target" placeholder="alice,carol" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">New threshold</span>
-              <span class="value-hint">How many of the new set must sign after the change.</span>
-            </span>
-            <input id="change-new-threshold" type="number" min="1" value="2" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Signers</span>
-              <span class="value-hint">Quorum of the <em>current</em> members (before the change).</span>
-            </span>
-            <input id="change-signers" class="name-target" placeholder="alice,bob" />
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="submitChangeAccount()">change_account</button>
-          </div>
-          <ul class="scenario-tips">
-            <li><strong>Under-threshold</strong> — one signer when threshold is 2 → panic <code>sigs_ok=1</code>.</li>
-            <li><strong>Happy rotate</strong> — enough current signers → members update, nonce++.</li>
-            <li><strong>Stale nonce</strong> — after a rotate, a stale digest fails (<code>sigs_ok=0</code>).</li>
-            <li><strong>Ex-member</strong> — removed member as signer → <code>member_matches</code> drops.</li>
-          </ul>
-        </div>
-        <pre class="log" id="change-log"></pre>
-      </div>
-    </div>
-
-    <!-- 7 Multi-person -->
-    <div class="tab-panel" id="panel-proposal" role="tabpanel" hidden>
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Chapter 7</p>
-          <h3>Multi-person approve</h3>
-          <p class="lede">Real separate machines: each person approves with their own keystore and wallet. Coordination is the chain — no signature files.</p>
-        </header>
-        <div class="values">
-          <h4>Values to enter</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Registry account id</span>
-              <span class="value-hint">The treasury council.</span>
-            </span>
-            <input id="prop-account-id" type="number" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Target ContractId</span>
-              <span class="value-hint">32-byte hex of the contract <code>finalize</code> will <code>call_raw</code>.</span>
-            </span>
-            <input id="prop-target" placeholder="0x…" spellcheck="false" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Function</span>
-              <span class="value-hint">Exported method name on the target.</span>
-            </span>
-            <input id="prop-function" placeholder="set_value" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Call args (hex)</span>
-              <span class="value-hint">Opaque rkyv payload; empty allowed. Canonical display on approve — never trust a free-text summary.</span>
-            </span>
-            <input id="prop-args-hex" placeholder="(optional hex)" spellcheck="false" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Deadline (block)</span>
-              <span class="value-hint">0 = contract default TTL from propose height.</span>
-            </span>
-            <input id="prop-deadline" type="number" value="0" />
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="proposalCreate()">propose</button>
-            <button type="button" class="ghost" onclick="proposalNextId()">next id</button>
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Proposal id</span>
-              <span class="value-hint">From create hint / next id (usually <code>0</code> for the first).</span>
-            </span>
-            <input id="prop-id" type="number" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Approve as</span>
-              <span class="value-hint">One local <em>signing</em> identity that is a member.</span>
-            </span>
-            <input id="prop-signer" class="name-target" placeholder="alice" />
-          </div>
-          <div id="prop-preview" class="pane-hint" hidden></div>
-          <label class="value-field" style="align-items:center;gap:0.5rem;flex-direction:row">
-            <input id="prop-confirm" type="checkbox" />
-            <span class="value-hint">I compared the fingerprint with co-signers and confirm these canonical fields.</span>
-          </label>
-          <div class="actions">
-            <button type="button" class="ghost" onclick="proposalPreview()">preview</button>
-            <button type="button" class="primary" id="prop-approve-btn" onclick="proposalApprove()" disabled>approve</button>
-            <button type="button" class="ghost" onclick="proposalStatus()">status</button>
-            <button type="button" class="primary" onclick="proposalFinalize()">finalize</button>
-          </div>
-          <p class="pane-hint">On machine B, open this same chapter with Bob’s store and only press approve.</p>
-        </div>
-        <pre class="log" id="prop-log"></pre>
-      </div>
-    </div>
-
-    <!-- 8 PM resolve -->
-    <div class="tab-panel" id="panel-pm-resolve" role="tabpanel" hidden>
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Chapter 8</p>
-          <h3>PM council resolve</h3>
-          <p class="lede">Collect M-of-N secure BLS partials for a prediction-market <code>resolve</code> over the collector, then submit when the threshold is met. Digest is <code>council-resolve.v2</code> (binds PM contract id, registry account, threshold, market, outcome) — never trust the summary alone.</p>
-        </header>
-        <div class="values">
-          <h4>On-chain pickers</h4>
-          <div class="actions">
-            <button type="button" class="ghost" onclick="pmRefreshChain()">refresh councils &amp; markets</button>
-          </div>
-          <p class="pane-hint" id="pm-chain-hint">Loads PM contract id, registry accounts, and markets from testnet.</p>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Council account</span>
-              <span class="value-hint">From multisig-registry free-read.</span>
-            </span>
-            <select id="pm-council-pick" onchange="pmOnCouncilPick()">
-              <option value="">— refresh to load —</option>
-            </select>
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Market</span>
-              <span class="value-hint">★ = Under review.</span>
-            </span>
-            <select id="pm-market-pick" onchange="pmOnMarketPick()">
-              <option value="">— refresh to load —</option>
-            </select>
-          </div>
-          <h4>Init + push</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Market id</span>
-              <span class="value-hint">On-chain market under review.</span>
-            </span>
-            <input id="pm-market" type="number" value="0" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Winning outcome</span>
-              <span class="value-hint">0 or 1.</span>
-            </span>
-            <input id="pm-outcome" type="number" min="0" max="1" value="1" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">PM ContractId</span>
-              <span class="value-hint">Legacy prediction-market 32-byte hex.</span>
-            </span>
-            <input id="pm-contract" placeholder="0x…" spellcheck="false" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Registry account</span>
-              <span class="value-hint">Dispute-council account id.</span>
-            </span>
-            <input id="pm-account" type="number" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Threshold</span>
-              <span class="value-hint">Client-side gate before submit (usually account threshold).</span>
-            </span>
-            <input id="pm-threshold" type="number" value="2" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Summary (untrusted)</span>
-              <span class="value-hint">Human hint only — signers must check market + outcome.</span>
-            </span>
-            <input id="pm-summary" placeholder="resolve market N → YES" />
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="pmResolveInit()">init + push</button>
-            <button type="button" class="ghost" onclick="pmResolveList()">list PM blobs</button>
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Blob id (digest hex)</span>
-              <span class="value-hint">From init, or pick from the list below.</span>
-            </span>
-            <input id="pm-id" placeholder="64 hex chars" spellcheck="false" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Sign as</span>
-              <span class="value-hint">Local signing identity that is a council member.</span>
-            </span>
-            <input id="pm-signer" class="name-target" placeholder="alice" />
-          </div>
-          <div id="pm-preview" class="pane-hint" hidden></div>
-          <label class="value-field" style="align-items:center;gap:0.5rem;flex-direction:row">
-            <input id="pm-confirm" type="checkbox" />
-            <span class="value-hint">I compared the fingerprint (mnemonic / safety number) with co-signers.</span>
-          </label>
-          <div class="actions">
-            <button type="button" class="ghost" onclick="pmResolvePreview()">preview</button>
-            <button type="button" class="primary" id="pm-sign-btn" onclick="pmResolveSign()" disabled>sign</button>
-            <button type="button" class="ghost" onclick="pmResolveStatus()">status</button>
-            <button type="button" class="primary" onclick="pmResolveSubmit()">submit resolve</button>
-          </div>
-          <div id="pm-list" class="identities-list"></div>
-          <p class="pane-hint">Reuse Setup for collector status and Cast for identities. Gas payer need not be a council member.</p>
-        </div>
-        <pre class="log" id="pm-log"></pre>
-      </div>
-    </div>
-
-    <!-- 9 Party finder -->
-    <div class="tab-panel" id="panel-party" role="tabpanel" hidden>
-      <div class="pane">
-        <header class="pane-head">
-          <p class="pane-role">Party finder</p>
-          <h3>Find co-signers</h3>
-          <p class="lede">Off-chain rendezvous on the collector — display name + public key only, never a secret key. It authorizes nothing on-chain; a leader still picks members here and forms the council with a real <code>create_account</code>.</p>
-        </header>
-        <div class="values">
-          <h4>Sign up on the roster</h4>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Your identity</span>
-              <span class="value-hint">A local signing identity (see Setup / Cast). Publishes its public key only.</span>
-            </span>
-            <input id="party-signup-name" class="name-target" placeholder="alice" />
-          </div>
-          <div class="value-field">
-            <span class="value-meta">
-              <span class="value-name">Note (optional)</span>
-              <span class="value-hint">Shown to others on the roster, e.g. “council lead”.</span>
-            </span>
-            <input id="party-signup-note" placeholder="council lead" />
-          </div>
-          <div class="actions">
-            <button type="button" class="primary" onclick="partySignup()">Sign up</button>
-            <button type="button" class="ghost" onclick="refreshParty()">Refresh roster</button>
-          </div>
-        </div>
-        <div id="party-list" class="identities-list"></div>
-        <p class="pane-hint">Check members below, then prefill Form council with their public keys (imported as pk-only identities if new).</p>
-        <div class="actions">
-          <button type="button" class="primary" onclick="usePartyForCouncil()">Use selected → prefill Form council</button>
-        </div>
-        <pre class="log" id="party-log"></pre>
-      </div>
-    </div>
-  </section>
-
-  <footer class="footer">
-    <p><strong>Multisig Lab</strong> — local UI for Dusk testnet registry &amp; proposals.</p>
-    <p class="footer-muted">Secret keys never leave this process. Bind is 127.0.0.1 only.</p>
-  </footer>
+  <p class="page-foot">Loopback only · Mock = local ledger · Testnet = gas + wallet</p>
 
   <script>window.MULTISIG_TOOL_TOKEN = "__TOKEN__";</script>
   <script src="/app.js"></script>
