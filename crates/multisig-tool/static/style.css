@@ -6,6 +6,7 @@
   --sky: #d5e0ea;
   --horizon: #c9a66b;
   --sea: #3d6b7a;
+  --you: #2b6cb0;
   --ok: #2f7d5a;
   --danger: #b33a2b;
   --warn: #8a6b3d;
@@ -259,9 +260,31 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 .demo-header-badges {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
+  justify-content: flex-end;
 }
+.docs-link {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--sea);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.docs-link:hover { text-decoration: underline; }
+
+.you-chip {
+  padding: 0.2rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--you);
+  border: 1px solid color-mix(in srgb, var(--you) 40%, var(--line));
+  background: color-mix(in srgb, var(--you) 10%, #fff);
+}
+
 .mode-badge {
   padding: 0.2rem 0.65rem;
   border-radius: 8px;
@@ -290,6 +313,36 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--ink-soft);
+}
+
+.header-council {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.6rem 0.22rem 0.4rem;
+  border-radius: 8px;
+  border: 1.5px solid color-mix(in srgb, var(--sea) 40%, var(--line));
+  background: color-mix(in srgb, var(--sky) 50%, #fff);
+  color: var(--sea);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--sea) 12%, transparent);
+}
+.header-council.pop {
+  animation: council-pop 0.55s var(--ease) both;
+}
+.header-council-icon {
+  width: 1.55rem;
+  height: 1.55rem;
+  display: grid;
+  place-items: center;
+}
+.header-council-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.header-council-id {
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .beat-dots {
@@ -364,18 +417,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   height: 100%;
 }
 
-.docs-cta {
-  margin: 0.75rem 0 0;
-  text-align: center;
-  font-size: 0.84rem;
-}
-.docs-cta a {
-  color: var(--sea);
-  text-decoration: none;
-  font-weight: 600;
-}
-.docs-cta a:hover { text-decoration: underline; }
-
 /* Pane / form chrome */
 .pane {
   background: var(--paper);
@@ -434,6 +475,12 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   color: var(--ink-soft);
 }
 
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
 input, textarea, select {
   width: 100%;
   background: #fff;
@@ -448,7 +495,11 @@ input, textarea, select {
   unicode-bidi: isolate;
   text-align: left;
 }
-textarea { min-height: 2.8rem; resize: vertical; }
+textarea {
+  min-height: 2.8rem;
+  resize: vertical;
+  font-family: var(--font-body);
+}
 
 .actions {
   display: flex;
@@ -478,18 +529,30 @@ textarea { min-height: 2.8rem; resize: vertical; }
   gap: 0.75rem 1.25rem;
 }
 
-.council-success-icon {
+/* Purpose chips (beat 4) */
+.purpose-chips {
   display: flex;
-  justify-content: center;
-  color: var(--ok);
-  margin: 0.15rem 0;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
-.council-success-icon svg {
-  width: 2.4rem;
-  height: 2.4rem;
+.purpose-chip {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--ink-soft);
+  cursor: pointer;
 }
-.council-success-icon.pop {
-  animation: council-pop 0.55s var(--ease) both;
+.purpose-chip:hover {
+  border-color: color-mix(in srgb, var(--sea) 40%, var(--line));
+  color: var(--ink);
+}
+.purpose-chip.active {
+  border-color: var(--sea);
+  background: color-mix(in srgb, var(--sky) 45%, #fff);
+  color: var(--sea);
 }
 
 /* Identity / signer tiles */
@@ -522,6 +585,7 @@ textarea { min-height: 2.8rem; resize: vertical; }
   min-width: 0;
 }
 .id-row:hover { border-color: color-mix(in srgb, var(--sea) 40%, var(--line)); }
+/* Green = council member selection (beat 2) */
 .id-row.selected {
   border-color: var(--ok);
   background: color-mix(in srgb, var(--ok) 8%, #fff);
@@ -532,9 +596,17 @@ textarea { min-height: 2.8rem; resize: vertical; }
   border-color: var(--line);
   background: color-mix(in srgb, var(--paper-2) 40%, #fff);
 }
-.id-row.active-signer {
+/* Blue = “you” (cast + matching approve-as) */
+.id-row.you-selected {
+  border-color: var(--you);
+  background: color-mix(in srgb, var(--you) 9%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--you) 30%, transparent);
+}
+/* Sea = active approve-as when not the header “you” */
+.id-row.active-signer:not(.you-selected) {
   border-color: var(--sea);
   background: color-mix(in srgb, var(--sky) 40%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sea) 28%, transparent);
 }
 .id-name {
   display: flex;
@@ -620,16 +692,41 @@ textarea { min-height: 2.8rem; resize: vertical; }
   box-shadow: 0 10px 28px rgba(28, 36, 48, 0.12);
 }
 .popover-wide {
-  width: min(20rem, calc(100vw - 3rem));
+  width: min(22rem, calc(100vw - 3rem));
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
   position: absolute;
+  padding: 1rem 1rem 0.85rem;
+}
+.popover-close {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.popover-close:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper-2) 50%, #fff);
+}
+.popover-close svg {
+  width: 1rem;
+  height: 1rem;
 }
 .popover-title {
-  margin: 0 0 0.5rem;
+  margin: 0 1.75rem 0.65rem 0;
   font-weight: 650;
-  font-size: 0.88rem;
+  font-size: 0.9rem;
+  line-height: 1.3;
 }
 .popover-field {
   display: flex;
@@ -638,7 +735,7 @@ textarea { min-height: 2.8rem; resize: vertical; }
   margin-bottom: 0.65rem;
 }
 
-/* Council cards (more square) */
+/* Council cards */
 .councils-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
@@ -649,7 +746,7 @@ textarea { min-height: 2.8rem; resize: vertical; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem;
+  gap: 0.2rem;
   aspect-ratio: 1 / 0.92;
   background: #fff;
   border: 1.5px solid var(--line);
@@ -668,10 +765,17 @@ textarea { min-height: 2.8rem; resize: vertical; }
   background: color-mix(in srgb, var(--ok) 8%, #fff);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 30%, transparent);
 }
+.council-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
 .council-card-icon {
-  width: 1.65rem;
-  height: 1.65rem;
+  width: 1.35rem;
+  height: 1.35rem;
   color: var(--sea);
+  flex-shrink: 0;
 }
 .council-card-icon svg {
   width: 100%;
@@ -710,56 +814,134 @@ textarea { min-height: 2.8rem; resize: vertical; }
   grid-column: 1 / -1;
 }
 
-/* Read-only proposal fields */
-.readonly-grid {
+/* Proposal tiles (beat 5) */
+.proposals-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.35rem 0.55rem;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.45rem;
 }
-.readonly-field {
+.proposal-card {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
+  align-items: flex-start;
+  gap: 0.2rem;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+.proposal-card:hover {
+  border-color: color-mix(in srgb, var(--sea) 40%, var(--line));
+}
+.proposal-card.selected {
+  border-color: var(--sea);
+  background: color-mix(in srgb, var(--sky) 35%, #fff);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sea) 25%, transparent);
+}
+.proposal-card-council {
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.proposal-card-id {
+  font-weight: 700;
+  font-size: 0.92rem;
+  letter-spacing: -0.02em;
+}
+.proposal-card-purpose {
+  font-size: 0.72rem;
+  color: var(--sea);
+  font-weight: 600;
+}
+
+/* Review intent (beat 5) */
+.intent-card {
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 0.35rem 0.5rem;
-}
-.readonly-value {
-  font-size: 0.72rem;
-  color: var(--ink);
-  background: transparent;
-  padding: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: block;
-}
-.prop-meta-row {
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
   display: flex;
-  justify-content: center;
-}
-.prop-meta-row .readonly-field {
-  min-width: 8rem;
-  text-align: center;
-  align-items: center;
-}
-
-.confirm-row {
-  display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 0.45rem;
-  margin: 0;
 }
-.confirm-row input[type="checkbox"] {
-  width: auto;
-  flex: 0 0 auto;
-  margin-top: 0.15rem;
-  accent-color: var(--ok);
+.intent-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.intent-purpose {
+  margin: 0;
+  font-weight: 650;
+  font-size: 0.9rem;
+}
+.intent-description {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.fingerprint-details {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+.fingerprint-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--sea);
+}
+.fingerprint-soft {
+  margin-top: 0.35rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.7rem;
+  word-break: break-word;
+  color: var(--ink-soft);
+  padding: 0.4rem 0.5rem;
+  background: color-mix(in srgb, var(--paper-2) 40%, #fff);
+  border-radius: 6px;
 }
 
-/* Outcome cards (replace terminal logs) */
+/* Single status card (beat 5) */
+.status-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+  padding: 0.55rem 0.75rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.status-chip {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.18rem 0.45rem;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+.status-chip.open {
+  color: var(--sea);
+  border-color: color-mix(in srgb, var(--sea) 40%, var(--line));
+  background: color-mix(in srgb, var(--sky) 35%, #fff);
+}
+.status-chip.finalized {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
+  background: color-mix(in srgb, var(--ok) 10%, #fff);
+}
+.status-approvals {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Outcome cards */
 .outcome {
   margin: 0;
   padding: 0.55rem 0.7rem;
@@ -771,12 +953,26 @@ textarea { min-height: 2.8rem; resize: vertical; }
   color: var(--ink);
 }
 .outcome.status-ok {
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--line));
-  box-shadow: inset 3px 0 0 var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--line));
+  background: color-mix(in srgb, var(--ok) 5%, #fff);
 }
 .outcome.status-err {
   border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
   box-shadow: inset 3px 0 0 var(--danger);
+}
+.outcome-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+}
+.outcome-row .outcome-meta {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.outcome-row .outcome-meta strong {
+  font-weight: 650;
+  color: var(--ink);
 }
 .outcome.fingerprint {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -792,8 +988,8 @@ textarea { min-height: 2.8rem; resize: vertical; }
   padding: 0.15rem 0.4rem;
   border-radius: 5px;
   border: 1px solid var(--line);
-  margin-right: 0.35rem;
   vertical-align: middle;
+  flex-shrink: 0;
 }
 .outcome-chip.ok {
   color: var(--ok);
@@ -807,7 +1003,7 @@ textarea { min-height: 2.8rem; resize: vertical; }
 }
 .outcome-title {
   font-weight: 650;
-  margin: 0 0 0.25rem;
+  margin: 0;
 }
 .outcome-body {
   margin: 0;
@@ -902,8 +1098,8 @@ textarea { min-height: 2.8rem; resize: vertical; }
 @media (max-width: 900px) {
   .slide-arrow { width: 2rem; height: 2rem; }
   .identities-grid { grid-template-columns: 1fr 1fr; }
-  .readonly-grid { grid-template-columns: 1fr; }
   .use-case-card h3 { white-space: normal; }
   .use-case-card p { max-width: 32ch; }
   .beat-dots .tab { font-size: 0.7rem; padding: 0.28rem 0.5rem; }
+  .docs-link { font-size: 0.68rem; }
 }
