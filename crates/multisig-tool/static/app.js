@@ -1054,21 +1054,67 @@ function applyPmPrefillsFromUrl() {
   setIf("pm-summary", "summary");
 }
 
+const SLIDE_HASHES = new Set(["top", "demo", "use-cases", ""]);
+
 function tabFromUrl() {
   const params = new URLSearchParams(location.search);
   const q = params.get("tab");
   if (q) return q;
   const hash = (location.hash || "").replace(/^#/, "");
+  // Page slides use #top / #demo / #use-cases — not chapter tabs.
+  if (SLIDE_HASHES.has(hash)) return null;
   if (hash) return hash;
   return null;
 }
 
+const BEAT_TABS = ["cast", "council", "check", "proposal"];
+
+function beatIndexForTab(tab) {
+  const i = BEAT_TABS.indexOf(tab);
+  return i >= 0 ? i : 0;
+}
+
+function goBeat(delta) {
+  const active = document.querySelector(".beat-dots .tab.active");
+  const cur = active ? active.dataset.tab : "cast";
+  let i = beatIndexForTab(cur);
+  // Prefer data-beat when both Propose/Finalize share data-tab=proposal.
+  if (active && active.dataset.beat) {
+    const b = parseInt(active.dataset.beat, 10);
+    if (!Number.isNaN(b)) i = Math.max(0, Math.min(BEAT_TABS.length - 1, b - 1));
+  }
+  i = Math.max(0, Math.min(BEAT_TABS.length - 1, i + delta));
+  const nextTab = BEAT_TABS[i];
+  const dot = document.querySelector(`.beat-dots .tab[data-beat="${i + 1}"]`);
+  if (dot) {
+    document.querySelectorAll(".beat-dots .tab").forEach((btn) => {
+      const on = btn === dot;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
+  activateTab(nextTab, { fromBeatNav: true });
+  const label = document.getElementById("status-beat-label");
+  if (label && dot) label.textContent = `Beat ${dot.dataset.beat} · ${dot.textContent.replace(/^\d+\s·\s/, "")}`;
+}
+
 function activateTab(name, opts = {}) {
   document.querySelectorAll(".tab").forEach((btn) => {
+    // goBeat already picked the Propose vs Finalize dot.
+    if (opts.fromBeatNav && btn.closest(".beat-dots")) return;
     const on = btn.dataset.tab === name;
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-selected", on ? "true" : "false");
   });
+  // Beats 4 + 5 share data-tab=proposal; keep only the matching data-beat active when set.
+  if (!opts.fromBeatNav && name === "proposal") {
+    const prefer = opts.beatPhase === "finalize" ? "5" : "4";
+    document.querySelectorAll('.beat-dots .tab[data-tab="proposal"]').forEach((btn) => {
+      const on = btn.dataset.beat === prefer;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
   document.querySelectorAll(".tab-panel").forEach((panel) => {
     const on = panel.id === `panel-${name}`;
     panel.classList.toggle("active", on);
@@ -1087,6 +1133,13 @@ function activateTab(name, opts = {}) {
     pmResolveList().catch((e) => console.error(e));
   }
   syncGuideForTab(name);
+  const label = document.getElementById("status-beat-label");
+  const beatDot = document.querySelector(`.beat-dots .tab.active[data-tab="${name}"]`)
+    || document.querySelector(`.beat-dots .tab[data-tab="${name}"]`);
+  if (label) {
+    if (beatDot) label.textContent = `Beat ${beatDot.dataset.beat} · ${beatDot.textContent.replace(/^\d+\s·\s/, "")}`;
+    else label.textContent = `Drawer · ${name}`;
+  }
 }
 
 wireNameTargets();
@@ -1122,7 +1175,11 @@ document.getElementById("setup-my-pk-copy").addEventListener("click", async () =
 });
 
 document.querySelectorAll(".tab").forEach((btn) => {
-  btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+  btn.addEventListener("click", () => {
+    const opts = {};
+    if (btn.dataset.beatPhase) opts.beatPhase = btn.dataset.beatPhase;
+    activateTab(btn.dataset.tab, opts);
+  });
 });
 
 const initialTab = tabFromUrl();
@@ -1130,16 +1187,17 @@ if (initialTab) {
   activateTab(initialTab);
 }
 
-document.getElementById("btn-walkthrough").addEventListener("click", () => {
-  startWalkthrough();
-});
-document.getElementById("btn-walkthrough-exit").addEventListener("click", () => {
-  exitWalkthrough();
-});
-document.getElementById("btn-walk-prev").addEventListener("click", () => {
+function on(id, ev, fn) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(ev, fn);
+}
+
+on("btn-walkthrough", "click", () => startWalkthrough());
+on("btn-walkthrough-exit", "click", () => exitWalkthrough());
+on("btn-walk-prev", "click", () => {
   if (walkIndex > 0) goWalkChapter(walkIndex - 1);
 });
-document.getElementById("btn-walk-next").addEventListener("click", () => {
+on("btn-walk-next", "click", () => {
   if (walkIndex >= CHAPTERS.length - 1) {
     exitWalkthrough();
     setGuide(
@@ -1150,3 +1208,30 @@ document.getElementById("btn-walk-next").addEventListener("click", () => {
   }
   goWalkChapter(walkIndex + 1);
 });
+
+on("btn-beat-prev", "click", () => goBeat(-1));
+on("btn-beat-next", "click", () => goBeat(1));
+
+// Highlight page-nav dots from scroll position (cover / demo / use-cases).
+(function wireSlideDots() {
+  const root = document.getElementById("slides");
+  const dots = [...document.querySelectorAll(".dots .dot")];
+  if (!root || !dots.length) return;
+  const sections = dots
+    .map((d) => document.getElementById(d.dataset.slide))
+    .filter(Boolean);
+  const sync = () => {
+    let best = 0;
+    let bestDist = Infinity;
+    sections.forEach((sec, i) => {
+      const dist = Math.abs(sec.getBoundingClientRect().top);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    });
+    dots.forEach((d, i) => d.classList.toggle("active", i === best));
+  };
+  root.addEventListener("scroll", sync, { passive: true });
+  sync();
+})();
