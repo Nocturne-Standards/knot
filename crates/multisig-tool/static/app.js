@@ -111,6 +111,8 @@ let walkActive = false;
 let walkIndex = 0;
 /** Parallel to BEATS — Next stays disabled until the beat’s primary action succeeds. */
 let beatDone = [false, false, false, false, false];
+/** Soft walk gate: preview must succeed before confirm enables approve. */
+let propPreviewShown = false;
 let storyAccountId = null;
 let storyProposalId = null;
 let demoMode = "mock";
@@ -387,6 +389,31 @@ function markBeatDone(index) {
   if (walkActive) setWalkUi(true);
 }
 
+/** Highest beat index reachable while walking (incomplete current beat included). */
+function maxWalkIndexAllowed() {
+  let max = 0;
+  for (let i = 0; i < beatDone.length; i++) {
+    max = i;
+    if (!beatDone[i]) break;
+  }
+  return max;
+}
+
+function submitOk(out) {
+  return out && out.outcome !== "panic" && out.tx_status !== "failed";
+}
+
+function syncPropApproveGate() {
+  const propConfirm = document.getElementById("prop-confirm");
+  const propBtn = document.getElementById("prop-approve-btn");
+  if (!propConfirm || !propBtn) return;
+  if (walkActive && !propPreviewShown) {
+    propBtn.disabled = true;
+    return;
+  }
+  propBtn.disabled = !propConfirm.checked;
+}
+
 function prefillStoryFields() {
   document.getElementById("create-members").value = STORY.members;
   document.getElementById("create-threshold").value = String(STORY.threshold);
@@ -444,12 +471,14 @@ function prepareBeatEntry(index) {
     document.getElementById("prop-deadline").value = String(STORY.propDeadline);
     document.getElementById("prop-signer").value = "alice";
     document.getElementById("prop-confirm").checked = false;
+    propPreviewShown = false;
     document.getElementById("prop-approve-btn").disabled = true;
     if (storyAccountId !== null) applyAccountIds(storyAccountId);
   }
   if (beat.beat === 5) {
     document.getElementById("prop-signer").value = "bob";
     document.getElementById("prop-confirm").checked = false;
+    propPreviewShown = false;
     document.getElementById("prop-approve-btn").disabled = true;
     if (storyProposalId !== null) {
       document.getElementById("prop-id").value = String(storyProposalId);
@@ -472,6 +501,7 @@ function goWalkChapter(i) {
 async function startWalkthrough() {
   try {
     beatDone = [false, false, false, false, false];
+    propPreviewShown = false;
     storyProposalId = null;
     statusApprovals = null;
     await ensureStoryCast();
@@ -711,7 +741,7 @@ async function submitCreateAccount() {
       }
     } catch (_) {}
     showSubmit("create-log", { ...out, log: (out.log || "") + next });
-    if (out.outcome !== "panic" && out.tx_status !== "failed") {
+    if (submitOk(out)) {
       updateStatusStrip({ threshold, approvals: 0 });
       if (walkActive && walkIndex === 1) markBeatDone(1);
     }
@@ -933,9 +963,12 @@ async function proposalPreview() {
       `target=${out.target_hex}<br>fn=${out.function_name}<br>` +
       `args=${out.call_args_hex}<br>deadline=${out.deadline}`;
     document.getElementById("prop-confirm").checked = false;
-    document.getElementById("prop-approve-btn").disabled = true;
+    propPreviewShown = true;
+    syncPropApproveGate();
     setLog("prop-log", "preview ok — check fingerprint, then confirm + approve", true);
   } catch (e) {
+    propPreviewShown = false;
+    syncPropApproveGate();
     setLog("prop-log", e.message, false);
   }
 }
@@ -943,6 +976,10 @@ async function proposalPreview() {
 async function proposalApprove() {
   const id = document.getElementById("prop-id").value;
   const signer = document.getElementById("prop-signer").value.trim();
+  if (walkActive && !propPreviewShown) {
+    setLog("prop-log", "preview the proposal first, then confirm + approve", false);
+    return;
+  }
   if (!document.getElementById("prop-confirm").checked) {
     setLog("prop-log", "check the confirm box after preview", false);
     return;
@@ -980,7 +1017,10 @@ async function proposalApprove() {
         approvals: (statusApprovals != null ? statusApprovals : 0) + 1,
       });
     }
-    if (walkActive && walkIndex === 3 && signer === "alice") markBeatDone(3);
+    // Alice or Bob: only unlock walk beat on successful submit (same as create/finalize).
+    if (submitOk(submit) && walkActive && walkIndex === 3 && signer === "alice") {
+      markBeatDone(3);
+    }
     // Beat 5 still needs finalize — Bob approve alone does not unlock Finish.
   } catch (e) {
     showError("prop-log", e.message);
@@ -993,7 +1033,7 @@ async function proposalFinalize() {
   try {
     const out = await api(`/api/proposal/${id}/finalize`, { method: "POST", body: "{}" });
     showSubmit("prop-log", out);
-    if (out.outcome !== "panic" && out.tx_status !== "failed") {
+    if (submitOk(out)) {
       if (walkActive && walkIndex === 4) markBeatDone(4);
     }
   } catch (e) {
@@ -1281,7 +1321,14 @@ function goBeat(delta) {
     const b = parseInt(active.dataset.beat, 10);
     if (!Number.isNaN(b)) i = b - 1;
   }
-  i = Math.max(0, Math.min(BEATS.length - 1, i + delta));
+  let target = Math.max(0, Math.min(BEATS.length - 1, i + delta));
+  // While walking, do not advance past incomplete beats (free browse stays open).
+  if (walkActive) {
+    const maxAllowed = maxWalkIndexAllowed();
+    if (delta > 0 && target > maxAllowed) return;
+    target = Math.min(target, maxAllowed);
+  }
+  i = target;
   const beat = BEATS[i];
   const dot = document.querySelector(`.beat-dots .tab[data-beat="${i + 1}"]`);
   if (dot) {
@@ -1306,7 +1353,25 @@ function goBeat(delta) {
   }
 }
 
+function resolveWalkIndexForTab(name, opts) {
+  if (opts.beat != null && !Number.isNaN(opts.beat)) {
+    return Math.max(0, Math.min(BEATS.length - 1, opts.beat - 1));
+  }
+  if (name === "proposal") {
+    return opts.beatPhase === "finalize" ? 4 : 3;
+  }
+  const idx = BEATS.findIndex((b) => b.tab === name);
+  return idx >= 0 ? idx : null;
+}
+
 function activateTab(name, opts = {}) {
+  // While walking, beat dots must not jump past incomplete beats (drawer tabs still free).
+  let walkNextIdx = null;
+  if (walkActive && !opts.fromWalk && !opts.fromBeatNav) {
+    walkNextIdx = resolveWalkIndexForTab(name, opts);
+    if (walkNextIdx != null && walkNextIdx > maxWalkIndexAllowed()) return;
+  }
+
   if (DRAWER_TABS.has(name)) openDevDrawer();
 
   document.querySelectorAll(".tab").forEach((btn) => {
@@ -1331,15 +1396,8 @@ function activateTab(name, opts = {}) {
     if (on) panel.removeAttribute("hidden");
     else panel.setAttribute("hidden", "");
   });
-  if (walkActive && !opts.fromWalk && !opts.fromBeatNav) {
-    if (opts.beat != null && !Number.isNaN(opts.beat)) {
-      walkIndex = Math.max(0, Math.min(BEATS.length - 1, opts.beat - 1));
-    } else if (name === "proposal") {
-      walkIndex = opts.beatPhase === "finalize" ? 4 : 3;
-    } else {
-      const idx = BEATS.findIndex((b) => b.tab === name);
-      if (idx >= 0) walkIndex = idx;
-    }
+  if (walkActive && !opts.fromWalk && !opts.fromBeatNav && walkNextIdx != null) {
+    walkIndex = walkNextIdx;
     prepareBeatEntry(walkIndex);
     setWalkUi(true);
   }
@@ -1366,11 +1424,8 @@ refreshSetupStatus().catch((e) => console.error(e));
 
 function wireConfirmGates() {
   const propConfirm = document.getElementById("prop-confirm");
-  const propBtn = document.getElementById("prop-approve-btn");
-  if (propConfirm && propBtn) {
-    propConfirm.addEventListener("change", () => {
-      propBtn.disabled = !propConfirm.checked;
-    });
+  if (propConfirm) {
+    propConfirm.addEventListener("change", () => syncPropApproveGate());
   }
   const pmConfirm = document.getElementById("pm-confirm");
   const pmBtn = document.getElementById("pm-sign-btn");
