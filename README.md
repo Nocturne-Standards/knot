@@ -41,7 +41,7 @@ five-beat walkthrough + developer drawer on `:8877`; public docs at
 | `crates/multisig-encoding` | Apache-2.0 | Canonical §4a digest + blob helpers + M3 fingerprint |
 | `crates/multisig-registry` | Apache-2.0 | On-chain BLS M-of-N quorum registry — **testnet v0.1.3** |
 | `crates/multisig-proposals` | Apache-2.0 | On-chain propose→approve→finalize `call_raw` — **testnet v0.3.0** |
-| `crates/multisig-tool` | Apache-2.0 | Local signing CLI + web UI + PM council resolve — **testnet only** |
+| `crates/multisig-tool` | Apache-2.0 | Local signing CLI + web UI + PM council resolve — **mock + testnet; no mainnet** |
 | `crates/multisig-collector` | AGPL-3.0-only | Untrusted off-chain relay; production auth at reverse proxy |
 
 - **Security / trust model:** [`docs/security-model.md`](docs/security-model.md)

@@ -128,9 +128,10 @@ submission goes two ways:
   demo studio / use cases slides; default path is a **five-beat** proposals
   walkthrough (Cast → Form council → Look up → Propose & first approve →
   Threshold & finalize); advanced panels (Setup, Aggregate, Rotate, Unsafe
-  UTF-8, Party finder, PM resolve) live in the **developer drawer** (501 in
-  mock — set `DEMO_MODE=testnet` and restart). Public story (no hosted
-  signing):
+  UTF-8, Party finder, PM resolve) live in the **developer drawer**. Setup
+  works in mock; Aggregate, Rotate, Unsafe UTF-8, Party finder, and PM
+  resolve return 501 in mock — set `DEMO_MODE=testnet` and restart. Public
+  story (no hosted signing):
   [`/docs/multisig.html`](../../../nocturne-standards-site/public/docs/multisig.html).
   Design (frozen):
   [`docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md`](../../../docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md).
@@ -211,7 +212,7 @@ submission goes two ways:
 | Registry create/query/change_account | Pass |
 | Quorum submit + outcome / diagnose surfacing | Pass (free-read verify still untrusted) |
 | Scenario web UI (slide Lab + five-beat mock walkthrough) | Pass |
-| Proposal create / approve (canonical intent) / finalize+execute | Lab green; live proposals **v0.2.0** deployed+wired 2026-07-23 |
+| Proposal create / approve (canonical intent) / finalize+execute | Lab green; live proposals **v0.3.0** deployed+wired 2026-07-24 |
 | Adversarial digest mismatch refuse | Pass (`multisig-encoding` `gate_blob_for_signing`) |
 | Pk-only import + refuse as signer | Pass |
 | File/BYO blob 2-of-3 → aggregate → `verify_quorum_aggregate` | Pass (local `VM::ephemeral`) |
@@ -392,8 +393,8 @@ Advanced panels live in the **developer drawer** (not the default path):
 and first identity create), Aggregate verify, Rotate, Unsafe UTF-8,
 **Party finder** (signs a local identity's *public* key up to the
 collector roster via `/api/party`; multi-select prefills Form council;
-roster is discovery only), and PM resolve. Drawer endpoints return 501
-in mock.
+roster is discovery only), and PM resolve. Aggregate / Rotate / Unsafe /
+Party / PM resolve return 501 in mock (Setup does not).
 
 *(Historical: the Lab used to be ten chapter tabs with Setup as the
 default landing tab and Party finder as “chapter 8”; that tab strip is
