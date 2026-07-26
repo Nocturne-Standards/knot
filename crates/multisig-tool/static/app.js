@@ -11,97 +11,111 @@ const STORY = {
   signers: "alice,bob",
   newMembers: "alice,carol",
   newThreshold: 2,
-  propTarget: "",
-  propFunction: "set_value",
+  // Mock-safe noop target: 31 zero bytes + 0x01 (32-byte ContractId hex).
+  propTarget: "0000000000000000000000000000000000000000000000000000000000000001",
+  propFunction: "noop",
   propArgsHex: "",
-  propDeadline: 0,
+  propDeadline: 999999999,
   propSigner: "alice",
 };
 
-const CHAPTERS = [
+/** Five-beat proposals walkthrough (replaces old 7-chapter CHAPTERS). */
+const BEATS = [
   {
     tab: "cast",
-    step: "Chapter 1 of 7 — Meet the cast",
-    text: "Alice, Bob, and Carol are the treasury signers. The walkthrough creates them if missing. Click Next when you see all three as signing identities.",
+    beat: 1,
+    step: "Beat 1 of 5 — Meet the cast",
+    text: "Alice, Bob, and Carol are the treasury signers. The walkthrough created them if they were missing. Confirm all three show as signing identities, then Next.",
   },
   {
     tab: "council",
-    step: "Chapter 2 of 7 — Form the treasury",
-    text: "Create a 2-of-3 council with alice,bob,carol. Press create_account — the new account id is filled into later chapters automatically.",
+    beat: 2,
+    step: "Beat 2 of 5 — Form the treasury",
+    text: "Create a 2-of-3 council with alice,bob,carol. Press create_account — the new account id fills later beats automatically. Next unlocks after success.",
   },
   {
     tab: "check",
-    step: "Chapter 3 of 7 — Look it up",
-    text: "Free-read the council. Query should show three members and threshold 2. No gas, just confirmation.",
-  },
-  {
-    tab: "payout",
-    step: "Chapter 4 of 7 — Approve a payout",
-    text: "Alice and Bob sign “approve payout #42”. Submit the quorum. Prefer check/diagnose only as a hint — free-read can look untrusted.",
-  },
-  {
-    tab: "aggregate",
-    step: "Chapter 5 of 7 — Same payout, cheaper",
-    text: "Optional detour: same message and signers, but one aggregate verify on-chain. Skip with Next if you want the main plot.",
-  },
-  {
-    tab: "rotate",
-    step: "Chapter 6 of 7 — Rotate the council",
-    text: "Drop Bob. Current members alice+bob authorize the new set alice,carol. After success, Look it up should show the new roster and a bumped nonce.",
+    beat: 3,
+    step: "Beat 3 of 5 — Look it up",
+    text: "Free-read the council. Query should show three members and threshold 2. No gas — just confirmation. Next unlocks after a successful query.",
   },
   {
     tab: "proposal",
-    step: "Chapter 7 of 7 — Multi-person approve",
-    text: "Propose the wire message, approve as Alice, then finalize when approvals ≥ threshold. On a second machine, Bob (or Carol) would approve from their own keystore.",
+    beat: 4,
+    beatPhase: null,
+    step: "Beat 4 of 5 — Propose & first approve",
+    text: "Propose a harmless noop (target 00…01, fn noop, empty args, far deadline). Preview the fingerprint, confirm, then approve as Alice. Next unlocks after Alice’s approval.",
+  },
+  {
+    tab: "proposal",
+    beat: 5,
+    beatPhase: "finalize",
+    step: "Beat 5 of 5 — Threshold & finalize",
+    text: "Switch to Bob, preview again if you like, confirm, approve — then finalize when approvals ≥ threshold. Finish after finalize confirms.",
   },
 ];
 
+const DRAWER_TABS = new Set([
+  "setup",
+  "aggregate",
+  "rotate",
+  "payout",
+  "party",
+  "pm-resolve",
+]);
+
 const BROWSE = {
   setup: {
-    step: "Chapter 0 — Setup",
+    step: "Developer · Setup",
     text: "Confirm your keystore is unlocked, create a signing identity, and check the collector URL configured server-side.",
   },
   cast: {
-    step: "Chapter 1 — Meet the cast",
+    step: "Beat 1 — Meet the cast",
     text: "Create named BLS keys that stay in this process. Foreign members can be imported as pk-only.",
   },
   council: {
-    step: "Chapter 2 — Form the treasury",
-    text: "Register an M-of-N member set on-chain. Naming keys grants the creator no special power.",
+    step: "Beat 2 — Form the treasury",
+    text: "Register an M-of-N member set. Naming keys grants the creator no special power.",
   },
   check: {
-    step: "Chapter 3 — Look it up",
+    step: "Beat 3 — Look it up",
     text: "Confirm members, threshold, and nonce after creates or rotations — free reads, no gas.",
   },
+  proposal: {
+    step: "Beats 4–5 — Propose & finalize",
+    text: "Propose → each signer approves → finalize. Coordination is the chain, not a file handoff.",
+  },
   payout: {
-    step: "Chapter 4 — Approve a payout",
-    text: "Per-signature quorum: each signer signs the message; on-chain verifies each BLS sig.",
+    step: "Developer · Unsafe UTF-8",
+    text: "Per-signature quorum with a raw message. Needs testnet in mock mode (501).",
   },
   aggregate: {
-    step: "Chapter 5 — Cheaper verify",
-    text: "Same story as a payout, but aggregated multisig — one pairing check on-chain.",
+    step: "Developer · Aggregate verify",
+    text: "Same story as a payout, but aggregated multisig — one pairing check on-chain. Needs testnet when mock.",
   },
   rotate: {
-    step: "Chapter 6 — Rotate members",
-    text: "Current members authorize a new set. Best place for crisp pass/fail demos.",
-  },
-  proposal: {
-    step: "Chapter 7 — Multi-person",
-    text: "Propose → each machine approves → finalize. Coordination is the chain, not a file handoff.",
+    step: "Developer · Rotate",
+    text: "Current members authorize a new set. Needs testnet when mock.",
   },
   "pm-resolve": {
-    step: "Chapter 8 — PM resolve",
-    text: "Init a council-resolve blob, collect secure BLS partials via the collector, then submit prediction-market.resolve when partials ≥ threshold.",
+    step: "Developer · PM resolve",
+    text: "Init a council-resolve blob, collect secure BLS partials, submit resolve. Needs testnet when mock.",
   },
   party: {
-    step: "Party finder",
-    text: "Sign up your local identity's public key on the shared roster, then pick members to prefill Form council.",
+    step: "Developer · Party finder",
+    text: "Shared roster signup. Needs testnet when mock.",
   },
 };
 
 let walkActive = false;
 let walkIndex = 0;
+/** Parallel to BEATS — Next stays disabled until the beat’s primary action succeeds. */
+let beatDone = [false, false, false, false, false];
 let storyAccountId = null;
+let storyProposalId = null;
+let demoMode = "mock";
+let statusThreshold = null;
+let statusApprovals = null;
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -250,10 +264,99 @@ function setGuide(step, text) {
   document.getElementById("guide-narrator").textContent = text;
 }
 
+function showToast(message) {
+  let el = document.getElementById("lab-toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "lab-toast";
+    el.setAttribute("role", "status");
+    Object.assign(el.style, {
+      position: "fixed",
+      bottom: "1.25rem",
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: "40",
+      maxWidth: "min(32rem, calc(100vw - 2rem))",
+      padding: "0.65rem 1rem",
+      borderRadius: "8px",
+      background: "#1c2a33",
+      color: "#f4f7f9",
+      fontSize: "0.85rem",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+      transition: "opacity 200ms ease",
+    });
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.style.opacity = "1";
+  el.hidden = false;
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => {
+    el.style.opacity = "0";
+    setTimeout(() => {
+      el.hidden = true;
+    }, 220);
+  }, 4800);
+}
+
+/** Drawer endpoints return 501 in mock with DEMO_MODE=testnet in the body. */
+function toastIfNeedsTestnet(err) {
+  const msg = String(err && err.message ? err.message : err);
+  if (demoMode === "mock" && msg.includes("DEMO_MODE=testnet")) {
+    showToast("Needs testnet — set DEMO_MODE=testnet and restart for this panel.");
+    return true;
+  }
+  return false;
+}
+
+function applyDemoMode(mode) {
+  demoMode = mode === "testnet" ? "testnet" : "mock";
+  const banner = document.getElementById("mode-banner");
+  const badge = document.getElementById("status-mode");
+  if (banner) {
+    banner.dataset.mode = demoMode;
+    banner.textContent =
+      demoMode === "testnet" ? "TESTNET · live chain" : "MOCK · local ledger";
+  }
+  if (badge) {
+    badge.dataset.mode = demoMode;
+    badge.textContent = demoMode === "testnet" ? "Testnet" : "Mock";
+  }
+}
+
+function updateStatusStrip({ account, threshold, approvals, beatLabel } = {}) {
+  if (account !== undefined && account !== null) {
+    const el = document.getElementById("status-account");
+    if (el) el.textContent = `Account ${account}`;
+  }
+  if (threshold !== undefined && threshold !== null) {
+    statusThreshold = threshold;
+    const el = document.getElementById("status-threshold");
+    if (el) el.textContent = `Threshold ${threshold}`;
+  }
+  if (approvals !== undefined && approvals !== null) {
+    statusApprovals = approvals;
+    const el = document.getElementById("status-approvals");
+    if (el) {
+      const t = statusThreshold != null ? `/${statusThreshold}` : "";
+      el.textContent = `Approvals ${approvals}${t}`;
+    }
+  }
+  if (beatLabel) {
+    const el = document.getElementById("status-beat-label");
+    if (el) el.textContent = beatLabel;
+  }
+}
+
+function openDevDrawer() {
+  const d = document.getElementById("dev-drawer");
+  if (d && !d.open) d.open = true;
+}
+
 function syncGuideForTab(tab) {
   if (walkActive) {
-    const ch = CHAPTERS[walkIndex];
-    setGuide(ch.step, ch.text);
+    const beat = BEATS[walkIndex];
+    setGuide(beat.step, beat.text);
     return;
   }
   const b = BROWSE[tab];
@@ -261,7 +364,7 @@ function syncGuideForTab(tab) {
   else {
     setGuide(
       "Browse freely",
-      "Pick a chapter below, or start the example walkthrough to load Alice, Bob, and Carol and step through a complete payout story."
+      "Step through the five-beat proposals walkthrough, or open the developer drawer for aggregate, rotate, unsafe UTF-8, party finder, and PM resolve."
     );
   }
 }
@@ -275,6 +378,13 @@ function applyAccountIds(id) {
       const el = document.getElementById(fid);
       if (el) el.value = s;
     });
+  updateStatusStrip({ account: id });
+}
+
+function markBeatDone(index) {
+  if (index < 0 || index >= beatDone.length) return;
+  beatDone[index] = true;
+  if (walkActive) setWalkUi(true);
 }
 
 function prefillStoryFields() {
@@ -319,23 +429,61 @@ function setWalkUi(active) {
   const prev = document.getElementById("btn-walk-prev");
   if (active) {
     prev.disabled = walkIndex === 0;
-    next.textContent = walkIndex >= CHAPTERS.length - 1 ? "Finish" : "Next chapter →";
+    next.disabled = !beatDone[walkIndex];
+    next.textContent = walkIndex >= BEATS.length - 1 ? "Finish" : "Next beat →";
+  }
+}
+
+function prepareBeatEntry(index) {
+  const beat = BEATS[index];
+  if (!beat) return;
+  if (beat.beat === 4) {
+    document.getElementById("prop-target").value = STORY.propTarget;
+    document.getElementById("prop-function").value = STORY.propFunction;
+    document.getElementById("prop-args-hex").value = STORY.propArgsHex;
+    document.getElementById("prop-deadline").value = String(STORY.propDeadline);
+    document.getElementById("prop-signer").value = "alice";
+    document.getElementById("prop-confirm").checked = false;
+    document.getElementById("prop-approve-btn").disabled = true;
+    if (storyAccountId !== null) applyAccountIds(storyAccountId);
+  }
+  if (beat.beat === 5) {
+    document.getElementById("prop-signer").value = "bob";
+    document.getElementById("prop-confirm").checked = false;
+    document.getElementById("prop-approve-btn").disabled = true;
+    if (storyProposalId !== null) {
+      document.getElementById("prop-id").value = String(storyProposalId);
+    }
   }
 }
 
 function goWalkChapter(i) {
-  walkIndex = Math.max(0, Math.min(CHAPTERS.length - 1, i));
-  const ch = CHAPTERS[walkIndex];
-  activateTab(ch.tab, { fromWalk: true });
+  walkIndex = Math.max(0, Math.min(BEATS.length - 1, i));
+  const beat = BEATS[walkIndex];
+  prepareBeatEntry(walkIndex);
+  activateTab(beat.tab, {
+    fromWalk: true,
+    beatPhase: beat.beatPhase === "finalize" ? "finalize" : undefined,
+  });
   setWalkUi(true);
-  syncGuideForTab(ch.tab);
+  syncGuideForTab(beat.tab);
 }
 
 async function startWalkthrough() {
   try {
+    beatDone = [false, false, false, false, false];
+    storyProposalId = null;
+    statusApprovals = null;
     await ensureStoryCast();
     prefillStoryFields();
+    // Beat 1 primary action: cast ready.
+    beatDone[0] = true;
     goWalkChapter(0);
+    updateStatusStrip({
+      threshold: STORY.threshold,
+      approvals: 0,
+      beatLabel: "Beat 1 · Cast",
+    });
   } catch (e) {
     alert(e.message);
   }
@@ -343,7 +491,7 @@ async function startWalkthrough() {
 
 function exitWalkthrough() {
   setWalkUi(false);
-  const active = document.querySelector(".tab.active");
+  const active = document.querySelector(".beat-dots .tab.active, .drawer-tabs .tab.active");
   syncGuideForTab(active ? active.dataset.tab : "cast");
 }
 
@@ -411,6 +559,7 @@ async function importPk() {
 async function refreshSetupStatus() {
   try {
     const status = await api("/api/setup/status");
+    if (status.demo_mode) applyDemoMode(status.demo_mode);
     const count = status.identities_count;
     document.getElementById("setup-store-status").textContent =
       `unlocked · ${count} identit${count === 1 ? "y" : "ies"} · ${status.store_path}`;
@@ -455,6 +604,7 @@ async function refreshParty() {
     renderPartyList(members);
     setLog("party-log", `roster: ${members.length} member(s)`, true);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     showError("party-log", e.message);
   }
 }
@@ -504,6 +654,7 @@ async function partySignup() {
     await refreshParty();
     setLog("party-log", `signed up as ${name}`, true);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     showError("party-log", e.message);
   }
 }
@@ -560,6 +711,10 @@ async function submitCreateAccount() {
       }
     } catch (_) {}
     showSubmit("create-log", { ...out, log: (out.log || "") + next });
+    if (out.outcome !== "panic" && out.tx_status !== "failed") {
+      updateStatusStrip({ threshold, approvals: 0 });
+      if (walkActive && walkIndex === 1) markBeatDone(1);
+    }
   } catch (e) {
     showError("create-log", e.message);
   }
@@ -583,6 +738,24 @@ async function queryAccount() {
   try {
     const out = await api(`/api/account/${id}`);
     setLog("query-log", out ? JSON.stringify(out, null, 2) : "not found", true);
+    if (out) {
+      updateStatusStrip({
+        account: id,
+        threshold: out.threshold,
+        approvals: statusApprovals != null ? statusApprovals : 0,
+      });
+      try {
+        const meta = await api(`/api/account/${id}/meta`);
+        if (meta) {
+          setLog(
+            "query-log",
+            JSON.stringify(out, null, 2) + "\n--- meta ---\n" + JSON.stringify(meta, null, 2),
+            true
+          );
+        }
+      } catch (_) {}
+      if (walkActive && walkIndex === 2) markBeatDone(2);
+    }
   } catch (e) {
     showError("query-log", e.message);
   }
@@ -627,6 +800,7 @@ async function submitQuorum() {
     const out = await api("/api/quorum/submit", { method: "POST", body: JSON.stringify(quorumBody()) });
     showSubmit("quorum-log", out);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     showError("quorum-log", e.message);
   }
 }
@@ -637,6 +811,7 @@ async function checkQuorum() {
     const out = await api("/api/quorum/diagnose", { method: "POST", body: JSON.stringify(quorumBody()) });
     showSubmit("quorum-log", out);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     showError("quorum-log", e.message);
   }
 }
@@ -656,6 +831,7 @@ async function submitQuorumAgg() {
     const out = await api("/api/quorum-agg/submit", { method: "POST", body: JSON.stringify(aggBody()) });
     showSubmit("agg-log", out);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     showError("agg-log", e.message);
   }
 }
@@ -666,6 +842,7 @@ async function checkQuorumAgg() {
     const out = await api("/api/quorum-agg/check", { method: "POST", body: JSON.stringify(aggBody()) });
     showSubmit("agg-log", out);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     showError("agg-log", e.message);
   }
 }
@@ -683,6 +860,7 @@ async function submitChangeAccount() {
     });
     showSubmit("change-log", out);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     showError("change-log", e.message);
   }
 }
@@ -706,11 +884,13 @@ async function proposalCreate() {
       }),
     });
     const submit = out.submit || out;
+    storyProposalId = out.allocated_id_hint;
     document.getElementById("prop-id").value = String(out.allocated_id_hint);
     showSubmit("prop-log", {
       ...submit,
       log: (submit.log || "") + `\nallocated_id_hint: ${out.allocated_id_hint}`,
     });
+    updateStatusStrip({ approvals: 0 });
   } catch (e) {
     showError("prop-log", e.message);
   }
@@ -785,6 +965,23 @@ async function proposalApprove() {
       ...submit,
       log: (submit.log || "") + extra,
     });
+    // Refresh approval count from status when possible.
+    try {
+      const st = await api(`/api/proposal/${id}`);
+      if (st && st.approvals_len != null) {
+        updateStatusStrip({ approvals: st.approvals_len });
+      } else {
+        updateStatusStrip({
+          approvals: (statusApprovals != null ? statusApprovals : 0) + 1,
+        });
+      }
+    } catch (_) {
+      updateStatusStrip({
+        approvals: (statusApprovals != null ? statusApprovals : 0) + 1,
+      });
+    }
+    if (walkActive && walkIndex === 3 && signer === "alice") markBeatDone(3);
+    // Beat 5 still needs finalize — Bob approve alone does not unlock Finish.
   } catch (e) {
     showError("prop-log", e.message);
   }
@@ -796,6 +993,9 @@ async function proposalFinalize() {
   try {
     const out = await api(`/api/proposal/${id}/finalize`, { method: "POST", body: "{}" });
     showSubmit("prop-log", out);
+    if (out.outcome !== "panic" && out.tx_status !== "failed") {
+      if (walkActive && walkIndex === 4) markBeatDone(4);
+    }
   } catch (e) {
     showError("prop-log", e.message);
   }
@@ -822,6 +1022,7 @@ async function pmResolveInit() {
     );
     await pmResolveList();
   } catch (e) {
+    toastIfNeedsTestnet(e);
     setLog("pm-log", e.message, false);
   }
 }
@@ -883,6 +1084,7 @@ async function pmRefreshChain() {
       hint.textContent = `PM ${dep.pm_contract_id.slice(0, 10)}… · ${accounts.length} account(s) · ${markets.length} market(s) (${under} under review)`;
     }
   } catch (e) {
+    toastIfNeedsTestnet(e);
     if (hint) hint.textContent = e.message;
     setLog("pm-log", e.message, false);
   }
@@ -932,6 +1134,7 @@ async function pmResolveList() {
       list.appendChild(row);
     }
   } catch (e) {
+    toastIfNeedsTestnet(e);
     setLog("pm-log", e.message, false);
   }
 }
@@ -958,6 +1161,7 @@ async function pmResolveStatus() {
     if (out.registry_warn) text += `\n${out.registry_warn}`;
     setLog("pm-log", text, true);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     setLog("pm-log", e.message, false);
   }
 }
@@ -989,6 +1193,7 @@ async function pmResolvePreview() {
     document.getElementById("pm-sign-btn").disabled = true;
     setLog("pm-log", "preview ok — compare mnemonic with co-signers, then confirm + sign", true);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     setLog("pm-log", e.message, false);
   }
 }
@@ -1017,6 +1222,7 @@ async function pmResolveSign() {
     );
     await pmResolveList();
   } catch (e) {
+    toastIfNeedsTestnet(e);
     setLog("pm-log", e.message, false);
   }
 }
@@ -1035,6 +1241,7 @@ async function pmResolveSubmit() {
     });
     showSubmit("pm-log", out);
   } catch (e) {
+    toastIfNeedsTestnet(e);
     showError("pm-log", e.message);
   }
 }
@@ -1067,24 +1274,15 @@ function tabFromUrl() {
   return null;
 }
 
-const BEAT_TABS = ["cast", "council", "check", "proposal"];
-
-function beatIndexForTab(tab) {
-  const i = BEAT_TABS.indexOf(tab);
-  return i >= 0 ? i : 0;
-}
-
 function goBeat(delta) {
   const active = document.querySelector(".beat-dots .tab.active");
-  const cur = active ? active.dataset.tab : "cast";
-  let i = beatIndexForTab(cur);
-  // Prefer data-beat when both Propose/Finalize share data-tab=proposal.
+  let i = 0;
   if (active && active.dataset.beat) {
     const b = parseInt(active.dataset.beat, 10);
-    if (!Number.isNaN(b)) i = Math.max(0, Math.min(BEAT_TABS.length - 1, b - 1));
+    if (!Number.isNaN(b)) i = b - 1;
   }
-  i = Math.max(0, Math.min(BEAT_TABS.length - 1, i + delta));
-  const nextTab = BEAT_TABS[i];
+  i = Math.max(0, Math.min(BEATS.length - 1, i + delta));
+  const beat = BEATS[i];
   const dot = document.querySelector(`.beat-dots .tab[data-beat="${i + 1}"]`);
   if (dot) {
     document.querySelectorAll(".beat-dots .tab").forEach((btn) => {
@@ -1093,12 +1291,24 @@ function goBeat(delta) {
       btn.setAttribute("aria-selected", on ? "true" : "false");
     });
   }
-  activateTab(nextTab, { fromBeatNav: true });
+  if (walkActive) {
+    walkIndex = i;
+    prepareBeatEntry(i);
+  }
+  activateTab(beat.tab, {
+    fromBeatNav: true,
+    beatPhase: beat.beatPhase === "finalize" ? "finalize" : undefined,
+  });
+  if (walkActive) setWalkUi(true);
   const label = document.getElementById("status-beat-label");
-  if (label && dot) label.textContent = `Beat ${dot.dataset.beat} · ${dot.textContent.replace(/^\d+\s·\s/, "")}`;
+  if (label && dot) {
+    label.textContent = `Beat ${dot.dataset.beat} · ${dot.textContent.replace(/^\d+\s·\s/, "")}`;
+  }
 }
 
 function activateTab(name, opts = {}) {
+  if (DRAWER_TABS.has(name)) openDevDrawer();
+
   document.querySelectorAll(".tab").forEach((btn) => {
     // goBeat already picked the Propose vs Finalize dot.
     if (opts.fromBeatNav && btn.closest(".beat-dots")) return;
@@ -1121,9 +1331,16 @@ function activateTab(name, opts = {}) {
     if (on) panel.removeAttribute("hidden");
     else panel.setAttribute("hidden", "");
   });
-  if (walkActive && !opts.fromWalk) {
-    const idx = CHAPTERS.findIndex((c) => c.tab === name);
-    if (idx >= 0) walkIndex = idx;
+  if (walkActive && !opts.fromWalk && !opts.fromBeatNav) {
+    if (opts.beat != null && !Number.isNaN(opts.beat)) {
+      walkIndex = Math.max(0, Math.min(BEATS.length - 1, opts.beat - 1));
+    } else if (name === "proposal") {
+      walkIndex = opts.beatPhase === "finalize" ? 4 : 3;
+    } else {
+      const idx = BEATS.findIndex((b) => b.tab === name);
+      if (idx >= 0) walkIndex = idx;
+    }
+    prepareBeatEntry(walkIndex);
     setWalkUi(true);
   }
   if (name === "setup") refreshSetupStatus().catch((e) => console.error(e));
@@ -1178,6 +1395,10 @@ document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
     const opts = {};
     if (btn.dataset.beatPhase) opts.beatPhase = btn.dataset.beatPhase;
+    if (btn.dataset.beat) {
+      const b = parseInt(btn.dataset.beat, 10);
+      if (!Number.isNaN(b)) opts.beat = b;
+    }
     activateTab(btn.dataset.tab, opts);
   });
 });
@@ -1198,11 +1419,12 @@ on("btn-walk-prev", "click", () => {
   if (walkIndex > 0) goWalkChapter(walkIndex - 1);
 });
 on("btn-walk-next", "click", () => {
-  if (walkIndex >= CHAPTERS.length - 1) {
+  if (!beatDone[walkIndex]) return;
+  if (walkIndex >= BEATS.length - 1) {
     exitWalkthrough();
     setGuide(
       "Walkthrough complete",
-      "You’ve walked the treasury story. Browse any chapter freely, or start again to replay with a fresh account id."
+      "You’ve walked the five-beat proposals story. Browse any beat freely, or open the developer drawer — start again to replay with a fresh account id."
     );
     return;
   }
