@@ -14,13 +14,15 @@ const STORY = {
   propSigner: "alice",
 };
 
-/** Five-beat proposals path (free browse via tabs + arrows). */
+const PURPOSES = ["Payout", "Config change", "Member rotation"];
+
+/** Five-beat path (free browse via tabs + arrows). */
 const BEATS = [
   { tab: "cast", beat: 1 },
   { tab: "council", beat: 2 },
   { tab: "check", beat: 3 },
-  { tab: "proposal", beat: 4, beatPhase: null },
-  { tab: "proposal", beat: 5, beatPhase: "finalize" },
+  { tab: "proposal", beat: 4 },
+  { tab: "finalize", beat: 5 },
 ];
 
 const COPY_ICON_SVG =
@@ -36,7 +38,7 @@ const COUNCIL_ICON_SVG =
   `<path d="M14 19c.8-2 2.2-3 4-3 1.2 0 2.2.4 3 1.2"/>` +
   `</svg>`;
 
-let propPreviewShown = false;
+let intentConfirmed = false;
 let storyAccountId = null;
 let storyProposalId = null;
 let demoMode = "mock";
@@ -44,14 +46,18 @@ let statusThreshold = null;
 let statusApprovals = null;
 /** Councils created during this demo run: { id, members[], threshold, nonce?, meta? } */
 let demoCouncils = [];
+/** Proposals from this demo run: { id, accountId, purpose, description, status, approvals } */
+let demoProposals = [];
 /** Beat 2: selected identity names for Form council. */
 let councilSelected = new Set();
-/** Beat 3 / 4–5: selected demo council id. */
+/** Beat 3+: selected demo council id. */
 let selectedCouncilId = null;
-/** Beat 4–5: single active approve-as signer. */
+/** Beat 5: selected proposal id. */
+let selectedProposalId = null;
+/** Beat 5: single active approve-as signer. */
 let activePropSigner = null;
-/** Last cast click — soft hint for later beats. */
-let lastClickedIdentity = null;
+/** Beat 1: who you are (blue header chip). */
+let youIdentity = null;
 let cachedIdentities = [];
 
 async function api(path, opts = {}) {
@@ -75,10 +81,6 @@ async function api(path, opts = {}) {
 
 function el(id) {
   return document.getElementById(id);
-}
-
-function splitNames(s) {
-  return String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
 }
 
 function submitOk(out) {
@@ -122,7 +124,7 @@ function setOutcome(id, html, ok = true) {
   const node = el(id);
   if (!node) return;
   node.hidden = false;
-  node.className = "outcome " + (ok ? "status-ok" : "status-err");
+  node.className = "outcome outcome-row " + (ok ? "status-ok" : "status-err");
   node.innerHTML = html;
 }
 
@@ -134,7 +136,7 @@ function formatSubmitHtml(out) {
   const ok = submitOk(out);
   const parts = [];
   parts.push(outcomeChip(ok));
-  parts.push(`<span class="outcome-title">${out.outcome || (ok ? "ok" : "error")}</span>`);
+  parts.push(`<span class="outcome-title">${escapeHtml(out.outcome || (ok ? "ok" : "error"))}</span>`);
   const lines = [];
   if (out.tx_status) lines.push(`tx: ${out.tx_status}`);
   if (out.tx_hash) lines.push(`hash: ${String(out.tx_hash).slice(0, 16)}…`);
@@ -142,7 +144,7 @@ function formatSubmitHtml(out) {
   if (out.note) lines.push(out.note);
   if (out.check !== undefined && out.check !== null) lines.push(`check: ${out.check}`);
   if (lines.length) {
-    parts.push(`<p class="outcome-body">${escapeHtml(lines.join("\n"))}</p>`);
+    parts.push(`<span class="outcome-meta">${escapeHtml(lines.join(" · "))}</span>`);
   }
   return { html: parts.join(" "), ok };
 }
@@ -164,7 +166,7 @@ function showErrorOutcome(outcomeId, message) {
   setOutcome(
     outcomeId,
     `${outcomeChip(false)}<span class="outcome-title">error</span>` +
-      `<p class="outcome-body">${escapeHtml(message)}</p>`,
+      `<span class="outcome-meta">${escapeHtml(message)}</span>`,
     false
   );
 }
@@ -175,6 +177,41 @@ function applyDemoMode(mode) {
   if (badge) {
     badge.dataset.mode = demoMode;
     badge.textContent = demoMode === "testnet" ? "Testnet" : "Mock";
+  }
+}
+
+function updateYouChip() {
+  const chip = el("status-you");
+  if (!chip) return;
+  if (youIdentity) {
+    chip.hidden = false;
+    chip.textContent = `You: ${youIdentity}`;
+  } else {
+    chip.hidden = true;
+    chip.textContent = "You: —";
+  }
+}
+
+function updateHeaderCouncil({ animate } = {}) {
+  const wrap = el("header-council");
+  const icon = el("header-council-icon");
+  const idEl = el("header-council-id");
+  if (!wrap) return;
+  const id = selectedCouncilId != null ? selectedCouncilId : storyAccountId;
+  if (id == null) {
+    wrap.hidden = true;
+    wrap.setAttribute("aria-hidden", "true");
+    wrap.classList.remove("pop");
+    return;
+  }
+  wrap.hidden = false;
+  wrap.setAttribute("aria-hidden", "false");
+  if (icon) icon.innerHTML = COUNCIL_ICON_SVG;
+  if (idEl) idEl.textContent = `#${id}`;
+  if (animate) {
+    wrap.classList.remove("pop");
+    void wrap.offsetWidth;
+    wrap.classList.add("pop");
   }
 }
 
@@ -206,39 +243,46 @@ function applyAccountIds(id) {
   const propAcct = el("prop-account-id");
   if (propAcct) propAcct.value = s;
   updateStatusStrip({ account: id });
+  updateHeaderCouncil();
   renderCouncilsLists();
 }
 
 function syncPropApproveGate() {
-  const propConfirm = el("prop-confirm");
   const propBtn = el("prop-approve-btn");
-  if (!propConfirm || !propBtn) return;
-  propBtn.disabled = !propConfirm.checked || !propPreviewShown;
+  if (!propBtn) return;
+  propBtn.disabled = !intentConfirmed || !selectedProposalId;
+}
+
+function setYouIdentity(name) {
+  youIdentity = name;
+  activePropSigner = name;
+  const signer = el("prop-signer");
+  if (signer) signer.value = name;
+  updateYouChip();
+  renderCastList(cachedIdentities);
+  renderPropSignerList(cachedIdentities);
 }
 
 function prefillStoryFields() {
   const thr = el("create-threshold");
   if (thr) thr.value = String(STORY.threshold);
-  setReadonlyPropFields();
+  const purpose = el("prop-purpose");
+  if (purpose) purpose.value = "Payout";
+  const desc = el("prop-description");
+  if (desc && !desc.value) desc.value = "pay vendor invoice for Q3 tooling";
   const signer = el("prop-signer");
   if (signer) signer.value = STORY.propSigner;
   activePropSigner = STORY.propSigner;
   if (storyAccountId !== null) applyAccountIds(storyAccountId);
 }
 
-function setReadonlyPropFields() {
-  const map = [
-    ["prop-target", "prop-target-display", STORY.propTarget, (v) => (v.length > 18 ? `${v.slice(0, 10)}…${v.slice(-4)}` : v)],
-    ["prop-function", "prop-function-display", STORY.propFunction, (v) => v],
-    ["prop-args-hex", "prop-args-display", STORY.propArgsHex, (v) => (v ? v : "(empty)")],
-    ["prop-deadline", "prop-deadline-display", String(STORY.propDeadline), (v) => v],
-  ];
-  for (const [hid, did, val, fmt] of map) {
-    const hidden = el(hid);
-    const disp = el(did);
-    if (hidden) hidden.value = val;
-    if (disp) disp.textContent = fmt(val);
-  }
+function purposeToFunction(purpose) {
+  const map = {
+    Payout: "noop",
+    "Config change": "noop",
+    "Member rotation": "noop",
+  };
+  return map[purpose] || STORY.propFunction;
 }
 
 async function ensureStoryCast() {
@@ -268,12 +312,26 @@ function pushDemoCouncil({ id, members, threshold, nonce, meta }) {
   else demoCouncils.push(entry);
   selectedCouncilId = id;
   renderCouncilsLists();
+  updateHeaderCouncil();
 }
 
-function renderSignerTile(id, { selected, deselected, active, onClick } = {}) {
+function pushDemoProposal(entry) {
+  const existing = demoProposals.findIndex((p) => p.id === entry.id);
+  if (existing >= 0) demoProposals[existing] = { ...demoProposals[existing], ...entry };
+  else demoProposals.push(entry);
+  selectedProposalId = entry.id;
+  storyProposalId = entry.id;
+  const propId = el("prop-id");
+  if (propId) propId.value = String(entry.id);
+  renderProposalsList();
+  refreshIntentCard();
+}
+
+function renderSignerTile(id, { selected, deselected, active, youSelected, onClick } = {}) {
   const row = document.createElement("div");
   row.className = "id-row";
   if (selected) row.classList.add("selected");
+  if (youSelected) row.classList.add("you-selected");
   if (deselected) row.classList.add("deselected");
   if (active) row.classList.add("active-signer");
   row.dataset.name = id.name;
@@ -316,20 +374,19 @@ function renderCastList(identities) {
   if (!list) return;
   list.innerHTML = "";
   for (const id of identities) {
+    const isYou = youIdentity === id.name;
     list.appendChild(
       renderSignerTile(id, {
+        youSelected: isYou,
+        deselected: !!youIdentity && !isYou,
         onClick: (ident) => {
-          lastClickedIdentity = ident.name;
-          activePropSigner = ident.name;
-          const signer = el("prop-signer");
-          if (signer) signer.value = ident.name;
-          // Soft select for council if not yet forming.
+          setYouIdentity(ident.name);
+          // Soft-select for council if not yet forming.
           if (!councilSelected.has(ident.name)) {
             councilSelected.add(ident.name);
           }
           renderCouncilPickList(cachedIdentities);
-          renderPropSignerList(cachedIdentities);
-          showToast(`${ident.name} ready for later beats`);
+          showToast(`You are ${ident.name}`);
         },
       })
     );
@@ -364,9 +421,11 @@ function renderPropSignerList(identities) {
   const signing = identities.filter((i) => !i.pk_only);
   for (const id of signing) {
     const isActive = activePropSigner === id.name;
+    const isYou = youIdentity === id.name;
     list.appendChild(
       renderSignerTile(id, {
         active: isActive,
+        youSelected: isYou && isActive,
         deselected: activePropSigner && !isActive,
         onClick: (ident) => {
           activePropSigner = ident.name;
@@ -379,22 +438,27 @@ function renderPropSignerList(identities) {
   }
 }
 
-function renderCouncilCard(c, { onSelect } = {}) {
+function renderCouncilCard(c, { onSelect, showDetail } = {}) {
   const card = document.createElement("div");
   card.className = "council-card" + (selectedCouncilId === c.id ? " selected" : "");
   card.dataset.id = String(c.id);
+  const detailBtn = showDetail !== false
+    ? `<button type="button" class="council-detail-btn" data-detail="${c.id}" title="Show members">detail</button>`
+    : "";
   card.innerHTML =
-    `<button type="button" class="council-detail-btn" data-detail="${c.id}" title="Show members">detail</button>` +
+    detailBtn +
+    `<span class="council-card-top">` +
     `<span class="council-card-icon">${COUNCIL_ICON_SVG}</span>` +
-    `<span class="council-card-id">#${c.id}</span>` +
-    `<span class="council-card-meta">${c.threshold}-of-${c.members.length || "?"}</span>`;
+    `<span class="council-card-id">Council #${c.id}</span>` +
+    `</span>` +
+    `<span class="council-card-meta">Threshold ${c.threshold}-of-${c.members.length || "?"}</span>`;
   card.addEventListener("click", (ev) => {
     if (ev.target.closest("[data-detail]")) return;
     if (onSelect) onSelect(c);
   });
-  const detailBtn = card.querySelector("[data-detail]");
-  if (detailBtn) {
-    detailBtn.addEventListener("click", (ev) => {
+  const detail = card.querySelector("[data-detail]");
+  if (detail) {
+    detail.addEventListener("click", (ev) => {
       ev.stopPropagation();
       openCouncilDetail(c);
     });
@@ -403,32 +467,119 @@ function renderCouncilCard(c, { onSelect } = {}) {
 }
 
 function renderCouncilsLists() {
-  for (const listId of ["councils-list", "prop-councils-list"]) {
-    const list = el(listId);
-    if (!list) continue;
-    list.innerHTML = "";
-    if (!demoCouncils.length) {
-      const empty = document.createElement("p");
-      empty.className = "councils-empty";
-      empty.textContent = "No councils yet — form one on Beat 2.";
-      list.appendChild(empty);
-      continue;
-    }
-    for (const c of demoCouncils) {
-      list.appendChild(
-        renderCouncilCard(c, {
-          onSelect: (council) => {
-            selectedCouncilId = council.id;
-            applyAccountIds(council.id);
-            updateStatusStrip({ threshold: council.threshold });
-            if (listId === "councils-list") {
-              fetchCouncilOutcome(council.id);
-            }
-            renderCouncilsLists();
-          },
-        })
-      );
-    }
+  const list = el("councils-list");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!demoCouncils.length) {
+    const empty = document.createElement("p");
+    empty.className = "councils-empty";
+    empty.textContent = "No councils yet — form one on Beat 2.";
+    list.appendChild(empty);
+    return;
+  }
+  for (const c of demoCouncils) {
+    list.appendChild(
+      renderCouncilCard(c, {
+        showDetail: true,
+        onSelect: (council) => {
+          selectedCouncilId = council.id;
+          applyAccountIds(council.id);
+          updateStatusStrip({ threshold: council.threshold });
+          fetchCouncilOutcome(council.id);
+          renderCouncilsLists();
+        },
+      })
+    );
+  }
+}
+
+function renderProposalsList() {
+  const list = el("proposals-list") || el("prop-proposals-list");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!demoProposals.length) {
+    const empty = document.createElement("p");
+    empty.className = "councils-empty";
+    empty.textContent = "No proposals yet — create one on Beat 4.";
+    list.appendChild(empty);
+    return;
+  }
+  // Newest first for visual priority; latest stays selected by default.
+  const ordered = [...demoProposals].sort((a, b) => Number(b.id) - Number(a.id));
+  for (const p of ordered) {
+    const card = document.createElement("div");
+    card.className = "proposal-card" + (String(selectedProposalId) === String(p.id) ? " selected" : "");
+    card.dataset.id = String(p.id);
+    card.innerHTML =
+      `<span class="proposal-card-council">Council #${escapeHtml(String(p.accountId))}</span>` +
+      `<span class="proposal-card-id">Proposal #${escapeHtml(String(p.id))}</span>` +
+      `<span class="proposal-card-purpose">${escapeHtml(p.purpose || "Intent")}</span>`;
+    card.addEventListener("click", () => selectProposal(p.id));
+    list.appendChild(card);
+  }
+}
+
+function selectProposal(id) {
+  const p = demoProposals.find((x) => x.id === id || String(x.id) === String(id));
+  if (!p) return;
+  selectedProposalId = p.id;
+  storyProposalId = p.id;
+  const propId = el("prop-id");
+  if (propId) propId.value = String(p.id);
+  if (p.accountId != null) applyAccountIds(p.accountId);
+  intentConfirmed = false;
+  syncPropApproveGate();
+  renderProposalsList();
+  refreshIntentCard();
+  updateStatusCard(p);
+}
+
+function refreshIntentCard() {
+  const card = el("intent-card");
+  const purposeEl = el("intent-purpose");
+  const descEl = el("intent-description");
+  const preview = el("prop-preview");
+  if (!card) return;
+  const p = demoProposals.find((x) => x.id === selectedProposalId);
+  if (!p) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  if (purposeEl) purposeEl.textContent = p.purpose || "Intent";
+  if (descEl) descEl.textContent = p.description || "(no description)";
+  if (preview) {
+    preview.innerHTML = intentConfirmed && p.fingerprintHtml
+      ? p.fingerprintHtml
+      : `<span class="value-hint">Confirm intent to load the fingerprint (optional).</span>`;
+  }
+  const confirmBtn = el("btn-intent-confirm");
+  if (confirmBtn) {
+    confirmBtn.disabled = intentConfirmed;
+    confirmBtn.textContent = intentConfirmed ? "Intent confirmed" : "Looks right — continue";
+  }
+}
+
+function updateStatusCard(p) {
+  const card = el("prop-status-card");
+  const chip = el("prop-status-chip");
+  const appr = el("prop-status-approvals");
+  if (!card) return;
+  if (!p) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const finalized = p.status === "finalized" || p.finalized === true;
+  if (chip) {
+    chip.textContent = finalized ? "Finalized" : "Open";
+    chip.className = "status-chip " + (finalized ? "finalized" : "open");
+  }
+  const council = demoCouncils.find((c) => c.id === p.accountId);
+  const thr = council ? council.threshold : statusThreshold;
+  const n = p.approvals != null ? p.approvals : 0;
+  if (appr) {
+    appr.textContent = thr != null ? `Approvals ${n}-of-${thr}` : `Approvals ${n}`;
   }
 }
 
@@ -437,7 +588,7 @@ function openCouncilDetail(c) {
   const title = el("council-detail-title");
   const membersEl = el("council-detail-members");
   if (!pop || !membersEl) return;
-  if (title) title.textContent = `Council #${c.id} · ${c.threshold}-of-${c.members.length}`;
+  if (title) title.textContent = `Council #${c.id} · Threshold ${c.threshold}-of-${c.members.length}`;
   membersEl.innerHTML = "";
   for (const name of c.members) {
     const ident = cachedIdentities.find((i) => i.name === name) || {
@@ -459,7 +610,7 @@ function closeCouncilDetail() {
 }
 
 async function fetchCouncilOutcome(id) {
-  setOutcome("query-outcome", `<p class="outcome-body">Looking up council #${id}…</p>`, true);
+  setOutcome("query-outcome", `<span class="outcome-meta">Looking up council #${id}…</span>`, true);
   try {
     const out = await api(`/api/account/${id}`);
     if (!out) {
@@ -471,7 +622,6 @@ async function fetchCouncilOutcome(id) {
     const members = Array.isArray(out.members)
       ? out.members.map((m) => (typeof m === "string" ? m : m.name || JSON.stringify(m)))
       : [];
-    // Prefer names from demoCouncils when available.
     const demo = demoCouncils.find((c) => c.id === Number(id) || c.id === id);
     const memberNames = demo && demo.members.length ? demo.members : members;
     pushDemoCouncil({
@@ -486,18 +636,11 @@ async function fetchCouncilOutcome(id) {
       threshold: out.threshold,
       approvals: statusApprovals != null ? statusApprovals : 0,
     });
-    const lines = [
-      `threshold: ${out.threshold}`,
-      `members: ${memberNames.length ? memberNames.join(", ") : "(see keys)"}`,
-    ];
-    if (out.nonce != null) lines.push(`nonce: ${out.nonce}`);
-    if (meta) {
-      if (meta.nonce != null && out.nonce == null) lines.push(`nonce: ${meta.nonce}`);
-    }
     setOutcome(
       "query-outcome",
       `${outcomeChip(true)}<span class="outcome-title">Council #${id}</span>` +
-        `<p class="outcome-body">${escapeHtml(lines.join("\n"))}</p>`,
+        `<span class="outcome-meta"><strong>Threshold:</strong> ${out.threshold}-of-${memberNames.length || "?"}</span>` +
+        `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(memberNames.length ? memberNames.join(", ") : "(see keys)")}</span>`,
       true
     );
   } catch (e) {
@@ -543,12 +686,7 @@ async function submitCreateAccount() {
   }
   const thrEl = el("create-threshold");
   const threshold = thrEl ? parseInt(thrEl.value, 10) : STORY.threshold;
-  setOutcome("create-outcome", `<p class="outcome-body">Creating council…</p>`, true);
-  const icon = el("council-success-icon");
-  if (icon) {
-    icon.hidden = true;
-    icon.classList.remove("pop");
-  }
+  setOutcome("create-outcome", `<span class="outcome-meta">Creating council…</span>`, true);
   try {
     const out = await api("/api/account/create", {
       method: "POST",
@@ -560,43 +698,66 @@ async function submitCreateAccount() {
       const next = typeof n === "number" ? n : (typeof n === "string" && /^\d+$/.test(n) ? parseInt(n, 10) : null);
       if (out.outcome !== "panic" && next != null) createdId = next - 1;
     } catch (_) {}
-    showSubmitOutcome("create-outcome", out);
     if (submitOk(out) && createdId != null) {
       pushDemoCouncil({ id: createdId, members, threshold });
       applyAccountIds(createdId);
       updateStatusStrip({ threshold, approvals: 0 });
-      if (icon) {
-        icon.hidden = false;
-        // restart animation
-        void icon.offsetWidth;
-        icon.classList.add("pop");
-      }
+      updateHeaderCouncil({ animate: true });
       setOutcome(
         "create-outcome",
         `${outcomeChip(true)}<span class="outcome-title">Council #${createdId} formed</span>` +
-          `<p class="outcome-body">${threshold}-of-${members.length}: ${escapeHtml(members.join(", "))}</p>`,
+          `<span class="outcome-meta"><strong>Threshold:</strong> ${threshold}-of-${members.length}</span>` +
+          `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(members.join(", "))}</span>`,
         true
       );
+    } else {
+      showSubmitOutcome("create-outcome", out);
     }
   } catch (e) {
     showErrorOutcome("create-outcome", e.message);
   }
 }
 
+function getSelectedPurpose() {
+  const hid = el("prop-purpose");
+  return (hid && hid.value.trim()) || "Payout";
+}
+
+function wirePurposeChips() {
+  const wrap = el("prop-purpose-chips");
+  if (!wrap) return;
+  wrap.querySelectorAll(".purpose-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      wrap.querySelectorAll(".purpose-chip").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const hid = el("prop-purpose");
+      if (hid) hid.value = btn.dataset.purpose || "Payout";
+    });
+  });
+}
+
 async function proposalCreate() {
+  let account = selectedCouncilId != null ? Number(selectedCouncilId) : NaN;
   const acctEl = el("prop-account-id");
-  let account = acctEl ? parseInt(acctEl.value, 10) : NaN;
-  if (Number.isNaN(account) && selectedCouncilId != null) account = Number(selectedCouncilId);
+  if (Number.isNaN(account) && acctEl) account = parseInt(acctEl.value, 10);
+  if (Number.isNaN(account) && storyAccountId != null) account = Number(storyAccountId);
   if (Number.isNaN(account)) {
-    showErrorOutcome("prop-outcome", "Select a registry account first.");
+    showErrorOutcome("prop-outcome", "Form a council first (Beat 2).");
     return;
   }
-  const target = (el("prop-target") && el("prop-target").value.trim()) || STORY.propTarget;
-  const functionName = (el("prop-function") && el("prop-function").value.trim()) || STORY.propFunction;
-  const args_hex = (el("prop-args-hex") && el("prop-args-hex").value.trim()) || "";
-  const deadlineEl = el("prop-deadline");
-  const deadline = deadlineEl ? (parseInt(deadlineEl.value, 10) || 0) : STORY.propDeadline;
-  setOutcome("prop-outcome", `<p class="outcome-body">Proposing…</p>`, true);
+  const purpose = getSelectedPurpose();
+  const descEl = el("prop-description");
+  const description = descEl ? descEl.value.trim() : "";
+  if (!description) {
+    showErrorOutcome("prop-outcome", "Add a short description.");
+    return;
+  }
+  // Keep mock chain fields as STORY constants; purpose/description are UI/demo context.
+  const target = STORY.propTarget;
+  const functionName = purposeToFunction(purpose) || STORY.propFunction;
+  const args_hex = STORY.propArgsHex;
+  const deadline = STORY.propDeadline;
+  setOutcome("prop-outcome", `<span class="outcome-meta">Proposing…</span>`, true);
   try {
     const out = await api("/api/proposal/create", {
       method: "POST",
@@ -609,160 +770,137 @@ async function proposalCreate() {
       }),
     });
     const submit = out.submit || out;
-    storyProposalId = out.allocated_id_hint;
-    const propId = el("prop-id");
-    const propDisp = el("prop-id-display");
-    if (propId) propId.value = String(out.allocated_id_hint);
-    if (propDisp) propDisp.textContent = String(out.allocated_id_hint);
-    showSubmitOutcome("prop-outcome", {
-      ...submit,
-      note: `proposal id ${out.allocated_id_hint}`,
+    const id = out.allocated_id_hint;
+    storyProposalId = id;
+    pushDemoProposal({
+      id,
+      accountId: account,
+      purpose,
+      description,
+      status: "open",
+      approvals: 0,
+      finalized: false,
+      fingerprintHtml: null,
     });
     updateStatusStrip({ approvals: 0 });
-    propPreviewShown = false;
-    const confirm = el("prop-confirm");
-    if (confirm) confirm.checked = false;
+    intentConfirmed = false;
     syncPropApproveGate();
-  } catch (e) {
-    showErrorOutcome("prop-outcome", e.message);
-  }
-}
-
-async function proposalStatus() {
-  const idEl = el("prop-id");
-  const id = idEl ? idEl.value : "";
-  if (!id) {
-    showErrorOutcome("prop-outcome", "Propose first to get a proposal id.");
-    return;
-  }
-  setOutcome("prop-outcome", `<p class="outcome-body">Fetching status…</p>`, true);
-  try {
-    const out = await api(`/api/proposal/${id}`);
-    if (!out) {
-      setOutcome("prop-outcome", `${outcomeChip(false)}<span class="outcome-title">not found</span>`, false);
-      return;
+    if (submitOk(submit)) {
+      setOutcome(
+        "prop-outcome",
+        `${outcomeChip(true)}<span class="outcome-title">Proposal #${id}</span>` +
+          `<span class="outcome-meta">${escapeHtml(purpose)} · ${escapeHtml(description)}</span>`,
+        true
+      );
+    } else {
+      showSubmitOutcome("prop-outcome", { ...submit, note: `proposal id ${id}` });
     }
-    if (out.approvals_len != null) updateStatusStrip({ approvals: out.approvals_len });
-    const lines = [
-      `proposal #${id}`,
-      `approvals: ${out.approvals_len != null ? out.approvals_len : "?"}`,
-      out.status != null ? `status: ${out.status}` : null,
-      out.finalized != null ? `finalized: ${out.finalized}` : null,
-    ].filter(Boolean);
-    setOutcome(
-      "prop-outcome",
-      `${outcomeChip(true)}<span class="outcome-title">Status</span>` +
-        `<p class="outcome-body">${escapeHtml(lines.join("\n"))}</p>`,
-      true
-    );
   } catch (e) {
     showErrorOutcome("prop-outcome", e.message);
   }
 }
 
-async function proposalPreview() {
-  const idEl = el("prop-id");
-  const id = idEl ? idEl.value : "";
-  if (!id) {
-    showErrorOutcome("prop-outcome", "Propose first to get a proposal id.");
+async function confirmIntent() {
+  const id = selectedProposalId != null ? selectedProposalId : (el("prop-id") && el("prop-id").value);
+  if (!id && id !== 0) {
+    showErrorOutcome("finalize-outcome", "Select a proposal first.");
     return;
   }
-  const box = el("prop-preview");
-  setOutcome("prop-outcome", `<p class="outcome-body">Previewing fingerprint…</p>`, true);
+  const preview = el("prop-preview");
   try {
     const out = await api(`/api/proposal/${id}/preview`);
-    if (box) {
-      box.hidden = false;
-      box.className = "outcome fingerprint status-ok";
-      box.innerHTML =
-        `<strong>Fingerprint</strong><br>` +
-        `mnemonic: ${escapeHtml(out.digest_mnemonic)}<br>` +
-        `safety: ${escapeHtml(String(out.digest_safety_number))}<br>` +
-        `digest: ${escapeHtml(String(out.digest_hex).slice(0, 24))}…<br>` +
-        `fn=${escapeHtml(out.function_name)} · deadline=${escapeHtml(String(out.deadline))}`;
-    }
-    const confirm = el("prop-confirm");
-    if (confirm) confirm.checked = false;
-    propPreviewShown = true;
+    const html =
+      `mnemonic: ${escapeHtml(out.digest_mnemonic)}<br>` +
+      `safety: ${escapeHtml(String(out.digest_safety_number))}<br>` +
+      `digest: ${escapeHtml(String(out.digest_hex).slice(0, 24))}…`;
+    if (preview) preview.innerHTML = html;
+    const p = demoProposals.find((x) => x.id === id || String(x.id) === String(id));
+    if (p) p.fingerprintHtml = html;
+    intentConfirmed = true;
     syncPropApproveGate();
-    setOutcome(
-      "prop-outcome",
-      `${outcomeChip(true)}<span class="outcome-title">Preview ready</span>` +
-        `<p class="outcome-body">Compare fingerprint, then confirm + approve.</p>`,
-      true
-    );
+    refreshIntentCard();
+    showToast("Intent confirmed — Approve unlocked");
   } catch (e) {
-    propPreviewShown = false;
+    intentConfirmed = false;
     syncPropApproveGate();
-    showErrorOutcome("prop-outcome", e.message);
+    showErrorOutcome("finalize-outcome", e.message);
   }
 }
 
 async function proposalApprove() {
   const idEl = el("prop-id");
   const signerEl = el("prop-signer");
-  const id = idEl ? idEl.value : "";
+  const id = idEl ? idEl.value : (selectedProposalId != null ? String(selectedProposalId) : "");
   const signer = signerEl ? signerEl.value.trim() : (activePropSigner || "");
   if (!id) {
-    showErrorOutcome("prop-outcome", "Propose first.");
+    showErrorOutcome("finalize-outcome", "Select a proposal first.");
     return;
   }
   if (!signer) {
-    showErrorOutcome("prop-outcome", "Select a signer tile.");
+    showErrorOutcome("finalize-outcome", "Select a signer tile.");
     return;
   }
-  if (!propPreviewShown) {
-    showErrorOutcome("prop-outcome", "Preview the proposal first, then confirm + approve.");
+  if (!intentConfirmed) {
+    showErrorOutcome("finalize-outcome", "Confirm the intent first.");
     return;
   }
-  const confirm = el("prop-confirm");
-  if (!confirm || !confirm.checked) {
-    showErrorOutcome("prop-outcome", "Check the confirm box after preview.");
-    return;
-  }
-  setOutcome("prop-outcome", `<p class="outcome-body">Approving as ${escapeHtml(signer)}…</p>`, true);
+  setOutcome("finalize-outcome", `<span class="outcome-meta">Approving as ${escapeHtml(signer)}…</span>`, true);
   try {
     const out = await api(`/api/proposal/${id}/approve`, {
       method: "POST",
       body: JSON.stringify({ signer, confirm: true }),
     });
     const submit = out.submit || out;
-    showSubmitOutcome("prop-outcome", {
+    let approvals = null;
+    try {
+      const st = await api(`/api/proposal/${id}`);
+      if (st && st.approvals_len != null) approvals = st.approvals_len;
+    } catch (_) {}
+    if (approvals == null) {
+      approvals = (statusApprovals != null ? statusApprovals : 0) + 1;
+    }
+    updateStatusStrip({ approvals });
+    const p = demoProposals.find((x) => String(x.id) === String(id));
+    if (p) {
+      p.approvals = approvals;
+      updateStatusCard(p);
+    }
+    showSubmitOutcome("finalize-outcome", {
       ...submit,
       note: `approved as ${signer}`,
     });
-    try {
-      const st = await api(`/api/proposal/${id}`);
-      if (st && st.approvals_len != null) {
-        updateStatusStrip({ approvals: st.approvals_len });
-      } else {
-        updateStatusStrip({
-          approvals: (statusApprovals != null ? statusApprovals : 0) + 1,
-        });
-      }
-    } catch (_) {
-      updateStatusStrip({
-        approvals: (statusApprovals != null ? statusApprovals : 0) + 1,
-      });
-    }
   } catch (e) {
-    showErrorOutcome("prop-outcome", e.message);
+    showErrorOutcome("finalize-outcome", e.message);
   }
 }
 
 async function proposalFinalize() {
   const idEl = el("prop-id");
-  const id = idEl ? idEl.value : "";
+  const id = idEl ? idEl.value : (selectedProposalId != null ? String(selectedProposalId) : "");
   if (!id) {
-    showErrorOutcome("prop-outcome", "Propose first.");
+    showErrorOutcome("finalize-outcome", "Select a proposal first.");
     return;
   }
-  setOutcome("prop-outcome", `<p class="outcome-body">Finalizing…</p>`, true);
+  setOutcome("finalize-outcome", `<span class="outcome-meta">Finalizing…</span>`, true);
   try {
     const out = await api(`/api/proposal/${id}/finalize`, { method: "POST", body: "{}" });
-    showSubmitOutcome("prop-outcome", out);
+    const p = demoProposals.find((x) => String(x.id) === String(id));
+    if (p && submitOk(out)) {
+      p.status = "finalized";
+      p.finalized = true;
+      updateStatusCard(p);
+    }
+    if (submitOk(out)) {
+      setOutcome(
+        "finalize-outcome",
+        `${outcomeChip(true)}<span class="outcome-title">Proposal #${id} finalized</span>`,
+        true
+      );
+    } else {
+      showSubmitOutcome("finalize-outcome", out);
+    }
   } catch (e) {
-    showErrorOutcome("prop-outcome", e.message);
+    showErrorOutcome("finalize-outcome", e.message);
   }
 }
 
@@ -770,34 +908,29 @@ function prepareBeatEntry(index) {
   const beat = BEATS[index];
   if (!beat) return;
   if (beat.beat === 4) {
-    setReadonlyPropFields();
-    activePropSigner = "alice";
-    const signer = el("prop-signer");
-    if (signer) signer.value = "alice";
-    const confirm = el("prop-confirm");
-    if (confirm) confirm.checked = false;
-    propPreviewShown = false;
-    const btn = el("prop-approve-btn");
-    if (btn) btn.disabled = true;
     if (storyAccountId !== null) applyAccountIds(storyAccountId);
-    renderPropSignerList(cachedIdentities);
+    updateHeaderCouncil();
   }
   if (beat.beat === 5) {
-    activePropSigner = "bob";
-    const signer = el("prop-signer");
-    if (signer) signer.value = "bob";
-    const confirm = el("prop-confirm");
-    if (confirm) confirm.checked = false;
-    propPreviewShown = false;
-    const btn = el("prop-approve-btn");
-    if (btn) btn.disabled = true;
-    if (storyProposalId !== null) {
-      const propId = el("prop-id");
-      const propDisp = el("prop-id-display");
-      if (propId) propId.value = String(storyProposalId);
-      if (propDisp) propDisp.textContent = String(storyProposalId);
+    // Prefer latest proposal; default approve-as to “you”, else bob.
+    if (demoProposals.length) {
+      const latest = [...demoProposals].sort((a, b) => Number(b.id) - Number(a.id))[0];
+      selectProposal(latest.id);
+    } else if (storyProposalId != null) {
+      selectProposal(storyProposalId);
     }
+    if (youIdentity) {
+      activePropSigner = youIdentity;
+    } else {
+      activePropSigner = "bob";
+    }
+    const signer = el("prop-signer");
+    if (signer) signer.value = activePropSigner;
+    intentConfirmed = false;
+    syncPropApproveGate();
     renderPropSignerList(cachedIdentities);
+    renderProposalsList();
+    refreshIntentCard();
   }
 }
 
@@ -831,10 +964,7 @@ function goBeat(delta) {
     });
   }
   prepareBeatEntry(target);
-  activateTab(beat.tab, {
-    fromBeatNav: true,
-    beatPhase: beat.beatPhase === "finalize" ? "finalize" : undefined,
-  });
+  activateTab(beat.tab, { fromBeatNav: true });
 }
 
 function activateTab(name, opts = {}) {
@@ -844,15 +974,6 @@ function activateTab(name, opts = {}) {
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-selected", on ? "true" : "false");
   });
-  if (!opts.fromBeatNav && name === "proposal") {
-    const prefer = opts.beatPhase === "finalize" ? "5" : "4";
-    document.querySelectorAll('.beat-dots .tab[data-tab="proposal"]').forEach((btn) => {
-      const on = btn.dataset.beat === prefer;
-      btn.classList.toggle("active", on);
-      btn.setAttribute("aria-selected", on ? "true" : "false");
-    });
-  }
-  // When clicking a beat tab with data-beat, prefer that phase.
   if (!opts.fromBeatNav && opts.beat != null) {
     document.querySelectorAll(".beat-dots .tab").forEach((btn) => {
       const on = String(btn.dataset.beat) === String(opts.beat);
@@ -869,11 +990,14 @@ function activateTab(name, opts = {}) {
     else panel.setAttribute("hidden", "");
   });
   if (name === "check") renderCouncilsLists();
-  if (name === "proposal") {
-    renderCouncilsLists();
+  if (name === "proposal") updateHeaderCouncil();
+  if (name === "finalize") {
+    renderProposalsList();
     renderPropSignerList(cachedIdentities);
+    refreshIntentCard();
   }
   if (name === "council") renderCouncilPickList(cachedIdentities);
+  if (name === "cast") renderCastList(cachedIdentities);
 }
 
 function on(id, ev, fn) {
@@ -905,18 +1029,10 @@ function wireIdentityPopover() {
   });
 }
 
-function wireConfirmGates() {
-  const propConfirm = el("prop-confirm");
-  if (propConfirm) {
-    propConfirm.addEventListener("change", () => syncPropApproveGate());
-  }
-}
-
 function wireBeatTabs() {
   document.querySelectorAll(".beat-dots .tab").forEach((btn) => {
     btn.addEventListener("click", () => {
       const opts = {};
-      if (btn.dataset.beatPhase) opts.beatPhase = btn.dataset.beatPhase;
       if (btn.dataset.beat) {
         const b = parseInt(btn.dataset.beat, 10);
         if (!Number.isNaN(b)) opts.beat = b;
@@ -969,7 +1085,7 @@ function wireBeatTabs() {
 // Init
 prefillStoryFields();
 wireIdentityPopover();
-wireConfirmGates();
+wirePurposeChips();
 wireBeatTabs();
 on("btn-beat-prev", "click", () => goBeat(-1));
 on("btn-beat-next", "click", () => goBeat(1));
@@ -986,11 +1102,23 @@ on("btn-close-council-detail", "click", () => closeCouncilDetail());
     console.error(e);
     try { await refreshIdentities(); } catch (e2) { console.error(e2); }
   }
-  // Soft-select story cast for Form council convenience.
   for (const name of STORY.cast) councilSelected.add(name);
   renderCouncilPickList(cachedIdentities);
   updateStatusStrip({ threshold: STORY.threshold, approvals: 0 });
+  updateYouChip();
+  updateHeaderCouncil();
+
+  // Seed header icon element even when empty (SVG ready).
+  const icon = el("header-council-icon");
+  if (icon && !icon.innerHTML) icon.innerHTML = COUNCIL_ICON_SVG;
 
   const initialTab = tabFromUrl();
   if (initialTab) activateTab(initialTab);
 })();
+
+// Expose handlers used by inline onclick attributes.
+window.submitCreateAccount = submitCreateAccount;
+window.proposalCreate = proposalCreate;
+window.proposalApprove = proposalApprove;
+window.proposalFinalize = proposalFinalize;
+window.confirmIntent = confirmIntent;
