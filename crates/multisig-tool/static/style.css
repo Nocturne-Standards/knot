@@ -18,6 +18,9 @@
 
 * { box-sizing: border-box; }
 
+/* Author rules that set display must not defeat the HTML hidden attribute. */
+[hidden] { display: none !important; }
+
 html { scroll-behavior: smooth; }
 
 body {
@@ -163,6 +166,7 @@ code {
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1;
+  color: var(--ink);
   animation: rise 0.8s var(--ease) both;
 }
 

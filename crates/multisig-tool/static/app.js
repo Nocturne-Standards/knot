@@ -515,7 +515,9 @@ async function startWalkthrough() {
       beatLabel: "Beat 1 · Cast",
     });
   } catch (e) {
-    alert(e.message);
+    const msg = e && e.message ? e.message : String(e);
+    setGuide("Walkthrough could not start", msg);
+    alert(msg);
   }
 }
 
@@ -1497,6 +1499,16 @@ on("btn-beat-next", "click", () => goBeat(1));
   const sections = dots
     .map((d) => document.getElementById(d.dataset.slide))
     .filter(Boolean);
+
+  function scrollToHash(behavior) {
+    const id = (location.hash || "#top").replace(/^#/, "") || "top";
+    const el = document.getElementById(id);
+    if (!el || !root.contains(el)) return;
+    // Window doesn't scroll — .slides owns overflow.
+    const top = el.offsetTop - root.offsetTop;
+    root.scrollTo({ top, behavior: behavior || "auto" });
+  }
+
   const sync = () => {
     let best = 0;
     let bestDist = Infinity;
@@ -1510,5 +1522,11 @@ on("btn-beat-next", "click", () => goBeat(1));
     dots.forEach((d, i) => d.classList.toggle("active", i === best));
   };
   root.addEventListener("scroll", sync, { passive: true });
+  window.addEventListener("hashchange", () => {
+    scrollToHash("smooth");
+    sync();
+  });
+  // Initial hash (e.g. #demo from cover CTA / deep link).
+  scrollToHash("auto");
   sync();
 })();
