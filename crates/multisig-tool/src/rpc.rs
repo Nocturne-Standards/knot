@@ -34,6 +34,12 @@ use crate::{chain, keystore};
 use multisig_tool::blob::{self, BlobFile, BlobKind};
 use multisig_tool::bls;
 use multisig_tool::collector_client::{self, CollectorClient};
+use multisig_tool::mock_ledger::{DemoMode, MockLedger, MockProposal, MockProposalStatus};
+
+/// Chain id baked into mock proposals (matches live testnet `init_chain_id`).
+const MOCK_CHAIN_ID: u64 = 2;
+
+const MOCK_DRAWER_MSG: &str = "mock mode: use DEMO_MODE=testnet";
 
 struct AppState {
     identities: Mutex<Vec<keystore::Identity>>,
@@ -42,6 +48,9 @@ struct AppState {
     token: String,
     /// When true, `/` serves the standalone PM council-resolve UI.
     standalone_pm_resolve: bool,
+    demo_mode: DemoMode,
+    /// In-process ledger; only read/written when `demo_mode == Mock`.
+    mock: Mutex<MockLedger>,
 }
 
 #[derive(Default)]
@@ -74,6 +83,9 @@ pub async fn serve_with_options(
     let password = crate::prompt_password()?;
     let identities = keystore::load(&store_path, &password)?;
 
+    let demo_mode = DemoMode::from_env();
+    eprintln!("DEMO_MODE={}", demo_mode.as_str());
+
     let mut token_bytes = [0u8; 32];
     OsRng.fill_bytes(&mut token_bytes);
     let state = Arc::new(AppState {
@@ -82,6 +94,8 @@ pub async fn serve_with_options(
         store_path,
         token: hex::encode(token_bytes),
         standalone_pm_resolve: opts.standalone_pm_resolve,
+        demo_mode,
+        mock: Mutex::new(MockLedger::new()),
     });
 
     let api = Router::new()
@@ -348,6 +362,8 @@ struct SetupStatusOut {
     #[serde(skip_serializing_if = "Option::is_none")]
     collector_url: Option<String>,
     collector_user_configured: bool,
+    /// `"mock"` | `"testnet"` — mirrors `DEMO_MODE` (default mock).
+    demo_mode: &'static str,
 }
 
 /// Server-side-only env read — the URL is shown to the browser (harmless),
@@ -364,11 +380,91 @@ async fn api_setup_status(State(state): State<Arc<AppState>>) -> Json<SetupStatu
         collector_configured: collector_url.is_some(),
         collector_url,
         collector_user_configured,
+        demo_mode: state.demo_mode.as_str(),
     })
 }
 
 fn to_400<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
     (StatusCode::BAD_REQUEST, e.to_string())
+}
+
+fn mock_drawer_unavailable(state: &AppState) -> Result<(), (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        Err((StatusCode::NOT_IMPLEMENTED, MOCK_DRAWER_MSG.into()))
+    } else {
+        Ok(())
+    }
+}
+
+fn mock_ok_submit(log: String, tx_hash: String) -> SubmitOut {
+    SubmitOut {
+        log,
+        outcome: "ok".into(),
+        tx_status: "confirmed".into(),
+        tx_hash: Some(tx_hash),
+        panic_line: None,
+        note: Some("DEMO_MODE=mock — no chain submit".into()),
+        diagnose: None,
+        check: None,
+    }
+}
+
+fn mock_proposal_preview(p: &MockProposal) -> Result<SignPreviewOut, (StatusCode, String)> {
+    if p.status != MockProposalStatus::Open {
+        return Err((StatusCode::BAD_REQUEST, "proposal is not Open".into()));
+    }
+    let intent = multisig_encoding::ProposalIntent {
+        chain_id: p.chain_id,
+        committee_id: p.registry_account_id,
+        nonce: p.nonce,
+        target_contract_id: p.target,
+        function_name: p.function_name.clone(),
+        call_args: p.call_args.clone(),
+        deadline: p.deadline,
+    };
+    let digest = multisig_encoding::recompute_and_verify(&intent, &p.digest).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "REFUSING: mock digest does not match recomputed intent".into(),
+        )
+    })?;
+    Ok(SignPreviewOut {
+        digest_hex: format!("0x{}", hex::encode(digest)),
+        digest_mnemonic: multisig_encoding::digest_mnemonic(&digest),
+        digest_safety_number: multisig_encoding::digest_safety_number(&digest),
+        chain_id: intent.chain_id,
+        committee_id: intent.committee_id,
+        nonce: intent.nonce,
+        target_hex: format!("0x{}", hex::encode(intent.target_contract_id)),
+        function_name: intent.function_name,
+        call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
+        deadline: intent.deadline,
+    })
+}
+
+fn mock_proposal_status_out(id: u64, p: MockProposal) -> ProposalStatusOut {
+    let status = match p.status {
+        MockProposalStatus::Open => "Open",
+        MockProposalStatus::Finalized => "Executed",
+    };
+    ProposalStatusOut {
+        id,
+        status: status.into(),
+        registry_account_id: p.registry_account_id,
+        chain_id: p.chain_id,
+        nonce: p.nonce,
+        target: format!("0x{}", hex::encode(p.target)),
+        function: p.function_name,
+        call_args_hex: format!("0x{}", hex::encode(&p.call_args)),
+        deadline: p.deadline,
+        digest_hex: format!("0x{}", hex::encode(p.digest)),
+        approvals_len: p.approvals.len(),
+        approvals: p
+            .approvals
+            .iter()
+            .map(|pk| bs58::encode(pk).into_string())
+            .collect(),
+    }
 }
 
 #[derive(Serialize)]
@@ -394,7 +490,10 @@ impl From<collector_client::PartyMember> for PartyMemberOut {
 /// Party finder proxy — `multisig-tool serve` holds `MULTISIG_COLLECTOR_*`
 /// in its own process env; the browser only ever sees names/pks/notes here,
 /// never the collector's Basic Auth password.
-async fn api_party_list() -> Result<Json<Vec<PartyMemberOut>>, (StatusCode, String)> {
+async fn api_party_list(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<PartyMemberOut>>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let client = CollectorClient::resolve(None).map_err(to_400)?;
     let members = client.list_party().await.map_err(to_500)?;
     Ok(Json(members.into_iter().map(PartyMemberOut::from).collect()))
@@ -412,6 +511,7 @@ async fn api_party_signup(
     State(state): State<Arc<AppState>>,
     Json(req): Json<PartySignupReq>,
 ) -> Result<Json<PartyMemberOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let pk = find_pk(&state, &req.name).await?;
     let client = CollectorClient::resolve(None).map_err(to_400)?;
     let member = client
@@ -501,6 +601,17 @@ async fn api_account_create(
     for name in &req.members {
         members.push(find_pk(&state, name).await?);
     }
+    if state.demo_mode == DemoMode::Mock {
+        let member_bytes: Vec<[u8; 96]> = members.iter().map(|pk| pk.to_bytes()).collect();
+        let mut mock = state.mock.lock().await;
+        let id = mock
+            .create_account(member_bytes, req.threshold)
+            .map_err(to_400)?;
+        return Ok(Json(mock_ok_submit(
+            format!("mock: create_account id={id} threshold={}", req.threshold),
+            format!("mock-create-account-{id}"),
+        )));
+    }
     let args = CreateAccountArgs {
         members,
         threshold: req.threshold,
@@ -521,8 +632,21 @@ struct AccountView {
 }
 
 async fn api_account_query(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
 ) -> Result<Json<Option<AccountView>>, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        return Ok(Json(mock.account(id).map(|v| AccountView {
+            threshold: v.threshold,
+            nonce: v.nonce,
+            members: v
+                .members
+                .iter()
+                .map(|pk| bs58::encode(pk).into_string())
+                .collect(),
+        })));
+    }
     let bytes = chain::encode(&id).map_err(to_500)?;
     let view: Option<MultisigAccountView> = chain::query("account", bytes).await.map_err(to_500)?;
     Ok(Json(view.map(|v| AccountView {
@@ -540,8 +664,17 @@ struct MetaOut {
 }
 
 async fn api_account_meta(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
 ) -> Result<Json<Option<MetaOut>>, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        return Ok(Json(mock.account_meta(id).map(|m| MetaOut {
+            threshold: m.threshold,
+            nonce: m.nonce,
+            members_len: m.member_count,
+        })));
+    }
     let bytes = chain::encode(&id).map_err(to_500)?;
     let meta: Option<AccountMeta> = chain::query("account_meta", bytes).await.map_err(to_500)?;
     Ok(Json(meta.map(|m| MetaOut {
@@ -552,14 +685,30 @@ async fn api_account_meta(
 }
 
 async fn api_account_keys(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
 ) -> Result<Json<Option<Vec<String>>>, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        return Ok(Json(mock.account(id).map(|a| {
+            a.members
+                .into_iter()
+                .map(|pk| hex::encode(pk))
+                .collect()
+        })));
+    }
     let bytes = chain::encode(&id).map_err(to_500)?;
     let keys: Option<Vec<Vec<u8>>> = chain::query("member_key_bytes", bytes).await.map_err(to_500)?;
     Ok(Json(keys.map(|ks| ks.into_iter().map(hex::encode).collect())))
 }
 
-async fn api_account_next_id() -> Result<Json<u64>, (StatusCode, String)> {
+async fn api_account_next_id(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<u64>, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        return Ok(Json(mock.next_account_id()));
+    }
     let bytes = chain::encode(&()).map_err(to_500)?;
     let next: u64 = chain::query("next_account_id", bytes).await.map_err(to_500)?;
     Ok(Json(next))
@@ -571,7 +720,10 @@ struct DeploymentsPmOut {
     registry_contract_id: String,
 }
 
-async fn api_deployments_pm() -> Result<Json<DeploymentsPmOut>, (StatusCode, String)> {
+async fn api_deployments_pm(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<DeploymentsPmOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let pm = chain::contract_id_hex(chain::Contract::PredictionMarket).map_err(to_500)?;
     let registry = chain::contract_id_hex(chain::Contract::Registry).map_err(to_500)?;
     Ok(Json(DeploymentsPmOut {
@@ -607,6 +759,7 @@ async fn api_registry_accounts(
     State(state): State<Arc<AppState>>,
     Query(q): Query<RegistryAccountsQuery>,
 ) -> Result<Json<Vec<RegistryAccountRow>>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let scan = q.limit.clamp(1, 256);
     let next_bytes = chain::encode(&()).map_err(to_500)?;
     let next: u64 = chain::query("next_account_id", next_bytes)
@@ -684,8 +837,10 @@ struct PmMarketRow {
 }
 
 async fn api_pm_markets(
+    State(state): State<Arc<AppState>>,
     Query(q): Query<PmMarketsQuery>,
 ) -> Result<Json<Vec<PmMarketRow>>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let limit = q.limit.clamp(1, 200);
     // When filtering, scan a wider page so Under review rows still surface.
     let fetch = if q.under_review_only {
@@ -801,6 +956,7 @@ async fn api_quorum_submit(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
     let args = VerifyQuorumArgs {
@@ -829,6 +985,7 @@ async fn api_quorum_check(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
     let args = VerifyQuorumArgs {
@@ -860,6 +1017,7 @@ async fn api_quorum_diagnose(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     api_quorum_check(State(state), Json(req)).await
 }
 
@@ -867,6 +1025,7 @@ async fn api_quorum_agg_submit(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let identities = state.identities.lock().await;
     let mut signer_keys = Vec::with_capacity(req.signers.len());
@@ -908,6 +1067,7 @@ async fn api_quorum_agg_check(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let identities = state.identities.lock().await;
     let mut signer_keys = Vec::with_capacity(req.signers.len());
@@ -957,6 +1117,7 @@ async fn api_change_account_submit(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ChangeAccountReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let mut new_members = Vec::with_capacity(req.new_members.len());
     for name in &req.new_members {
         new_members.push(find_pk(&state, name).await?);
@@ -1005,6 +1166,7 @@ struct ProposalCreateOut {
 }
 
 async fn api_proposal_create(
+    State(state): State<Arc<AppState>>,
     Json(req): Json<ProposalCreateReq>,
 ) -> Result<Json<ProposalCreateOut>, (StatusCode, String)> {
     let target_bytes: [u8; 32] = hex::decode(req.target.trim_start_matches("0x"))
@@ -1017,6 +1179,27 @@ async fn api_proposal_create(
     } else {
         hex::decode(req.args_hex.trim_start_matches("0x")).map_err(to_500)?
     };
+    if state.demo_mode == DemoMode::Mock {
+        let mut mock = state.mock.lock().await;
+        let before = mock.next_proposal_id();
+        let id = mock
+            .create_proposal(
+                req.account,
+                target_bytes,
+                req.function,
+                call_args,
+                req.deadline,
+                MOCK_CHAIN_ID,
+            )
+            .map_err(to_400)?;
+        return Ok(Json(ProposalCreateOut {
+            submit: mock_ok_submit(
+                format!("mock: propose id={id} account={}", req.account),
+                format!("mock-propose-{id}"),
+            ),
+            allocated_id_hint: before,
+        }));
+    }
     let before: u64 = chain::query_contract(
         chain::Contract::Proposals,
         "next_proposal_id",
@@ -1123,8 +1306,16 @@ fn proposal_preview_from_view(view: &ProposalView) -> Result<SignPreviewOut, (St
 }
 
 async fn api_proposal_preview(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
 ) -> Result<Json<SignPreviewOut>, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        let p = mock
+            .proposal(id)
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("proposal {id} not found")))?;
+        return Ok(Json(mock_proposal_preview(&p)?));
+    }
     let view: Option<ProposalView> = chain::query_contract(
         chain::Contract::Proposals,
         "proposal",
@@ -1138,8 +1329,10 @@ async fn api_proposal_preview(
 
 /// Preview a collector proposals-kind blob (no signing).
 async fn api_blob_preview(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<String>,
 ) -> Result<Json<SignPreviewOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let client = CollectorClient::resolve(None).map_err(to_500)?;
     let file = client.pull(&id).await.map_err(to_500)?;
     let proposal = file.to_proposal_blob().map_err(to_500)?;
@@ -1175,6 +1368,74 @@ async fn api_proposal_approve(
             "confirm required — call /preview first, then POST with confirm:true".into(),
         ));
     }
+
+    if state.demo_mode == DemoMode::Mock {
+        let mock_p = {
+            let mock = state.mock.lock().await;
+            mock.proposal(id)
+                .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("proposal {id} not found")))?
+        };
+        if mock_p.status != MockProposalStatus::Open {
+            return Err((StatusCode::BAD_REQUEST, format!("proposal {id} is not Open")));
+        }
+        let intent = multisig_encoding::ProposalIntent {
+            chain_id: mock_p.chain_id,
+            committee_id: mock_p.registry_account_id,
+            nonce: mock_p.nonce,
+            target_contract_id: mock_p.target,
+            function_name: mock_p.function_name.clone(),
+            call_args: mock_p.call_args.clone(),
+            deadline: mock_p.deadline,
+        };
+        let digest =
+            multisig_encoding::recompute_and_verify(&intent, &mock_p.digest).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "REFUSING TO SIGN: mock digest does not match recomputed intent".into(),
+                )
+            })?;
+        let intent_out = IntentDisplay {
+            chain_id: intent.chain_id,
+            committee_id: intent.committee_id,
+            nonce: intent.nonce,
+            target: format!("0x{}", hex::encode(intent.target_contract_id)),
+            function: intent.function_name.clone(),
+            call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
+            deadline: intent.deadline,
+            digest_hex: format!("0x{}", hex::encode(digest)),
+            digest_mnemonic: multisig_encoding::digest_mnemonic(&digest),
+            digest_safety_number: multisig_encoding::digest_safety_number(&digest),
+        };
+
+        let identities = state.identities.lock().await;
+        let id_rec = identities
+            .iter()
+            .find(|i| i.name == req.signer)
+            .ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("no identity named '{}'", req.signer),
+                )
+            })?;
+        let sk = id_rec
+            .require_sk()
+            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+        // Real secure BLS sign of the digest (signature discarded after membership record).
+        let _signature = bls::sign(sk, &digest);
+        let pk_bytes = id_rec.pk.to_bytes();
+        drop(identities);
+
+        let mut mock = state.mock.lock().await;
+        mock.approve(id, pk_bytes).map_err(to_400)?;
+        return Ok(Json(ProposalApproveOut {
+            submit: mock_ok_submit(
+                format!("mock: approve proposal {id} by {}", req.signer),
+                format!("mock-approve-{id}"),
+            ),
+            intent: intent_out,
+        }));
+    }
+
     let view: Option<ProposalView> = chain::query_contract(
         chain::Contract::Proposals,
         "proposal",
@@ -1259,8 +1520,13 @@ struct ProposalStatusOut {
 }
 
 async fn api_proposal_status(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
 ) -> Result<Json<Option<ProposalStatusOut>>, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        return Ok(Json(mock.proposal(id).map(|p| mock_proposal_status_out(id, p))));
+    }
     let view: Option<ProposalView> = chain::query_contract(
         chain::Contract::Proposals,
         "proposal",
@@ -1292,8 +1558,17 @@ async fn api_proposal_status(
 }
 
 async fn api_proposal_finalize(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mut mock = state.mock.lock().await;
+        mock.finalize(id).map_err(to_400)?;
+        return Ok(Json(mock_ok_submit(
+            format!("mock: finalize proposal {id}"),
+            format!("mock-finalize-{id}"),
+        )));
+    }
     let bytes = chain::encode(&id).map_err(to_500)?;
     let result =
         tokio::task::spawn_blocking(move || chain::submit_call_to(chain::Contract::Proposals, "finalize", &bytes))
@@ -1303,7 +1578,13 @@ async fn api_proposal_finalize(
     Ok(Json(submit_from_log(result.stdout)))
 }
 
-async fn api_proposal_next_id() -> Result<Json<u64>, (StatusCode, String)> {
+async fn api_proposal_next_id(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<u64>, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        return Ok(Json(mock.next_proposal_id()));
+    }
     let next: u64 = chain::query_contract(
         chain::Contract::Proposals,
         "next_proposal_id",
@@ -1343,8 +1624,10 @@ struct PmResolveInitOut {
 }
 
 async fn api_pm_resolve_init(
+    State(state): State<Arc<AppState>>,
     Json(req): Json<PmResolveInitReq>,
 ) -> Result<Json<PmResolveInitOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     if req.winning_outcome > 1 {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -1390,7 +1673,10 @@ struct PmResolveListItem {
     created_at: i64,
 }
 
-async fn api_pm_resolve_list() -> Result<Json<Vec<PmResolveListItem>>, (StatusCode, String)> {
+async fn api_pm_resolve_list(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<PmResolveListItem>>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let client = CollectorClient::resolve(None).map_err(to_500)?;
     let all = client.list_proposals().await.map_err(to_500)?;
     let items = all
@@ -1426,8 +1712,10 @@ struct PmResolveStatusOut {
 }
 
 async fn api_pm_resolve_status(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<String>,
 ) -> Result<Json<PmResolveStatusOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let client = CollectorClient::resolve(None).map_err(to_500)?;
     let file = client.pull(&id).await.map_err(to_500)?;
     status_out_from_file(&file, &id).await
@@ -1535,8 +1823,10 @@ struct PmResolveSignOut {
 }
 
 async fn api_pm_resolve_preview(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<String>,
 ) -> Result<Json<PmResolvePreviewOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let client = CollectorClient::resolve(None).map_err(to_500)?;
     let file = client.pull(&id).await.map_err(to_500)?;
     let digest = blob::gate_pm_blob_for_signing(&file).map_err(to_500)?;
@@ -1564,6 +1854,7 @@ async fn api_pm_resolve_sign(
     AxPath(id): AxPath<String>,
     Json(req): Json<PmResolveSignReq>,
 ) -> Result<Json<PmResolveSignOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     if !req.confirm {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -1628,8 +1919,10 @@ async fn api_pm_resolve_sign(
 }
 
 async fn api_pm_resolve_submit(
+    State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<String>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+    mock_drawer_unavailable(&state)?;
     let client = CollectorClient::resolve(None).map_err(to_500)?;
     let file = client.pull(&id).await.map_err(to_500)?;
     let args = blob::build_pm_resolve_args(&file).map_err(to_500)?;

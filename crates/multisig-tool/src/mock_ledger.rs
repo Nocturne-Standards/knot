@@ -432,4 +432,82 @@ mod tests {
         let p = ledger.proposal(proposal_id).expect("proposal");
         assert_eq!(p.status, MockProposalStatus::Open);
     }
+
+    #[test]
+    fn demo_mode_as_str_for_setup_status() {
+        assert_eq!(DemoMode::Mock.as_str(), "mock");
+        assert_eq!(DemoMode::Testnet.as_str(), "testnet");
+
+        #[derive(serde::Serialize)]
+        struct SetupStatusSlice<'a> {
+            demo_mode: &'a str,
+        }
+        let mock_json = serde_json::to_value(SetupStatusSlice {
+            demo_mode: DemoMode::Mock.as_str(),
+        })
+        .expect("serialize");
+        assert_eq!(mock_json["demo_mode"], "mock");
+        let testnet_json = serde_json::to_value(SetupStatusSlice {
+            demo_mode: DemoMode::Testnet.as_str(),
+        })
+        .expect("serialize");
+        assert_eq!(testnet_json["demo_mode"], "testnet");
+    }
+
+    /// Mirrors the mock RPC approve/finalize path: real BLS sign of digest,
+    /// membership via `MockLedger::approve`, finalize → synthetic tx hash shape.
+    #[test]
+    fn signed_approve_finalize_path_for_rpc() {
+        use dusk_bytes::Serializable;
+        use dusk_core::signatures::bls::{PublicKey, SecretKey};
+        use rand::rngs::OsRng;
+
+        let sk1 = SecretKey::random(&mut OsRng);
+        let sk2 = SecretKey::random(&mut OsRng);
+        let sk3 = SecretKey::random(&mut OsRng);
+        let pk1 = PublicKey::from(&sk1);
+        let pk2 = PublicKey::from(&sk2);
+        let pk3 = PublicKey::from(&sk3);
+        let members = vec![pk1.to_bytes(), pk2.to_bytes(), pk3.to_bytes()];
+
+        let mut ledger = MockLedger::new();
+        let account_id = ledger
+            .create_account(members, 2)
+            .expect("create 2-of-3");
+        let proposal_id = ledger
+            .create_proposal(
+                account_id,
+                [0x11; 32],
+                "set_value".into(),
+                vec![7, 8],
+                1_000,
+                2,
+            )
+            .expect("create proposal");
+        let digest = ledger.proposal(proposal_id).expect("proposal").digest;
+
+        // Same secure sign path as `bls::sign` / rpc mock approve.
+        let _sig1 = sk1.sign(&digest);
+        ledger
+            .approve(proposal_id, pk1.to_bytes())
+            .expect("approve member 1");
+        let _sig2 = sk2.sign(&digest);
+        ledger
+            .approve(proposal_id, pk2.to_bytes())
+            .expect("approve member 2");
+
+        ledger.finalize(proposal_id).expect("finalize at threshold");
+        let p = ledger.proposal(proposal_id).expect("proposal");
+        assert_eq!(p.status, MockProposalStatus::Finalized);
+        assert_eq!(p.approvals.len(), 2);
+
+        // RPC returns this synthetic hash shape (no chain submit).
+        let tx_hash = format!("mock-finalize-{proposal_id}");
+        assert_eq!(tx_hash, "mock-finalize-0");
+        assert_eq!(
+            ledger.account(account_id).expect("account").nonce,
+            1,
+            "committee nonce bumps on finalize"
+        );
+    }
 }
