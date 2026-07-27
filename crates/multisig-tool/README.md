@@ -21,7 +21,7 @@ export MULTISIG_TOOL_PWD='local-dev-only'                      # unlocks ~/.mult
 
 # Shared collector (if you use one) — password is the nginx htpasswd you handed out:
 export MULTISIG_COLLECTOR_URL=https://collector.nocturne-standards.org
-export MULTISIG_COLLECTOR_USER=demo                # or per-person user
+export MULTISIG_COLLECTOR_USER=demo                # collector htpasswd user (not WEN metadata user)
 export MULTISIG_COLLECTOR_PASSWORD='navHam-cemnib-4pytja'
 
 ./scripts/multisig-first-run.sh --serve
