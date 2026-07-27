@@ -15,6 +15,9 @@ as a client.
 
 ## Status
 
+**2026-07-27 — product name Knot** (public surfaces: `knot.nocturne-standards.org`,
+docs `/v1/knot/`). Code/repo remains `multisig`.
+
 **2026-07-23 — nested workspace carve landed** (hard-cut; see parent
 `docs/roadmap.md` Track 7 for per-crate deploy status).
 
@@ -32,7 +35,7 @@ to registry account **0** (`init_dispute_council` tx `b7f02c0c…`; portal
 **2026-07-26 — Multisig Lab website demo:** `DEMO_MODE=mock` default /
 `DEMO_MODE=testnet` optional; slide Lab (cover / demo studio / use cases) +
 five-beat walkthrough + developer drawer on `:8877`; public docs at
-[`docs.nocturne-standards.org/0.1/multisig/`](https://docs.nocturne-standards.org/0.1/multisig/)
+[`docs.nocturne-standards.org/v1/knot/`](https://docs.nocturne-standards.org/v1/knot/)
 (no hosted signing; marketing `/docs/multisig.html` redirects there).
 Canonical ports/modes:
 [`crates/multisig-tool/README.md`](crates/multisig-tool/README.md) Status.

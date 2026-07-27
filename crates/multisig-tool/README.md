@@ -132,7 +132,7 @@ submission goes two ways:
   works in mock; Aggregate, Rotate, Unsafe UTF-8, Party finder, and PM
   resolve return 501 in mock — set `DEMO_MODE=testnet` and restart. Public
   story (no hosted signing):
-  [`docs.nocturne-standards.org/0.1/multisig/`](https://docs.nocturne-standards.org/0.1/multisig/).
+  [`docs.nocturne-standards.org/v1/knot/`](https://docs.nocturne-standards.org/v1/knot/).
   Design (frozen):
   [`docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md`](../../../docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md).
 - **PM council resolve CLI + standalone UI (2026-07-24)** — `pm-resolve init|sign|status|submit|ui`
@@ -403,7 +403,7 @@ gone — beats + drawer replaced it.)*
 ## Explicitly out of scope (this pass)
 
 - Hosted / public Multisig Lab or signing subdomain (public docs only:
-  [`docs.nocturne-standards.org/0.1/multisig/`](https://docs.nocturne-standards.org/0.1/multisig/)).
+  [`docs.nocturne-standards.org/v1/knot/`](https://docs.nocturne-standards.org/v1/knot/)).
 - Dusk Wallet Extension / Dusk Connect `dusk_signMessage` integration as an
   alternative signer — still unverified whether the real extension
   implements it and in what byte format.
