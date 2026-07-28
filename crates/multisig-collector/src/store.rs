@@ -293,15 +293,6 @@ impl Store {
         Ok(out)
     }
 
-    /// Removes the roster row under `pk`. Returns `true` if a row was
-    /// deleted, `false` if `pk` wasn't on the roster.
-    pub fn remove_party_member(&self, pk: &str) -> Result<bool> {
-        let conn = self.conn.lock().expect("db mutex poisoned");
-        let affected = conn
-            .execute("DELETE FROM party WHERE pk = ?1", params![pk])
-            .context("delete party member")?;
-        Ok(affected > 0)
-    }
 }
 
 fn now_unix() -> i64 {
@@ -673,20 +664,6 @@ mod tests {
         let list = store.list_party().expect("list");
         assert_eq!(list.len(), 1, "upsert must not create a duplicate row");
         assert_eq!(list[0].name, "Alice Renamed");
-    }
-
-    #[test]
-    fn party_remove_by_pk() {
-        let store = Store::open_in_memory().expect("open store");
-        let pk = "0x".to_string() + &"33".repeat(96);
-        store.upsert_party_member(&pk, "Bob", None).expect("upsert");
-
-        assert!(store.remove_party_member(&pk).expect("remove"));
-        assert!(store.list_party().expect("list").is_empty());
-        assert!(
-            !store.remove_party_member(&pk).expect("remove again"),
-            "removing an already-absent pk returns false, not an error"
-        );
     }
 
     fn tempfile_dir() -> std::path::PathBuf {
