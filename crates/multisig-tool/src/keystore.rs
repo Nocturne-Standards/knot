@@ -12,7 +12,7 @@
 //! - PK-only: `sk_hex` absent/null, `pk_hex` required — usable as account
 //!   members but not as `--signer`.
 //! Password never touches disk; key = PBKDF2-HMAC-SHA256(password, salt,
-//! 100_000 rounds), zeroized after use.
+//! 600_000 rounds), zeroized after use.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,7 +31,7 @@ use zeroize::Zeroize;
 
 const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
-const PBKDF2_ROUNDS: u32 = 100_000;
+const PBKDF2_ROUNDS: u32 = 600_000;
 
 pub struct Identity {
     pub name: String,
@@ -125,7 +125,13 @@ pub fn load(path: &Path, password: &str) -> Result<Vec<Identity>> {
     let nonce = Nonce::from_slice(nonce_bytes);
     let plaintext = cipher
         .decrypt(nonce, ciphertext)
-        .map_err(|_| anyhow::anyhow!("wrong password, or identity store is corrupt"))?;
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "wrong password, or identity store is corrupt (stores encrypted under the old \
+                 100k-round KDF must be re-created — delete ~/.multisig-tool/identities.dat or \
+                 your --store path and re-import identities)"
+            )
+        })?;
     key_bytes.zeroize();
 
     let stored: Vec<StoredIdentity> =
@@ -228,5 +234,32 @@ pub fn from_pk_only(name: &str, pk: BlsPublicKey) -> Identity {
         name: name.to_string(),
         sk: None,
         pk,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_trip_encrypt_decrypt() {
+        let dir = std::env::temp_dir().join(format!(
+            "multisig-keystore-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("identities.dat");
+        let password = "test-password";
+        let identity = generate("alice");
+        save(&path, password, &[identity]).expect("save");
+        let loaded = load(&path, password).expect("load");
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "alice");
+        assert!(!loaded[0].is_pk_only());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

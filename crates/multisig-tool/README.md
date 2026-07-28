@@ -89,10 +89,11 @@ submission goes two ways:
   local encrypted keystore file (`~/.multisig-tool/identities.dat` by
   default) — signing happens server-side; the web UI's JS never receives a
   secret key, only names/public keys/messages/signatures.
-- Keystore: AES-256-GCM, key derived via PBKDF2-HMAC-SHA256 (100k rounds)
+- Keystore: AES-256-GCM, key derived via PBKDF2-HMAC-SHA256 (600k rounds)
   from a password prompted at startup. Rounds are a **compile-time constant**
-  (not persisted in the keystore file) — do not bump without a format-version
-  change or existing stores will fail to unlock. `MULTISIG_TOOL_PWD` is honored only
+  (not persisted in the keystore file) — bumping rounds invalidates existing
+  stores; delete `~/.multisig-tool/identities.dat` (or your `--store` path)
+  and re-import identities after an upgrade. `MULTISIG_TOOL_PWD` is honored only
   when `MULTISIG_TOOL_ALLOW_ENV_PWD=1` is also set (scripting); otherwise the
   tool refuses the env password with a clear error. Not `rusk-wallet`'s
   wallet format (that's one BIP39-seed wallet — wrong shape for N
