@@ -41,6 +41,7 @@ sha2 = "0.10"
 rpassword = "7"
 multisig-encoding = { path = "../multisig-encoding" }
 zeroize = "1"
+subtle = "2"
 
 [dev-dependencies]
 dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
