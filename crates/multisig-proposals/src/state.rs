@@ -150,7 +150,8 @@ mod multisig_proposals {
                 args.function_name.as_bytes(),
                 &args.call_args,
                 deadline,
-            );
+            )
+            .expect("propose caps keep function_name/call_args within u32");
 
             // Identical open digest merges into existing open proposal.
             if let Some(&existing_id) = self.by_digest.get(&digest) {

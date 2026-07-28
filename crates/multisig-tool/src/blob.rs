@@ -444,6 +444,31 @@ pub fn create_blob(
     threshold: u32,
     human_summary: Option<String>,
 ) -> ProposalBlob {
+    build_proposal_blob(
+        chain_id,
+        committee_id,
+        nonce,
+        target,
+        function_name,
+        call_args,
+        deadline,
+        threshold,
+        human_summary,
+    )
+    .expect("create_blob inputs stay within encode caps")
+}
+
+fn build_proposal_blob(
+    chain_id: u64,
+    committee_id: u64,
+    nonce: u64,
+    target: [u8; 32],
+    function_name: String,
+    call_args: Vec<u8>,
+    deadline: u64,
+    threshold: u32,
+    human_summary: Option<String>,
+) -> Result<ProposalBlob> {
     let intent = ProposalIntent {
         chain_id,
         committee_id,
@@ -453,8 +478,8 @@ pub fn create_blob(
         call_args,
         deadline,
     };
-    let signed_digest = intent.digest();
-    ProposalBlob {
+    let signed_digest = intent.digest().context("proposal digest")?;
+    Ok(ProposalBlob {
         version: BLOB_FILE_VERSION,
         intent: DecodedIntent {
             intent,
@@ -463,7 +488,7 @@ pub fn create_blob(
         signed_digest,
         threshold,
         partials: Vec::new(),
-    }
+    })
 }
 
 /// Print canonical intent (never trusts `human_summary`) and gate the digest.

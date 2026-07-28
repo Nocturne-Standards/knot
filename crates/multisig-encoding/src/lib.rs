@@ -24,6 +24,33 @@ use tiny_keccak::{Hasher, Keccak};
 pub mod fingerprint;
 pub use fingerprint::{digest_hex, digest_mnemonic, digest_safety_number};
 
+/// Encoding failure for §4a proposal preimage construction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EncodingError {
+    FieldTooLarge { field: &'static str, len: usize },
+    CapacityOverflow,
+}
+
+impl core::fmt::Display for EncodingError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            EncodingError::FieldTooLarge { field, len } => {
+                write!(f, "{field} length {len} exceeds u32::MAX")
+            }
+            EncodingError::CapacityOverflow => {
+                write!(f, "preimage capacity overflow")
+            }
+        }
+    }
+}
+
+impl core::error::Error for EncodingError {}
+
+/// Reject lengths that cannot be represented as u32 length-prefix fields.
+pub fn checked_u32_len(field: &'static str, len: usize) -> Result<u32, EncodingError> {
+    u32::try_from(len).map_err(|_| EncodingError::FieldTooLarge { field, len })
+}
+
 /// Versioned domain tag for the proposal signing preimage.
 pub const DOMAIN_PROPOSAL_V1: &[u8] = b"sme-platform.multisig.proposal.v1";
 
@@ -106,7 +133,7 @@ pub struct ProposalBlob {
 
 impl ProposalIntent {
     /// Stream the §4a preimage into Keccak-256 and return the full 32-byte digest.
-    pub fn digest(&self) -> [u8; 32] {
+    pub fn digest(&self) -> Result<[u8; 32], EncodingError> {
         proposal_digest(
             self.chain_id,
             self.committee_id,
@@ -119,7 +146,7 @@ impl ProposalIntent {
     }
 
     /// Build the raw §4a preimage bytes (without hashing). Useful for tests.
-    pub fn preimage_bytes(&self) -> Vec<u8> {
+    pub fn preimage_bytes(&self) -> Result<Vec<u8>, EncodingError> {
         proposal_preimage(
             self.chain_id,
             self.committee_id,
@@ -141,22 +168,23 @@ pub fn proposal_preimage(
     function_name: &[u8],
     call_args: &[u8],
     deadline: u64,
-) -> Vec<u8> {
-    let fn_len = u32::try_from(function_name.len()).expect("function_name length fits u32");
-    let args_len = u32::try_from(call_args.len()).expect("call_args length fits u32");
+) -> Result<Vec<u8>, EncodingError> {
+    let fn_len = checked_u32_len("function_name", function_name.len())?;
+    let args_len = checked_u32_len("call_args", call_args.len())?;
 
-    let mut out = Vec::with_capacity(
-        DOMAIN_PROPOSAL_V1.len()
-            + 8
-            + 8
-            + 8
-            + 32
-            + 4
-            + function_name.len()
-            + 4
-            + call_args.len()
-            + 8,
-    );
+    let capacity = DOMAIN_PROPOSAL_V1
+        .len()
+        .checked_add(8)
+        .and_then(|n| n.checked_add(8))
+        .and_then(|n| n.checked_add(8))
+        .and_then(|n| n.checked_add(32))
+        .and_then(|n| n.checked_add(4))
+        .and_then(|n| n.checked_add(function_name.len()))
+        .and_then(|n| n.checked_add(4))
+        .and_then(|n| n.checked_add(call_args.len()))
+        .and_then(|n| n.checked_add(8))
+        .ok_or(EncodingError::CapacityOverflow)?;
+    let mut out = Vec::with_capacity(capacity);
     out.extend_from_slice(DOMAIN_PROPOSAL_V1);
     out.extend_from_slice(&chain_id.to_le_bytes());
     out.extend_from_slice(&committee_id.to_le_bytes());
@@ -167,7 +195,7 @@ pub fn proposal_preimage(
     out.extend_from_slice(&args_len.to_le_bytes());
     out.extend_from_slice(call_args);
     out.extend_from_slice(&deadline.to_le_bytes());
-    out
+    Ok(out)
 }
 
 /// Keccak256 of the §4a preimage — full 32 bytes, never truncated.
@@ -179,7 +207,7 @@ pub fn proposal_digest(
     function_name: &[u8],
     call_args: &[u8],
     deadline: u64,
-) -> [u8; 32] {
+) -> Result<[u8; 32], EncodingError> {
     let preimage = proposal_preimage(
         chain_id,
         committee_id,
@@ -188,18 +216,18 @@ pub fn proposal_digest(
         function_name,
         call_args,
         deadline,
-    );
+    )?;
     let mut hasher = Keccak::v256();
     hasher.update(&preimage);
     let mut out = [0u8; 32];
     hasher.finalize(&mut out);
-    out
+    Ok(out)
 }
 
 /// Recompute digest from intent fields and assert it matches `claimed`.
 /// Returns `Ok(digest)` or `Err` if the blob's claimed digest disagrees.
 pub fn recompute_and_verify(intent: &ProposalIntent, claimed: &[u8; 32]) -> Result<[u8; 32], ()> {
-    let got = intent.digest();
+    let got = intent.digest().map_err(|_| ())?;
     if &got == claimed {
         Ok(got)
     } else {
@@ -237,10 +265,31 @@ mod tests {
 
     #[test]
     fn digest_is_deterministic() {
-        let a = sample_intent().digest();
-        let b = sample_intent().digest();
+        let a = sample_intent().digest().unwrap();
+        let b = sample_intent().digest().unwrap();
         assert_eq!(a, b);
         assert_eq!(a.len(), 32);
+    }
+
+    /// Golden digest for [`sample_intent`] — locked before Result API change (2026-07-28).
+    #[test]
+    fn sample_intent_digest_golden() {
+        let digest = sample_intent().digest().unwrap();
+        let expected = hex_decode(
+            "8c649841361db8afeb6225e11a9fa104e99f9a8c9a81bf39d9a419d5c8f549ed",
+        );
+        assert_eq!(digest, expected);
+    }
+
+    #[test]
+    fn proposal_preimage_rejects_len_over_u32() {
+        assert!(matches!(
+            checked_u32_len("function_name", (u32::MAX as usize) + 1),
+            Err(EncodingError::FieldTooLarge {
+                field: "function_name",
+                ..
+            })
+        ));
     }
 
     /// Locked known vector for registry `change_account` encoding.
@@ -270,13 +319,16 @@ mod tests {
     #[test]
     fn two_processes_byte_identical_preimage() {
         let i = sample_intent();
-        assert_eq!(i.preimage_bytes(), sample_intent().preimage_bytes());
+        assert_eq!(
+            i.preimage_bytes().unwrap(),
+            sample_intent().preimage_bytes().unwrap()
+        );
     }
 
     #[test]
     fn recompute_rejects_mismatched_digest() {
         let i = sample_intent();
-        let good = i.digest();
+        let good = i.digest().unwrap();
         assert!(recompute_and_verify(&i, &good).is_ok());
         let mut bad = good;
         bad[0] ^= 0xff;
@@ -288,7 +340,7 @@ mod tests {
     #[test]
     fn adversarial_blob_digest_mismatch_refuses_signing() {
         let intent = sample_intent();
-        let honest = intent.digest();
+        let honest = intent.digest().unwrap();
         let mut evil_digest = honest;
         evil_digest[0] ^= 0xaa;
 
@@ -318,7 +370,7 @@ mod tests {
     #[test]
     fn adversarial_lying_human_summary_ignored_for_digest() {
         let intent = sample_intent();
-        let digest = intent.digest();
+        let digest = intent.digest().unwrap();
         let blob = ProposalBlob {
             version: 1,
             intent: DecodedIntent {
@@ -345,15 +397,15 @@ mod tests {
         let mut a = sample_intent();
         let mut b = sample_intent();
         b.nonce = a.nonce + 1;
-        assert_ne!(a.digest(), b.digest());
+        assert_ne!(a.digest().unwrap(), b.digest().unwrap());
 
         b = sample_intent();
         b.function_name = "set_constant".to_string();
-        assert_ne!(a.digest(), b.digest());
+        assert_ne!(a.digest().unwrap(), b.digest().unwrap());
 
         b = sample_intent();
         b.call_args = b"other".to_vec();
-        assert_ne!(a.digest(), b.digest());
+        assert_ne!(a.digest().unwrap(), b.digest().unwrap());
 
         // Field-shifting: move bytes from fn name into args with adjusted lengths
         // must not collide with the honest encoding of a different split.
@@ -361,16 +413,16 @@ mod tests {
         a.call_args = b"cd".to_vec();
         b.function_name = "abc".to_string();
         b.call_args = b"d".to_vec();
-        assert_ne!(a.digest(), b.digest());
-        assert_ne!(a.preimage_bytes(), b.preimage_bytes());
+        assert_ne!(a.digest().unwrap(), b.digest().unwrap());
+        assert_ne!(a.preimage_bytes().unwrap(), b.preimage_bytes().unwrap());
     }
 
     #[test]
     fn length_prefix_rejects_field_shifting() {
         // Concatenation without length prefixes would make "ab"||"cd" == "abc"||"d".
         // With u32 LE length prefixes, preimages differ.
-        let left = proposal_preimage(1, 1, 0, &[0u8; 32], b"ab", b"cd", 0);
-        let right = proposal_preimage(1, 1, 0, &[0u8; 32], b"abc", b"d", 0);
+        let left = proposal_preimage(1, 1, 0, &[0u8; 32], b"ab", b"cd", 0).unwrap();
+        let right = proposal_preimage(1, 1, 0, &[0u8; 32], b"abc", b"d", 0).unwrap();
         assert_ne!(left, right);
     }
 
@@ -394,7 +446,7 @@ mod tests {
                 call_args: args,
                 deadline,
             };
-            let d1 = intent.digest();
+            let d1 = intent.digest().unwrap();
             let d2 = proposal_digest(
                 intent.chain_id,
                 intent.committee_id,
@@ -403,7 +455,8 @@ mod tests {
                 intent.function_name.as_bytes(),
                 &intent.call_args,
                 intent.deadline,
-            );
+            )
+            .unwrap();
             assert_eq!(d1, d2);
             assert!(recompute_and_verify(&intent, &d1).is_ok());
         }

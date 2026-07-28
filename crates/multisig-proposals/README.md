@@ -10,6 +10,8 @@ Signed bytes are the §4a digest from [`multisig-encoding`](../multisig-encoding
   (default `false` → `Executed`); propose caps (`function_name` ≤ 64,
   `call_args` ≤ 4096); reject past deadlines at propose; `init_chain_id` wipes
   open proposals; require `init_chain_id` before propose.
+- Bytecode changed for `EncodingError` / fallible `proposal_digest` (audit
+  2026-07-28 #5); **testnet redeploy still pending** (local wasm/tests only).
 - Lab AC: `make test` green under `VM::ephemeral()` (includes `test-target`
   execute / reentrancy / failed-`call_raw` paths).
 - **Testnet:** **v0.3.0** live (2026-07-24 cutover); `init_registry` →

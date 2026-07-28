@@ -31,7 +31,7 @@ pub fn digest_hex(digest: &[u8; 32]) -> String {
 /// 264 bits → 24 × 11-bit word indices into the English BIP39 list.
 pub fn digest_mnemonic(digest: &[u8; 32]) -> String {
     let words = wordlist();
-    debug_assert_eq!(words.len(), 2048);
+    assert_eq!(words.len(), 2048);
 
     let mut hash = Sha256::digest(digest);
     let checksum_byte = hash[0];
@@ -55,7 +55,7 @@ pub fn digest_mnemonic(digest: &[u8; 32]) -> String {
             indices.push(idx as usize);
         }
     }
-    debug_assert_eq!(indices.len(), 24);
+    assert_eq!(indices.len(), 24);
 
     let mut out = String::new();
     for (i, idx) in indices.iter().enumerate() {
@@ -87,10 +87,10 @@ pub fn digest_safety_number(digest: &[u8; 32]) -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn bip39_english_wordlist_has_2048_words() {
-        assert_eq!(wordlist().len(), 2048);
-    }
+#[test]
+fn bip39_wordlist_is_2048_words() {
+    assert_eq!(wordlist().len(), 2048);
+}
 
     /// BIP39 Trezor vectors: ENT=256 all-zero → known 24-word mnemonic.
     #[test]
