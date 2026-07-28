@@ -9,6 +9,19 @@ multi-person propose/approve/finalize path. One binary, two skins: a CLI
 **TESTNET ONLY.** Never use with mainnet keys or funds — see "Security model"
 below.
 
+## For newcomers
+
+Local signing Lab + web UI for Knot (registry / proposals / collector). Product
+docs name: **Knot**.
+
+Architecture and crate interaction diagram:
+[docs.nocturne-standards.org — Knot](https://docs.nocturne-standards.org/v1/knot/)
+· [source on GitHub](https://github.com/aichbindas/sme_platform/blob/main/nocturne-docs/docs/v1/knot/index.md)
+
+Cold-start: `./scripts/multisig-first-run.sh --serve` from repo root.
+
+Everything below is lab **Status**, env, and maintainer run notes. Dense on purpose.
+
 ## Quick start
 
 From the **sme_platform** repo root (not this crate alone):
