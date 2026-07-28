@@ -140,6 +140,11 @@ pub async fn serve_with_options(
         .route("/style.css", get(style_css))
         .route("/fonts.css", get(fonts_css))
         .route("/fonts/{file}", get(serve_font))
+        .route("/lab/fonts.css", get(lab_fonts_css))
+        .route("/lab/tokens.css", get(lab_tokens_css))
+        .route("/lab/layout.css", get(lab_layout_css))
+        .route("/lab/components.css", get(lab_components_css))
+        .route("/lab/fonts/{file}", get(serve_lab_font))
         .merge(api)
         .with_state(state);
 
@@ -266,6 +271,22 @@ async fn fonts_css() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/fonts.css"))
 }
 
+async fn lab_fonts_css() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/lab/fonts.css"))
+}
+
+async fn lab_tokens_css() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/lab/tokens.css"))
+}
+
+async fn lab_layout_css() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/lab/layout.css"))
+}
+
+async fn lab_components_css() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/lab/components.css"))
+}
+
 async fn serve_font(AxPath(file): AxPath<String>) -> Result<Response, StatusCode> {
     const ALLOWED: &[&str] = &[
         "literata-500.woff2",
@@ -280,6 +301,32 @@ async fn serve_font(AxPath(file): AxPath<String>) -> Result<Response, StatusCode
     }
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("static/fonts")
+        .join(&file);
+    let bytes = std::fs::read(&path).map_err(|_| StatusCode::NOT_FOUND)?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "font/woff2"),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+async fn serve_lab_font(AxPath(file): AxPath<String>) -> Result<Response, StatusCode> {
+    const ALLOWED: &[&str] = &[
+        "literata-500.woff2",
+        "literata-700.woff2",
+        "sora-400.woff2",
+        "sora-500.woff2",
+        "sora-600.woff2",
+        "sora-700.woff2",
+    ];
+    if !ALLOWED.contains(&file.as_str()) {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("static/lab/fonts")
         .join(&file);
     let bytes = std::fs::read(&path).map_err(|_| StatusCode::NOT_FOUND)?;
     Ok((

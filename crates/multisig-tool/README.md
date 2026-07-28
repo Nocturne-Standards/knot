@@ -121,6 +121,10 @@ submission goes two ways:
 ## Status
 
 - **Package version `0.2.0`** — see [CHANGELOG.md](CHANGELOG.md). Policy: [docs/versioning.md](../../../docs/versioning.md). `multisig-tool --version` prints the same string.
+- **Nocturne Lab UI (2026-07-28)** — static HTML links synced `static/lab/*` from
+  [`nocturne-lab`](../../../nocturne-lab/) (tokens, layout, components, self-hosted
+  Literata/Sora). Product override: `--you: #2b6cb0` in `static/style.css`. Re-sync:
+  `bash nocturne-lab/scripts/sync-assets.sh`.
 - **Website demo Lab (2026-07-26)** — `DEMO_MODE=mock` (**default**) uses an
   in-process `MockLedger` for account/proposal APIs (approve still signs the
   digest with real local BLS; chain submit is skipped in mock only).
