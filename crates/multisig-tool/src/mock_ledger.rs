@@ -168,7 +168,8 @@ impl MockLedger {
             call_args: call_args.clone(),
             deadline,
         }
-        .digest();
+        .digest()
+        .expect("mock intent in bounds");
 
         let id = self.next_proposal_id;
         self.next_proposal_id += 1;
@@ -336,7 +337,8 @@ mod tests {
             call_args,
             deadline,
         }
-        .digest();
+        .digest()
+        .expect("mock intent in bounds");
         assert_eq!(p.digest, expected);
     }
 
