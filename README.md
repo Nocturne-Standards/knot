@@ -13,6 +13,18 @@ operator-private notes stay in the parent platform’s `docs/` / `references/`.
 **outside** this nest — it consumes `multisig-proposals` / `multisig-registry`
 as a client.
 
+## For newcomers
+
+**Knot** (this nest: `multisig`) is an M-of-N BLS quorum suite: on-chain
+registry + proposals, a local signing Lab, and an optional collector relay.
+
+Architecture and crate interaction diagram:
+[docs.nocturne-standards.org — Knot](https://docs.nocturne-standards.org/v1/knot/)
+· [source on GitHub](https://github.com/aichbindas/sme_platform/blob/main/nocturne-docs/docs/v1/knot/index.md)
+
+Everything below is nest **Status** and maintainer notes (deploy IDs, layout).
+Dense on purpose.
+
 ## Status
 
 **2026-07-27 — product name Knot** (public surfaces: `knot.nocturne-standards.org`,
