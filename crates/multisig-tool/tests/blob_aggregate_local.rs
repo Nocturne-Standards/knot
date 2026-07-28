@@ -80,7 +80,8 @@ fn file_byo_two_of_three_aggregate_verifies_locally() {
         0,
         2,
         Some("untrusted UI hint".into()),
-    );
+    )
+    .expect("create_blob");
 
     // Simulate two machines: each adds a partial (insecure for PreFork VM).
     for (sk, pk) in [(&sk1, &pk1), (&sk2, &pk2)] {

@@ -87,10 +87,10 @@ pub fn digest_safety_number(digest: &[u8; 32]) -> String {
 mod tests {
     use super::*;
 
-#[test]
-fn bip39_wordlist_is_2048_words() {
-    assert_eq!(wordlist().len(), 2048);
-}
+    #[test]
+    fn bip39_wordlist_is_2048_words() {
+        assert_eq!(wordlist().len(), 2048);
+    }
 
     /// BIP39 Trezor vectors: ENT=256 all-zero → known 24-word mnemonic.
     #[test]

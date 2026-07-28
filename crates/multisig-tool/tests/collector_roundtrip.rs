@@ -158,7 +158,8 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
         0,
         2,
         Some("2-of-3 demo via collector".into()),
-    );
+    )
+    .expect("create_blob");
     let file_blob = blob::BlobFile::from_proposal_blob(&created);
 
     let pushed = client.push(&file_blob).await.expect("push");
