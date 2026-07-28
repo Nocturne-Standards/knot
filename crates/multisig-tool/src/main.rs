@@ -1090,7 +1090,7 @@ async fn main() -> Result<()> {
                     deadline,
                     threshold,
                     summary,
-                );
+                )?;
                 blob::print_canonical_intent(&proposal)?;
                 blob::write_file(&out, &blob::BlobFile::from_proposal_blob(&proposal))?;
                 println!("wrote {}", out.display());

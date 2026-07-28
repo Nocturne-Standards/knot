@@ -443,31 +443,6 @@ pub fn create_blob(
     deadline: u64,
     threshold: u32,
     human_summary: Option<String>,
-) -> ProposalBlob {
-    build_proposal_blob(
-        chain_id,
-        committee_id,
-        nonce,
-        target,
-        function_name,
-        call_args,
-        deadline,
-        threshold,
-        human_summary,
-    )
-    .expect("create_blob inputs stay within encode caps")
-}
-
-fn build_proposal_blob(
-    chain_id: u64,
-    committee_id: u64,
-    nonce: u64,
-    target: [u8; 32],
-    function_name: String,
-    call_args: Vec<u8>,
-    deadline: u64,
-    threshold: u32,
-    human_summary: Option<String>,
 ) -> Result<ProposalBlob> {
     let intent = ProposalIntent {
         chain_id,
@@ -601,7 +576,8 @@ mod tests {
             1000,
             2,
             Some("hint".into()),
-        );
+        )
+        .unwrap();
         let file = BlobFile::from_proposal_blob(&blob);
         assert_eq!(file.kind, BlobKind::Proposals);
         let back = file.to_proposal_blob().unwrap();
@@ -627,7 +603,8 @@ mod tests {
             0,
             2,
             None,
-        );
+        )
+        .unwrap();
         add_partial(&mut blob, &sk1, &pk1).unwrap();
         add_partial(&mut blob, &sk2, &pk2).unwrap();
         assert_eq!(blob.partials.len(), 2);
@@ -641,7 +618,7 @@ mod tests {
     fn mismatched_digest_refuses_sign() {
         let rng = &mut StdRng::seed_from_u64(7);
         let (sk, pk) = keypair(rng);
-        let mut blob = create_blob(1, 0, 0, [0; 32], "x".into(), Vec::new(), 0, 1, None);
+        let mut blob = create_blob(1, 0, 0, [0; 32], "x".into(), Vec::new(), 0, 1, None).unwrap();
         blob.signed_digest[0] ^= 0xff;
         assert!(add_partial(&mut blob, &sk, &pk).is_err());
     }
