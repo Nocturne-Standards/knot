@@ -70,9 +70,8 @@ future `compliance-gate` operator council.
 
 ## Status
 
-v0.1.3 on testnet (contract id in `../../../deployments/testnet.json`).
-Audit #6: `checked_add` on `next_id`/`nonce` (audit 2026-07-28); **testnet
-redeploy still pending** (local wasm/tests only).
+**v0.1.4** on testnet (2026-07-28 cutover — audit #6 `checked_add` on
+`next_id`/`nonce`). Contract id in `../../../deployments/testnet.json`.
 `make wasm` + `make wasm-dd` + `cargo test --release`, 14/14 green.
 Same dusk-forge-template pattern as `identity-credential`/`compliance-gate`
 (wasm32-unknown-unknown, Rust 1.94.0, `#[dusk_forge::contract]`).

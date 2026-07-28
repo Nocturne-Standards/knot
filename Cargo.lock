@@ -2185,7 +2185,7 @@ dependencies = [
 
 [[package]]
 name = "multisig-proposals"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "bytecheck",
  "dusk-bls12_381",
@@ -2202,7 +2202,7 @@ dependencies = [
 
 [[package]]
 name = "multisig-registry"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "bytecheck",
  "dusk-bls12_381",
