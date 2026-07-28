@@ -50,7 +50,10 @@ mod multisig_registry {
             validate_committee(&args.members, args.threshold);
 
             let id = self.next_id;
-            self.next_id += 1;
+            self.next_id = self
+                .next_id
+                .checked_add(1)
+                .expect("next_id overflow");
             self.accounts.insert(
                 id,
                 MultisigAccount {
@@ -219,7 +222,10 @@ mod multisig_registry {
             let account = self.accounts.get_mut(&args.account_id).unwrap();
             account.members = args.new_members;
             account.threshold = args.new_threshold;
-            account.nonce += 1;
+            account.nonce = account
+                .nonce
+                .checked_add(1)
+                .expect("nonce overflow");
             abi::emit("account_changed", args.account_id);
         }
     }
