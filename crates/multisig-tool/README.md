@@ -219,18 +219,16 @@ submission goes two ways:
   prints **canonical fields first** (refuses on digest mismatch). Web UI
   mirrors the same gate.
 - Against `multisig-registry` / `multisig-proposals` testnet ids in
-  `../../../deployments/testnet.json`. **Audit remediation code (proposals
-  0.3.0, registry encoding/`change_account` digests, PM `council-resolve.v2`)
-  needs testnet redeploy** before live lab matches source — see suite
-  [`multisig/README.md`](../../../multisig/README.md) Status.
-  Atlas + treasury-data/logic also on testnet — see those READMEs.
+  `../../../deployments/testnet.json` (registry **v0.1.4**, proposals
+  **v0.3.1**, 2026-07-28 cutover). Atlas + treasury-data/logic also on
+  testnet — see those READMEs.
 
 | Check | Result |
 |---|---|
 | Registry create/query/change_account | Pass |
 | Quorum submit + outcome / diagnose surfacing | Pass (free-read verify still untrusted) |
 | Scenario web UI (slide Lab + five-beat mock walkthrough) | Pass |
-| Proposal create / approve (canonical intent) / finalize+execute | Lab green; live proposals **v0.3.0** deployed+wired 2026-07-24 |
+| Proposal create / approve (canonical intent) / finalize+execute | Lab green; live proposals **v0.3.1** deployed+wired 2026-07-28 |
 | Adversarial digest mismatch refuse | Pass (`multisig-encoding` `gate_blob_for_signing`) |
 | Pk-only import + refuse as signer | Pass |
 | File/BYO blob 2-of-3 → aggregate → `verify_quorum_aggregate` | Pass (local `VM::ephemeral`) |

@@ -6,16 +6,15 @@ Signed bytes are the §4a digest from [`multisig-encoding`](../multisig-encoding
 
 ## Status
 
-- **v0.3.0** — CEI `finalize` (status + nonce before `call_raw`); `tombstone: bool`
+- **v0.3.1** — CEI `finalize` (status + nonce before `call_raw`); `tombstone: bool`
   (default `false` → `Executed`); propose caps (`function_name` ≤ 64,
   `call_args` ≤ 4096); reject past deadlines at propose; `init_chain_id` wipes
-  open proposals; require `init_chain_id` before propose.
-- Bytecode changed for `EncodingError` / fallible `proposal_digest` (audit
-  2026-07-28 #5); **testnet redeploy still pending** (local wasm/tests only).
+  open proposals; require `init_chain_id` before propose; fallible
+  `proposal_digest` / `EncodingError` (audit 2026-07-28 #5).
 - Lab AC: `make test` green under `VM::ephemeral()` (includes `test-target`
   execute / reentrancy / failed-`call_raw` paths).
-- **Testnet:** **v0.3.0** live (2026-07-24 cutover); `init_registry` →
-  registry v0.1.3, `init_chain_id` = `2`. See
+- **Testnet:** **v0.3.1** live (2026-07-28 cutover); `init_registry` →
+  registry v0.1.4, `init_chain_id` = `2`. See
   `../../../deployments/testnet.json`.
 - Unit tests use `sign_insecure` (PreFork). Live clients must use secure `sign`.
 
@@ -48,5 +47,5 @@ cd ../multisig-proposals && make test
 
 ## Deploy
 
-When redeploying v0.3.0, bump `deployments/testnet.json` and re-`init_registry` /
+When redeploying, bump `deployments/testnet.json` and re-`init_registry` /
 `init_chain_id` (and `set_tombstone` if you want `Tombstoned` on success).

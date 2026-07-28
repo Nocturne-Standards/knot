@@ -37,12 +37,20 @@ docs `/v1/knot/`). Code/repo remains `multisig`.
 council resolve (`multisig-tool pm-resolve`, collector `kind=pm_council_resolve`,
 portal web→CLI handoff).
 
+**2026-07-28 — audit overflow/encoding cutover on testnet:** registry
+**v0.1.4** (`4e24b59d…`), proposals **v0.3.1** (`5e91ddb6…`, `init_registry` →
+new registry + `init_chain_id=2` wired). **PM dispute council still points
+at the previous registry** until you create a new account and re-run
+`init_dispute_council` (manual council setup). Atlas mapping for
+`prediction-market` unchanged.
+
 **2026-07-24 — audit remediation live on testnet:** registry **v0.1.3**
 (`66d763b2…`), proposals **v0.3.0** (`6b8ba51c…`, `init_registry` +
 `init_chain_id=2` wired), PM monolith **v0.3.1** (`1c095ae2…`,
 `council-resolve.v2` + `init_treasury` re-wired). **Dispute council wired**
 to registry account **0** (`init_dispute_council` tx `b7f02c0c…`; portal
-`accountId: 0`).
+`accountId: 0`). Superseded for registry/proposals by the 2026-07-28
+cutover above.
 
 **2026-07-26 — Multisig Lab website demo:** `DEMO_MODE=mock` default /
 `DEMO_MODE=testnet` optional; slide Lab (cover / demo studio / use cases) +
@@ -55,8 +63,8 @@ Canonical ports/modes:
 | Surface | License | Notes |
 |---|---|---|
 | `crates/multisig-encoding` | Apache-2.0 | Canonical §4a digest + blob helpers + M3 fingerprint |
-| `crates/multisig-registry` | Apache-2.0 | On-chain BLS M-of-N quorum registry — **testnet v0.1.3** |
-| `crates/multisig-proposals` | Apache-2.0 | On-chain propose→approve→finalize `call_raw` — **testnet v0.3.0** |
+| `crates/multisig-registry` | Apache-2.0 | On-chain BLS M-of-N quorum registry — **testnet v0.1.4** |
+| `crates/multisig-proposals` | Apache-2.0 | On-chain propose→approve→finalize `call_raw` — **testnet v0.3.1** |
 | `crates/multisig-tool` | Apache-2.0 | Local signing CLI + web UI + PM council resolve — **mock + testnet; no mainnet** |
 | `crates/multisig-collector` | AGPL-3.0-only | Untrusted off-chain relay; production auth at reverse proxy |
 
