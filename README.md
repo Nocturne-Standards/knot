@@ -39,10 +39,10 @@ portal web→CLI handoff).
 
 **2026-07-28 — audit overflow/encoding cutover on testnet:** registry
 **v0.1.4** (`4e24b59d…`), proposals **v0.3.1** (`5e91ddb6…`, `init_registry` →
-new registry + `init_chain_id=2` wired). **PM dispute council still points
-at the previous registry** until you create a new account and re-run
-`init_dispute_council` (manual council setup). Atlas mapping for
-`prediction-market` unchanged.
+new registry + `init_chain_id=2` wired). **PM dispute council** on Atlas logic
+**v0.2.0** (`b7543a2b…`) points at registry account **0** (alice + partner;
+`dispute_council_of` live). Atlas `"prediction-market"` remapped to the new
+logic id.
 
 **2026-07-24 — audit remediation live on testnet:** registry **v0.1.3**
 (`66d763b2…`), proposals **v0.3.0** (`6b8ba51c…`, `init_registry` +
