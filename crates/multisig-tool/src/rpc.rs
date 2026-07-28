@@ -20,6 +20,7 @@ use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
 use tokio::sync::Mutex;
 
 use crate::proposals_types::call_types::{
@@ -218,7 +219,11 @@ async fn require_token(
     let ok = headers
         .get("X-Multisig-Tool-Token")
         .and_then(|v| v.to_str().ok())
-        .map(|v| v == state.token)
+        .map(|v| {
+            let got = v.as_bytes();
+            let want = state.token.as_bytes();
+            got.len() == want.len() && bool::from(got.ct_eq(want))
+        })
         .unwrap_or(false);
     if !ok {
         return (StatusCode::UNAUTHORIZED, "missing/invalid token").into_response();
