@@ -69,7 +69,7 @@ let cachedIdentities = [];
 async function api(path, opts = {}) {
   if (USE_FRONTEND_MOCK) {
     if (!window.MockLab || typeof window.MockLab.mockApi !== "function") {
-      throw new Error("Frontend MockLedger missing — load /mock-ledger.js before app.js");
+      throw new Error("Frontend MockLedger missing - load /mock-ledger.js before app.js");
     }
     return window.MockLab.mockApi(path, opts);
   }
@@ -202,7 +202,7 @@ function updateYouChip() {
   const chip = el("status-you");
   if (!chip) return;
   chip.hidden = false;
-  chip.textContent = youIdentity ? `You: ${youIdentity}` : "You: —";
+  chip.textContent = youIdentity ? `You: ${youIdentity}` : "You: -";
   chip.classList.toggle("is-set", !!youIdentity);
 }
 
@@ -297,7 +297,7 @@ function applyAccountIds(id) {
 function syncPropApproveGate() {
   const propBtn = el("prop-approve-btn");
   if (!propBtn) return;
-  // Proposal id 0 is valid — don't treat it as falsy.
+  // Proposal id 0 is valid - don't treat it as falsy.
   propBtn.disabled = !intentConfirmed || selectedProposalId == null;
 }
 
@@ -531,7 +531,7 @@ function renderCouncilsLists() {
   if (!demoCouncils.length) {
     const empty = document.createElement("p");
     empty.className = "councils-empty";
-    empty.textContent = "No councils yet — form one on Beat 2.";
+    empty.textContent = "No councils yet - form one on Beat 2.";
     list.appendChild(empty);
     return;
   }
@@ -558,7 +558,7 @@ function renderProposalsList() {
   if (!demoProposals.length) {
     const empty = document.createElement("p");
     empty.className = "councils-empty";
-    empty.textContent = "No proposals yet — create one on Beat 4.";
+    empty.textContent = "No proposals yet - create one on Beat 4.";
     list.appendChild(empty);
     return;
   }
@@ -624,7 +624,7 @@ function refreshIntentCard() {
   const confirmBtn = el("btn-intent-confirm");
   if (confirmBtn) {
     confirmBtn.disabled = false;
-    confirmBtn.textContent = "Looks right — continue";
+    confirmBtn.textContent = "Looks right - continue";
   }
   updateApproveSection();
 }
@@ -894,7 +894,7 @@ async function confirmIntent() {
     renderProposalsList();
     refreshIntentCard();
     updateApproveSection();
-    showToast("Intent confirmed — Approve unlocked");
+    showToast("Intent confirmed - Approve unlocked");
   } catch (e) {
     intentConfirmed = false;
     syncPropApproveGate();
