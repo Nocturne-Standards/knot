@@ -78,7 +78,7 @@ async function refreshSetup() {
     const names = ids.filter((i) => !i.pk_only).map((i) => i.name);
     const coll = st.collector_configured
       ? `<span class="collector-ok">collector: ${st.collector_url || "configured"}</span>`
-      : `<span class="collector-bad">collector not configured — set MULTISIG_COLLECTOR_URL before starting this UI (init+push needs it)</span>`;
+      : `<span class="collector-bad">collector not configured - set MULTISIG_COLLECTOR_URL before starting this UI (init+push needs it)</span>`;
     line.innerHTML = `Identities: ${names.length ? names.join(", ") : "(none)"} · ${coll}`;
   } catch (e) {
     line.textContent = e.message;
@@ -104,7 +104,7 @@ async function refreshChainData() {
     council.innerHTML = "";
     const blankC = document.createElement("option");
     blankC.value = "";
-    blankC.textContent = accounts.length ? "— pick council —" : "— no accounts —";
+    blankC.textContent = accounts.length ? "- pick council -" : "- no accounts -";
     council.appendChild(blankC);
     for (const a of accounts) {
       const opt = document.createElement("option");
@@ -122,7 +122,7 @@ async function refreshChainData() {
     marketPick.innerHTML = "";
     const blankM = document.createElement("option");
     blankM.value = "";
-    blankM.textContent = markets.length ? "— pick market —" : "— no markets —";
+    blankM.textContent = markets.length ? "- pick market -" : "- no markets -";
     marketPick.appendChild(blankM);
     const sorted = [...markets].sort((a, b) => Number(b.under_review) - Number(a.under_review) || a.id - b.id);
     for (const m of sorted) {
@@ -285,7 +285,7 @@ async function preview() {
     document.getElementById("threshold").value = out.threshold;
     document.getElementById("confirm").checked = false;
     document.getElementById("btn-sign").disabled = true;
-    log("preview ok — compare mnemonic, then check confirm + sign", true);
+    log("preview ok - compare mnemonic, then check confirm + sign", true);
   } catch (e) {
     log(e.message, false);
   }

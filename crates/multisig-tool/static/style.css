@@ -17,7 +17,7 @@ body {
   font-family: var(--font-body);
   font-size: 16px;
   line-height: 1.5;
-  /* Do not lock overflow here — standalone pages (pm-resolve.html) must scroll. */
+  /* Do not lock overflow here - standalone pages (pm-resolve.html) must scroll. */
 }
 
 /* Lab full-page slides shell: viewport locked; .slides owns scroll */
@@ -37,7 +37,7 @@ code {
   border-radius: 4px;
 }
 
-/* —— Standalone TESTNET strip (pm-resolve.html uses class="banner") —— */
+/* -- Standalone TESTNET strip (pm-resolve.html uses class="banner") -- */
 .banner {
   background: var(--danger);
   color: #fff8f6;
@@ -58,7 +58,7 @@ code {
   scroll-snap-stop: always;
 }
 
-/* —— Cover —— */
+/* -- Cover -- */
 .hero {
   max-width: 44rem;
   margin: 0 auto;
@@ -165,7 +165,7 @@ button:hover { filter: brightness(1.05); }
 button:active { transform: translateY(1px); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* —— Demo studio —— */
+/* -- Demo studio -- */
 .demo-slide {
   justify-content: center;
   padding: clamp(1.25rem, 3.5vh, 2.25rem) clamp(1rem, 4vw, 2.5rem) clamp(1.75rem, 4.5vh, 2.75rem);
@@ -271,7 +271,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   min-width: 12rem;
 }
 
-/* Docs control — same chrome as beat tabs, sea accent */
+/* Docs control - same chrome as beat tabs, sea accent */
 .docs-tab {
   font: inherit;
   font-weight: 600;
@@ -411,7 +411,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   border-color: var(--ink);
 }
 
-/* Beat carousel — sized to beat 5 so every beat shares one stage */
+/* Beat carousel - sized to beat 5 so every beat shares one stage */
 .beat-slideshow {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -774,7 +774,7 @@ textarea {
   margin-bottom: 0.65rem;
 }
 
-/* Council cards — centered cluster (no LTR fill) */
+/* Council cards - centered cluster (no LTR fill) */
 .councils-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1115,7 +1115,7 @@ textarea {
   word-break: break-word;
 }
 
-/* —— Use cases —— */
+/* -- Use cases -- */
 .use-cases-slide {
   padding: clamp(2rem, 6vh, 3.5rem) clamp(1rem, 4vw, 2.5rem);
 }

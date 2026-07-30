@@ -3,7 +3,7 @@
 //
 // In-browser port of multisig-tool `mock_ledger.rs` + Lab `/api/*` mock router.
 // Used when the page has no live tool token (static / Cloudflare Pages Lab).
-// Crypto digests are deterministic UI stand-ins — not production BIP39 fingerprints.
+// Crypto digests are deterministic UI stand-ins - not production BIP39 fingerprints.
 
 (function (global) {
   "use strict";
@@ -326,7 +326,7 @@
         tx_status: "confirmed",
         tx_hash: txHash,
         panic_line: null,
-        note: "DEMO_MODE=mock — no chain submit (frontend MockLedger)",
+        note: "DEMO_MODE=mock - no chain submit (frontend MockLedger)",
       };
     }
   }
@@ -486,7 +486,7 @@
     if (m && method === "POST") {
       const body = parseBody(opts);
       if (!body.confirm) {
-        httpError(400, "confirm required — call /preview first, then POST with confirm:true");
+        httpError(400, "confirm required - call /preview first, then POST with confirm:true");
       }
       const id = Number(m[1]);
       const p = store.ledger.proposal(id);
