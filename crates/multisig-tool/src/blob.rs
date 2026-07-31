@@ -22,7 +22,8 @@ use multisig_encoding::{
     gate_blob_for_signing, DecodedIntent, PartialSig, ProposalBlob, ProposalIntent,
 };
 use serde::{Deserialize, Deserializer, Serialize};
-use tiny_keccak::{Hasher, Keccak};
+
+pub use multisig_encoding::council_resolve_digest;
 
 use crate::bls;
 use crate::pm_resolve_types::{CouncilSigEntry, ResolveArgs};
@@ -31,11 +32,6 @@ use crate::pm_resolve_types::{CouncilSigEntry, ResolveArgs};
 pub const BLOB_FILE_VERSION: u16 = 1;
 /// Wire version for `kind=pm_council_resolve` blobs.
 pub const PM_BLOB_FILE_VERSION: u16 = 2;
-
-/// Domain tag for PM council-resolve digests — must match
-/// `prediction-market`'s `DOMAIN_COUNCIL_RESOLVE` / `council_resolve_message`.
-pub const DOMAIN_COUNCIL_RESOLVE: &[u8] =
-    b"sme-platform.prediction-market.council-resolve.v2";
 
 /// Outer blob discriminator. Missing `kind` on the wire deserializes as
 /// [`BlobKind::Proposals`] (v1 compatibility).
@@ -162,28 +158,6 @@ fn encode_hex(bytes: &[u8]) -> String {
 /// Content-addressed collector id = lowercase hex of the 32-byte digest (no `0x`).
 pub fn digest_id(digest_hex: &str) -> String {
     digest_hex.trim_start_matches("0x").to_ascii_lowercase()
-}
-
-/// `keccak256(DOMAIN_V2 || contract_id[32] || registry_account_id_le64 ||
-/// threshold_le32 || market_id_le64 || winning_outcome_u8)` — byte-for-byte
-/// match with the monolith's private `council_resolve_message`.
-pub fn council_resolve_digest(
-    pm_contract_id: &[u8; 32],
-    registry_account_id: u64,
-    threshold: u32,
-    market_id: u64,
-    winning_outcome: u8,
-) -> [u8; 32] {
-    let mut hasher = Keccak::v256();
-    hasher.update(DOMAIN_COUNCIL_RESOLVE);
-    hasher.update(pm_contract_id);
-    hasher.update(&registry_account_id.to_le_bytes());
-    hasher.update(&threshold.to_le_bytes());
-    hasher.update(&market_id.to_le_bytes());
-    hasher.update(&[winning_outcome]);
-    let mut out = [0u8; 32];
-    hasher.finalize(&mut out);
-    out
 }
 
 /// Build a local v2 `pm_council_resolve` blob (unsigned).
