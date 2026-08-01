@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multisig Lab - Dusk</title>
+  <title>Knot - Shared control. Keys stay on your machines.</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/knot-icon.svg" />
   <link rel="stylesheet" href="/lab/fonts.css" />
   <link rel="stylesheet" href="/lab/tokens.css" />
   <link rel="stylesheet" href="/lab/layout.css" />
@@ -15,16 +16,24 @@
     <!-- 1 · Cover -->
     <header class="slide hero" id="top">
       <div class="hero-copy">
-        <p class="hero-brand">Multisig Lab</p>
+        <p class="hero-brand">
+          <img src="/assets/knot-icon.svg" alt="" width="96" height="96" />
+          <span>Knot</span>
+        </p>
         <h1>Shared control. Keys stay on your machines.</h1>
         <p class="hero-lede">
-          Multisig Lab lets an M-of-N council share authority: propose an intent,
-          collect approvals to threshold, then finalize - without a server holding
-          anyone’s secret keys.
+          Form an M-of-N council, propose an intent, collect approvals to
+          threshold, then finalize - keys never leave the members' machines.
         </p>
         <div class="hero-cta">
           <a class="btn primary" href="#demo">Try the demo</a>
           <a class="btn ghost" href="#use-cases">Use cases</a>
+          <a
+            class="btn ghost"
+            href="https://docs.nocturne-standards.org/v1/knot/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >View the docs</a>
         </div>
       </div>
     </header>
@@ -278,6 +287,11 @@
     <a href="#top" class="dot active" data-slide="top" aria-label="Cover"></a>
     <a href="#demo" class="dot" data-slide="demo" aria-label="Demo"></a>
     <a href="#use-cases" class="dot" data-slide="use-cases" aria-label="Use cases"></a>
+  </nav>
+
+  <nav class="legal-links" aria-label="Legal">
+    <a href="mailto:info@nocturne-standards.org">Contact</a>
+    <a href="https://nocturne-standards.org/privacy.html">Privacy</a>
   </nav>
 
   <script>window.MULTISIG_TOOL_TOKEN = "__TOKEN__";</script>
