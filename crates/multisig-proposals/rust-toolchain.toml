@@ -1,4 +1,8 @@
 [toolchain]
+# 1.94.0 is a wire-format guarantee for this crate's archived (rkyv) types,
+# not just a build pin — see docs/encoding-architecture.md "## rkyv layout"
+# and AGENTS.md §2. Re-run every layout golden before bumping this and
+# before any deploy that follows.
 channel = "1.94.0"
 targets = ["wasm32-unknown-unknown"]
 components = ["rust-src", "rustfmt", "cargo", "clippy"]
