@@ -344,7 +344,7 @@ async fn serve_lab_font(AxPath(file): AxPath<String>) -> Result<Response, Status
         .into_response())
 }
 
-fn bs58_pk(pk: &BlsPublicKey) -> String {
+pub(crate) fn bs58_pk(pk: &BlsPublicKey) -> String {
     bs58::encode(pk.to_bytes()).into_string()
 }
 
