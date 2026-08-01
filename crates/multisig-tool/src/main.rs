@@ -543,7 +543,7 @@ fn print_identity_summary(identities: &[keystore::Identity]) {
     );
     for i in identities {
         let kind = if i.is_pk_only() { "pk-only" } else { "signing" };
-        println!("  {} [{kind}]: pk = {}", i.name, bs58_pk(&i.pk));
+        println!("  {} [{kind}]: pk = {}", i.name, rpc::bs58_pk(&i.pk));
     }
 }
 
@@ -648,7 +648,7 @@ async fn main() -> Result<()> {
                 let mut identities = Vec::new();
                 if let Some(name) = &name {
                     let identity = keystore::generate(name);
-                    println!("{name}: pk = {}", bs58_pk(&identity.pk));
+                    println!("{name}: pk = {}", rpc::bs58_pk(&identity.pk));
                     identities.push(identity);
                 }
                 keystore::save(&store_path, &password, &identities)?;
@@ -664,7 +664,7 @@ async fn main() -> Result<()> {
                     bail!("identity '{name}' already exists");
                 }
                 let identity = keystore::generate(&name);
-                println!("{name}: pk = {}", bs58_pk(&identity.pk));
+                println!("{name}: pk = {}", rpc::bs58_pk(&identity.pk));
                 identities.push(identity);
                 keystore::save(&store_path, &password, &identities)?;
             }
@@ -678,7 +678,7 @@ async fn main() -> Result<()> {
                 use dusk_bytes::Serializable;
                 println!("name: {}", id.name);
                 println!("kind: {}", if id.is_pk_only() { "pk-only" } else { "signing" });
-                println!("pk_base58: {}", bs58_pk(&id.pk));
+                println!("pk_base58: {}", rpc::bs58_pk(&id.pk));
                 println!("pk_hex: {}", hex::encode(id.pk.to_bytes()));
             }
             IdentityCmd::ImportPk { name, pk } => {
@@ -688,7 +688,7 @@ async fn main() -> Result<()> {
                 }
                 let parsed = keystore::parse_pk(&pk)?;
                 let identity = keystore::from_pk_only(&name, parsed);
-                println!("{name} [pk-only]: pk = {}", bs58_pk(&identity.pk));
+                println!("{name} [pk-only]: pk = {}", rpc::bs58_pk(&identity.pk));
                 identities.push(identity);
                 keystore::save(&store_path, &password, &identities)?;
             }
@@ -713,7 +713,7 @@ async fn main() -> Result<()> {
                     Some(v) => {
                         println!("account {account_id}: threshold={}, nonce={}", v.threshold, v.nonce);
                         for pk in &v.members {
-                            println!("  member: {}", bs58_pk(pk));
+                            println!("  member: {}", rpc::bs58_pk(pk));
                         }
                     }
                     None => println!("account {account_id}: not found"),
@@ -1037,7 +1037,7 @@ async fn main() -> Result<()> {
                             v.approvals.len()
                         );
                         for pk in &v.approvals {
-                            println!("  approval: {}", bs58_pk(pk));
+                            println!("  approval: {}", rpc::bs58_pk(pk));
                         }
                     }
                 }
@@ -1175,7 +1175,7 @@ async fn main() -> Result<()> {
                 println!("digest: 0x{}", hex::encode(digest));
                 println!("signers: {}", keys.len());
                 for (i, pk) in keys.iter().enumerate() {
-                    println!("  [{i}] {}", bs58_pk(pk));
+                    println!("  [{i}] {}", rpc::bs58_pk(pk));
                 }
                 println!("aggregate_sig: 0x{}", hex::encode(agg.to_bytes()));
             }
@@ -1504,11 +1504,6 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn bs58_pk(pk: &BlsPublicKey) -> String {
-    use dusk_bytes::Serializable;
-    bs58::encode(pk.to_bytes()).into_string()
 }
 
 /// Minimal query-string escape for demo prefills (no extra crate).
