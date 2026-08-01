@@ -117,6 +117,13 @@ pub const GOLDEN_VERIFY_QUORUM_AGGREGATE_ARGS_HEX: &str = concat!(
     "e991453fa10050000000000000000"
 );
 
+/// **This type is declared independently in both `multisig-registry` and
+/// `multisig-proposals`** (an unclosed layer-E mirror of `MultisigAccountView`
+/// across a live `abi::call` boundary — see `WAVE5-IMPLEMENTATION-REVIEW.md`
+/// §5.1). The twin golden in the other crate uses the same fixture and, as of
+/// 2026-08-01, records byte-identical hex. **If you change this constant,
+/// change the other one, and explain why the two encoders diverged.**
+///
 /// `MultisigAccountView { members: [pk0, pk1], threshold: 2, nonce: 3 }`.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
 pub const GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX: &str = concat!(
