@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<g transform="translate(152,70) scale(4.33333)">
+<path d="M24,24 C24,16 15,16 15,24 C15,32 24,32 24,24 C24,16 33,16 33,24 C33,32 24,32 24,24" fill="none" stroke="#292b31" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+<circle cx="24" cy="24" r="2.2" fill="#9184d9"></circle>
+</g>
+<text x="256" y="345" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="500" font-size="84" letter-spacing="-1.5" fill="#292b31">Knot</text>
+</svg>
