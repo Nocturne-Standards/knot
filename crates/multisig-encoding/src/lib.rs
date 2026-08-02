@@ -32,6 +32,11 @@ pub use fingerprint::{digest_hex, digest_mnemonic, digest_safety_number};
 #[cfg(feature = "call-types")]
 pub mod call_types;
 
+// Goldens are a `pub mod`, not `#[cfg(test)]` — consumers assert against these
+// consts rather than hand-copying hex (spec 26 Task 7 / Wave 4 pattern).
+#[cfg(feature = "call-types")]
+pub mod layout_goldens;
+
 /// Encoding failure for §4a proposal preimage construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EncodingError {
