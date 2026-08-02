@@ -5,6 +5,8 @@ edition = "2024"
 rust-version = "1.94"
 publish = false
 license = "Apache-2.0"
+description = "On-chain propose/approve/finalize+execute multisig proposals contract."
+repository = "https://github.com/aichbindas/knot"
 
 [dependencies]
 dusk-bls12_381 = { version = "=0.14.2", default-features = false }
