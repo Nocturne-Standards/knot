@@ -2178,7 +2178,11 @@ dependencies = [
 name = "multisig-encoding"
 version = "0.1.0"
 dependencies = [
+ "bytecheck",
+ "dusk-core",
  "proptest",
+ "rkyv",
+ "serde",
  "sha2 0.10.9",
  "tiny-keccak",
 ]
