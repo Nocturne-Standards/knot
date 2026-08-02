@@ -27,8 +27,20 @@ Dense on purpose.
 
 ## Status
 
+**2026-08-02 — Wave 7 carve target:** private GitHub repo
+[`aichbindas/knot`](https://github.com/aichbindas/knot). Repo-level consumer pin
+**`v0.1.0`** (not crates.io). Per-crate versions inside the workspace today:
+`multisig-encoding` 0.1.0 · `multisig-registry` 0.1.4 · `multisig-proposals`
+0.3.1 · `multisig-tool` 0.2.0 · `multisig-collector` 0.2.0 (AGPL). Nest folder
+name stays `multisig/` until monorepo hard-cut.
+
+**Consumer dep (encoding):**
+```toml
+multisig-encoding = { git = "https://github.com/aichbindas/knot", tag = "v0.1.0", package = "multisig-encoding", features = ["call-types"] }
+```
+
 **2026-07-27 — product name Knot** (public surfaces: `knot.nocturne-standards.org`,
-docs `/v1/knot/`). Code/repo remains `multisig`.
+docs `/v1/knot/`). Code/repo remains `multisig` until carve completes.
 
 **2026-07-23 — nested workspace carve landed** (hard-cut; see parent
 `docs/roadmap.md` Track 7 for per-crate deploy status).
