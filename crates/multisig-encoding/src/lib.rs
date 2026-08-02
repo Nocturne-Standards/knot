@@ -9,9 +9,10 @@
 //! - **§4b ProposalBlob** — in-memory shape for intent + partials (never itself signed).
 //!   JSON+hex transport for blobs lives in `multisig-tool` / `multisig-collector`;
 //!   this crate does not serialize §4b with rkyv.
-//! - **Layer E (`call-types` feature)** — rkyv ABI structs (`SignatureEntry`,
-//!   `VerifyQuorumArgs`, `MultisigAccountView`) shared by `multisig-registry`
-//!   and `multisig-proposals`. Off by default so §4a consumers never inherit
+//! - **Layer E (`call-types` feature)** — rkyv ABI structs shared by
+//!   `multisig-registry` and `multisig-proposals` (and host tools after Wave 7).
+//!   Includes quorum types plus registry/proposals call args (`CreateAccountArgs`,
+//!   `ProposeArgs`, …). Off by default so §4a consumers never inherit
 //!   `dusk-core` / `rkyv`. Spec 26.
 //!
 //! Spec: `docs/multisig/multisig-suite-and-atlas-implementation-plan.md` §4;

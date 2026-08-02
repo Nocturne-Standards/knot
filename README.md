@@ -30,7 +30,7 @@ Dense on purpose.
 **2026-08-02 — Wave 7 carve target:** private GitHub repo
 [`aichbindas/knot`](https://github.com/aichbindas/knot). Repo-level consumer pin
 **`v0.1.0`** (not crates.io). Per-crate versions inside the workspace today:
-`multisig-encoding` 0.1.0 · `multisig-registry` 0.1.4 · `multisig-proposals`
+`multisig-encoding` 0.1.1 · `multisig-registry` 0.1.4 · `multisig-proposals`
 0.3.1 · `multisig-tool` 0.2.0 · `multisig-collector` 0.2.0 (AGPL). Nest folder
 name stays `multisig/` until monorepo hard-cut.
 
