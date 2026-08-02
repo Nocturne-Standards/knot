@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.0"
+          targets: wasm32-unknown-unknown
+      # Workspace root = knot nest. Collector is AGPL; encoding/registry/proposals/tool Apache.
+      - name: cargo test (workspace)
+        run: cargo test
+        timeout-minutes: 45
