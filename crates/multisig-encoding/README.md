@@ -15,8 +15,8 @@ cannot drift.
 - **Layer E (`call-types`, 2026-08-02 / spec 26)** — default-off feature holding
   `SignatureEntry`, `VerifyQuorumArgs`, `MultisigAccountView` (rkyv ABI; no
   `repr(C)` yet — that is spec 23b). Serde derives behind `data-driver`.
-  Adoption by `multisig-registry` / `multisig-proposals` is the follow-on tasks
-  in plan 26; until then both contracts still declare local copies.
+  Both contracts re-export from `call_types` (`f7f4c1b` registry /
+  `823ca2f` proposals); IDENTICAL carry.
 - Spec: [`docs/multisig/multisig-suite-and-atlas-implementation-plan.md`](../../../docs/multisig/multisig-suite-and-atlas-implementation-plan.md) §4 / M3;
   call types: [`26-multisig-shared-call-types.md`](../../../docs/superpowers/specs/2026-07-31-shared-code/26-multisig-shared-call-types.md).
 - Host `rlib` (`no_std` + `alloc`); path-dep from contracts and the tool.
