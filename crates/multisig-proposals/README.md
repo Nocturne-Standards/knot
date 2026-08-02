@@ -18,6 +18,14 @@ Signed bytes are the §4a digest from [`multisig-encoding`](../multisig-encoding
   `../../../deployments/testnet.json`.
 - Unit tests use `sign_insecure` (PreFork). Live clients must use secure `sign`.
 
+**Source divergence (Spec 26, `823ca2f` / extraction `117183c..823ca2f`):**
+`SignatureEntry` / `VerifyQuorumArgs` / `MultisigAccountView` now come from
+`multisig-encoding` behind the `call-types` feature. Source differs from
+deployed v0.3.1 wasm, but layout-golden hex is byte-identical
+(**IDENTICAL**). Carry indefinitely; no redeploy required (same Track 9 /
+2026-08-01 standing decision as Wave 3 byte-identical type moves). Derives
+moved unchanged (R12); no derive edits in the adoption commits.
+
 ## Functions
 
 | Method | Notes |
