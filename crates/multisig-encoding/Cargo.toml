@@ -26,7 +26,6 @@ data-driver = ["call-types", "dep:serde", "dusk-core/serde"]
 
 [dev-dependencies]
 proptest = "1"
-hex = "0.4"
 rand = { version = "0.8.6", default-features = false }
 dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", features = ["zk"] }
 
