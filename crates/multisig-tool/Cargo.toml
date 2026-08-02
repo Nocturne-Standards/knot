@@ -39,7 +39,7 @@ aes-gcm = "0.10"
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 sha2 = "0.10"
 rpassword = "7"
-multisig-encoding = { path = "../multisig-encoding" }
+multisig-encoding = { path = "../multisig-encoding", features = ["call-types"] }
 zeroize = "1"
 subtle = "2"
 
