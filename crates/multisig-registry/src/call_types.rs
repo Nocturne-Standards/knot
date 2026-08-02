@@ -3,25 +3,18 @@
 //! Kept outside the `#[dusk_forge::contract]` module so host-side tests can
 //! construct the same layouts the WASM contract deserializes (rkyv) — same
 //! convention as `prediction-market/src/call_types.rs`.
+//!
+//! `SignatureEntry`, `VerifyQuorumArgs`, and `MultisigAccountView` live in
+//! `multisig-encoding` (spec 26); re-exported here so existing paths keep
+//! working.
 
 use alloc::vec::Vec;
 
 use bytecheck::CheckBytes;
-use dusk_core::signatures::bls::{
-    MultisigSignature, PublicKey as BlsPublicKey, Signature as BlsSignature,
-};
+use dusk_core::signatures::bls::{MultisigSignature, PublicKey as BlsPublicKey};
 use rkyv::{Archive, Deserialize, Serialize};
 
-/// One member's signature over the message being authorized. `signer` must
-/// be one of the account's `members` and must not repeat across entries in
-/// the same call — see `quorum_met`'s dedupe check.
-#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
-#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
-pub struct SignatureEntry {
-    pub signer: BlsPublicKey,
-    pub signature: BlsSignature,
-}
+pub use multisig_encoding::call_types::{MultisigAccountView, SignatureEntry, VerifyQuorumArgs};
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
@@ -29,23 +22,6 @@ pub struct SignatureEntry {
 pub struct CreateAccountArgs {
     pub members: Vec<BlsPublicKey>,
     pub threshold: u32,
-}
-
-/// Pure quorum check: does `sigs` carry >= `threshold` valid, distinct-member
-/// signatures over `msg` for account `account_id`? Callers (this crate's own
-/// `change_account`, or another contract via `abi::call`) choose `msg`'s
-/// content themselves — this registry does not impose or track a message
-/// format, only verifies signatures against the account's current member
-/// set. Replay protection is therefore the *caller's* responsibility (e.g.
-/// fold a nonce the caller owns into `msg`), except for `change_account`
-/// itself, which folds this account's own `nonce` in automatically.
-#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
-#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
-pub struct VerifyQuorumArgs {
-    pub account_id: u64,
-    pub msg: Vec<u8>,
-    pub sigs: Vec<SignatureEntry>,
 }
 
 /// Replaces an account's member set / threshold. Authorized by a quorum of
@@ -90,16 +66,6 @@ pub struct VerifyQuorumAggregateArgs {
     pub msg: Vec<u8>,
     pub signer_keys: Vec<BlsPublicKey>,
     pub aggregate_sig: MultisigSignature,
-}
-
-/// Read-only view of an account, returned by `account`.
-#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
-#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
-pub struct MultisigAccountView {
-    pub members: Vec<BlsPublicKey>,
-    pub threshold: u32,
-    pub nonce: u64,
 }
 
 /// Lightweight account summary without `BlsPublicKey` values — used to
