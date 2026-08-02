@@ -5,6 +5,8 @@ edition = "2024"
 rust-version = "1.94"
 publish = false
 license = "Apache-2.0"
+description = "Local signing tool and web UI for exercising the multisig suite."
+repository = "https://github.com/aichbindas/knot"
 
 [[bin]]
 name = "multisig-tool"
