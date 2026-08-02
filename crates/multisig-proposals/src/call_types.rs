@@ -1,4 +1,8 @@
 //! Call argument / return types for `multisig-proposals` (v0.3).
+//!
+//! `SignatureEntry`, `VerifyQuorumArgs`, and `MultisigAccountView` live in
+//! `multisig-encoding` (spec 26); re-exported here so existing paths keep
+//! working.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -7,6 +11,8 @@ use bytecheck::CheckBytes;
 use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, Signature as BlsSignature};
 use rkyv::{Archive, Deserialize, Serialize};
+
+pub use multisig_encoding::call_types::{MultisigAccountView, SignatureEntry, VerifyQuorumArgs};
 
 /// Proposal lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -24,36 +30,10 @@ pub enum ProposalStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
-pub struct SignatureEntry {
-    pub signer: BlsPublicKey,
-    pub signature: BlsSignature,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
-#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct ApproveArgs {
     pub proposal_id: u64,
     pub signer: BlsPublicKey,
     pub signature: BlsSignature,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
-#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
-pub struct VerifyQuorumArgs {
-    pub account_id: u64,
-    pub msg: Vec<u8>,
-    pub sigs: Vec<SignatureEntry>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(CheckBytes))]
-#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
-pub struct MultisigAccountView {
-    pub members: Vec<BlsPublicKey>,
-    pub threshold: u32,
-    pub nonce: u64,
 }
 
 /// Structured propose input — §4a fields. Digest is recomputed on-chain.
