@@ -85,6 +85,14 @@ of a `dusk-vm` gotcha: see
 `prediction-market::resolve` via `verify_quorum` (not yet the aggregate
 path — see Next steps).
 
+**Source divergence (Spec 26, `f7f4c1b` / extraction `117183c..f7f4c1b`):**
+`SignatureEntry` / `VerifyQuorumArgs` / `MultisigAccountView` now come from
+`multisig-encoding` behind the `call-types` feature. Source differs from
+deployed v0.1.4 wasm, but layout-golden hex is byte-identical
+(**IDENTICAL**). Carry indefinitely; no redeploy required (same Track 9 /
+2026-08-01 standing decision as Wave 3 byte-identical type moves). Derives
+moved unchanged (R12); no derive edits in the adoption commits.
+
 ## Next steps
 
 - Wire `prediction-market::resolve`'s council path (currently
