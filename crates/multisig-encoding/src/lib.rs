@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Nocturne Standards
 
-//! Canonical multisig proposal encoding.
+//! Canonical multisig proposal encoding, plus shared layer-E call types.
 //!
-//! Two artifacts (do not conflate):
+//! Three surfaces (do not conflate):
 //! - **§4a signing preimage** — malleability-free byte concatenation → Keccak256 digest.
 //!   This is what members sign. Never use rkyv for these bytes.
 //! - **§4b ProposalBlob** — in-memory shape for intent + partials (never itself signed).
 //!   JSON+hex transport for blobs lives in `multisig-tool` / `multisig-collector`;
 //!   this crate does not serialize §4b with rkyv.
+//! - **Layer E (`call-types` feature)** — rkyv ABI structs (`SignatureEntry`,
+//!   `VerifyQuorumArgs`, `MultisigAccountView`) shared by `multisig-registry`
+//!   and `multisig-proposals`. Off by default so §4a consumers never inherit
+//!   `dusk-core` / `rkyv`. Spec 26.
 //!
-//! Spec: `docs/multisig/multisig-suite-and-atlas-implementation-plan.md` §4.
+//! Spec: `docs/multisig/multisig-suite-and-atlas-implementation-plan.md` §4;
+//! call types: `docs/superpowers/specs/2026-07-31-shared-code/26-multisig-shared-call-types.md`.
 
 #![cfg_attr(not(test), no_std)]
 
@@ -23,6 +28,9 @@ use tiny_keccak::{Hasher, Keccak};
 
 pub mod fingerprint;
 pub use fingerprint::{digest_hex, digest_mnemonic, digest_safety_number};
+
+#[cfg(feature = "call-types")]
+pub mod call_types;
 
 /// Encoding failure for §4a proposal preimage construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
