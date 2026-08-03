@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "pituitary": {
+      "command": "pituitary",
+      "args": [
+        "--config",
+        "${workspaceFolder}/.pituitary/pituitary.toml",
+        "serve",
+        "--transport",
+        "stdio"
+      ]
+    }
+  }
+}
