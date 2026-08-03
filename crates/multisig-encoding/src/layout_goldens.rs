@@ -8,15 +8,19 @@
 //! plan 23a §4.1). Do **not** re-paste hex in consumer crates.
 //!
 //! **rkyv camp:** this crate pins `rkyv = "=0.7.39"` (same as the multisig
-//! contracts). Resolved patch: run `(cd multisig && cargo tree -p rkyv)`.
+//! contracts). Resolved patch: `(cd crates/multisig-encoding && cargo tree -p rkyv)`.
+//!
+//! **Layer E + `repr(C)` (spec 23b Phase B, 2026-08-03):** structs carry
+//! `#[archive_attr(repr(C))]`. Measured **DIFFERENT** on `MultisigAccountView`
+//! (IDENTICAL on `SignatureEntry` / `VerifyQuorumArgs`). Constants below are
+//! after-pin bytes where they moved.
 //!
 //! Fixed inputs: `StdRng::seed_from_u64(0xa11ce_u64)`; message bytes
 //! `b"wave5-layout-golden-multisig"` for signatures.
 //!
-//! R9 corrupt-one-digit check performed 2026-08-02 on
-//! `GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX` (flipped final `0` to `1`; both
-//! `multisig-registry` and `multisig-proposals` `layout_goldens` went red;
-//! reverted; green).
+//! R9 corrupt-one-digit on **post-`repr(C)`** constants 2026-08-03:
+//! `GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX` final digit flipped; encoding + both
+//! consumer `layout_goldens` went red; reverted; green.
 
 /// `SignatureEntry` — signer from seed key 0, `sign_insecure(MSG)`.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
@@ -52,6 +56,7 @@ pub const GOLDEN_VERIFY_QUORUM_ARGS_HEX: &str = concat!(
 
 /// `MultisigAccountView { members: [pk0, pk1], threshold: 2, nonce: 3 }`.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
+/// After-pin hex (spec 23b `repr(C)` DIFFERENT 2026-08-03).
 pub const GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX: &str = concat!(
     "e3a945bd7dbd51365c255b3a7851432419f20ddb7bc948f5b60d677c5b02ff9e",
     "6255228ee75c9dd8a3bd4a86751e9b14cf501c89e69b4b2a2169c189accff3af",
@@ -65,8 +70,8 @@ pub const GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX: &str = concat!(
     "fd430913d88f43f140eb423fc1b9f5bfca7275eef2e1535532d8a405101a6d00",
     "f5b8d28252b6c3a8918eef733d241600235b1bd43fec9e36511e234afcdfe9a",
     "1eb9754a83cc21f3992f76a05fb31f425978548db4a800f7acc435f5bb0fcbcb",
-    "1ff8dd71321866759507000000000000000070feffff020000000300000000000000",
-    "0200000000000000"
+    "1ff8dd71321866759507000000000000000070feffff020000000200000000000000",
+    "0300000000000000"
 );
 
 #[cfg(test)]
