@@ -70,28 +70,29 @@ future `compliance-gate` operator council.
 
 ## Status
 
-**v0.1.4** on testnet (2026-07-28 cutover — audit #6 `checked_add` on
-`next_id`/`nonce`). Contract id in `../../../deployments/testnet.json`.
-`make wasm` + `make wasm-dd` + `cargo test --release`, 14/14 green.
-Same dusk-forge-template pattern as `identity-credential`/`compliance-gate`
-(wasm32-unknown-unknown, Rust 1.94.0, `#[dusk_forge::contract]`).
+**v0.1.5** on testnet (2026-08-03 — Spec 23b Phase B `repr(C)` pin; measured
+**DIFFERENT**). Contract id `3e3c5be563e8b085d4e66b048b4794457382cf3f578699a55e5c4a9fe9c94045`
+(see monorepo `deployments/testnet.json` key `multisig-registry`). Prior live
+pin: **v0.1.4** (2026-07-28 audit #6 `checked_add`). Status:
+**PINNED-DIFFERENT-REDEPLOYED**.
+
+`make wasm` + `make wasm-dd` + `cargo test --release`. Same dusk-forge-template
+pattern (wasm32-unknown-unknown, Rust 1.94.0, `#[dusk_forge::contract]`).
 `verify_quorum_aggregate`'s tests exercise the real `verify_bls_multisig`
 host query under `VM::ephemeral()` (not mocked) — signing uses
 `sign_multisig_insecure`, not the default secure `sign_multisig`, because
 of a `dusk-vm` gotcha: see
 `references/dusk-native/dusk-vm-issue-1-ephemeral-hardfork-policy-unreachable.md`.
 **Live testnet clients must use secure `sign`/`sign_multisig`** — see
-[`../multisig-tool/README.md`](../multisig-tool/README.md). Wired into
-`prediction-market::resolve` via `verify_quorum` (not yet the aggregate
-path — see Next steps).
+[`../multisig-tool/README.md`](../multisig-tool/README.md).
 
-**Source divergence (Spec 26, `f7f4c1b` / extraction `117183c..f7f4c1b`):**
-`SignatureEntry` / `VerifyQuorumArgs` / `MultisigAccountView` now come from
-`multisig-encoding` behind the `call-types` feature. Source differs from
-deployed v0.1.4 wasm, but layout-golden hex is byte-identical
-(**IDENTICAL**). Carry indefinitely; no redeploy required (same Track 9 /
-2026-08-01 standing decision as Wave 3 byte-identical type moves). Derives
-moved unchanged (R12); no derive edits in the adoption commits.
+**23b Phase B (2026-08-03):** `#[archive_attr(repr(C))]` on shared
+`multisig-encoding` call types (this crate re-exports). Layout goldens in
+`tests/layout_goldens.rs` (post-pin hex). DIFFERENT types include
+`MultisigAccountView` / `ChangeAccountArgs` / `AccountMeta` /
+`DiagnoseQuorumResult`. Spec 26 source-carry paragraph cleared by this
+redeploy (R7). Operator ceremony re-wire of downstream callers (e.g. PM
+council) may stay deferred/unwired — OK per Phase B lessons.
 
 ## Next steps
 

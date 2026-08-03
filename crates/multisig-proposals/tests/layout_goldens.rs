@@ -1,25 +1,28 @@
 //! Consumer-local archived-layout goldens for `multisig-proposals` call types
-//! (Wave 5 / spec 23a). Shared layer-E types (`SignatureEntry`,
+//! (Wave 5 / spec 23a + 23b Phase B). Shared layer-E types (`SignatureEntry`,
 //! `VerifyQuorumArgs`, `MultisigAccountView`) assert against
 //! `multisig_encoding::layout_goldens` — do **not** re-paste those hex values
 //! here; still call `rkyv::to_bytes` at runtime.
 //!
-//! **rkyv camp:** this crate pins `rkyv = "=0.7.39"` (compliance-gate / identity-
-//! credential arm). Resolved patch: run `(cd multisig && cargo tree -p rkyv)`.
+//! **rkyv camp:** this crate pins `rkyv = "=0.7.39"`. Resolved patch:
+//! `(cd crates/multisig-proposals && cargo tree -p rkyv)`.
 //!
-//! **Layer E, no `repr(C)`:** these pins record the archived byte layout as
-//! rkyv 0.7.39 emits it today. Spec 23b (`#[archive_attr(repr(C))]`) is out of
-//! scope — do not add `repr(C)` here.
+//! **Layer E + `repr(C)`:** Archive structs in `multisig-encoding` `call_types`
+//! carry `#[archive_attr(repr(C))]`. Fieldless `ProposalStatus` keeps
+//! `#[repr(u8)]` only — `archive_attr(repr(C))` rejected on archived unit enum.
+//! Measured **DIFFERENT** 2026-08-03 on `ProposeArgs` / `MultisigAccountView`
+//! (IDENTICAL on `SignatureEntry`, `VerifyQuorumArgs`, `ApproveArgs`,
+//! `ProposalView`, `ProposalStatus`). Constants below are after-pin bytes
+//! where they moved.
 //!
 //! Fixed inputs: `StdRng::seed_from_u64(0xa11ce_u64)`; message bytes
 //! `b"wave5-layout-golden-multisig"` for signatures; target `ContractId` all
 //! `0x0d`; `function_name` `"set_value"`; `call_args` rkyv `u64(42)`; digest
 //! `[0x11; 32]` for `ProposalView` approval signatures.
 //!
-//! R9 corrupt-one-digit check performed 2026-08-01 on `GOLDEN_PROPOSAL_STATUS_HEX`
-//! (flipped final `0` to `1`; `proposal_status_golden` failed; reverted; green).
-//! Shared types: R9 recorded in `multisig-encoding/src/layout_goldens.rs`
-//! (2026-08-02, both consumers red then green).
+//! R9 corrupt-one-digit on **post-`repr(C)`** constants 2026-08-03:
+//! `GOLDEN_PROPOSE_ARGS_HEX` final digit flipped; `propose_args_golden`
+//! failed; reverted; green.
 
 extern crate alloc;
 
@@ -62,7 +65,7 @@ pub const GOLDEN_APPROVE_ARGS_HEX: &str =
 /// `ProposeArgs` — account 1, TARGET, `"set_value"`, rkyv `u64(42)`, deadline 0.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
 pub const GOLDEN_PROPOSE_ARGS_HEX: &str =
-    "7365745f76616c75652a00000000000000000000000000000d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d010000000000000009000000c0ffffffc1ffffff080000000000000000000000";
+    "7365745f76616c75652a000000000000000000000000000001000000000000000d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d09000000c0ffffffc1ffffff080000000000000000000000";
 
 /// `ProposalView` — open proposal with one approval over `SIGNED_DIGEST`.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.

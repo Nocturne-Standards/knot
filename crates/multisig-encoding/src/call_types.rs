@@ -1,6 +1,7 @@
 //! Layer-E multisig ABI types shared across `multisig-registry` and
-//! `multisig-proposals` (spec 26 + Wave 7 host carve). Layout-neutral move —
-//! do not add `repr(C)` here (spec 23b owns that). Gated behind the
+//! `multisig-proposals` (spec 26 + Wave 7 host carve). Spec 23b pins
+//! `#[archive_attr(repr(C))]` on struct Archive types (not fieldless
+//! `#[repr(u8)]` enums — see `ProposalStatus`). Gated behind the
 //! `call-types` feature so §4a digest consumers do not pull in `dusk-core`.
 
 use alloc::string::String;
@@ -18,6 +19,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 /// the same call — see `quorum_met`'s dedupe check.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct SignatureEntry {
     pub signer: BlsPublicKey,
@@ -34,6 +36,7 @@ pub struct SignatureEntry {
 /// itself, which folds this account's own `nonce` in automatically.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct VerifyQuorumArgs {
     pub account_id: u64,
@@ -44,6 +47,7 @@ pub struct VerifyQuorumArgs {
 /// Read-only view of an account, returned by `account`.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct MultisigAccountView {
     pub members: Vec<BlsPublicKey>,
@@ -53,6 +57,7 @@ pub struct MultisigAccountView {
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct CreateAccountArgs {
     pub members: Vec<BlsPublicKey>,
@@ -70,6 +75,7 @@ pub struct CreateAccountArgs {
 /// quorum for an older nonce fails once the account has changed.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct ChangeAccountArgs {
     pub account_id: u64,
@@ -95,6 +101,7 @@ pub struct ChangeAccountArgs {
 /// which subset actually signed before combining.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct VerifyQuorumAggregateArgs {
     pub account_id: u64,
@@ -108,6 +115,7 @@ pub struct VerifyQuorumAggregateArgs {
 /// returning BLS keys over RUES.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct AccountMeta {
     pub threshold: u32,
@@ -119,6 +127,7 @@ pub struct AccountMeta {
 /// skipped: `member_match` is pure `contains`, `sig_ok` is `abi::verify_bls`.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct DiagnoseQuorumResult {
     pub exists: bool,
@@ -134,6 +143,11 @@ pub struct DiagnoseQuorumResult {
 }
 
 /// Proposal lifecycle.
+///
+/// Fieldless `#[repr(u8)]` enum: rkyv's archived form is also a unit enum with
+/// an integer discriminant. `#[archive_attr(repr(C))]` is rejected by rustc
+/// ("enums may only be repr(i*) or repr(u*)") when applied here, so the pin
+/// is the existing `repr(u8)` plus the layout golden — not `archive_attr`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
@@ -148,6 +162,7 @@ pub enum ProposalStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct ApproveArgs {
     pub proposal_id: u64,
@@ -158,6 +173,7 @@ pub struct ApproveArgs {
 /// Structured propose input — §4a fields. Digest is recomputed on-chain.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProposeArgs {
     pub registry_account_id: u64,
@@ -170,6 +186,7 @@ pub struct ProposeArgs {
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProposalView {
     pub registry_account_id: u64,

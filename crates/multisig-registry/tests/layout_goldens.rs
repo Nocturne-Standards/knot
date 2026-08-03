@@ -1,23 +1,25 @@
 //! Consumer-local archived-layout goldens for `multisig-registry` call types
-//! (Wave 5 / spec 23a). Shared layer-E types (`SignatureEntry`,
+//! (Wave 5 / spec 23a + 23b Phase B). Shared layer-E types (`SignatureEntry`,
 //! `VerifyQuorumArgs`, `MultisigAccountView`) assert against
 //! `multisig_encoding::layout_goldens` — do **not** re-paste those hex values
 //! here; still call `rkyv::to_bytes` at runtime.
 //!
-//! **rkyv camp:** this crate pins `rkyv = "=0.7.39"` (compliance-gate / identity-
-//! credential arm). Resolved patch: run `(cd multisig && cargo tree -p rkyv)`.
+//! **rkyv camp:** this crate pins `rkyv = "=0.7.39"`. Resolved patch:
+//! `(cd crates/multisig-registry && cargo tree -p rkyv)`.
 //!
-//! **Layer E, no `repr(C)`:** these pins record the archived byte layout as
-//! rkyv 0.7.39 emits it today. Spec 23b (`#[archive_attr(repr(C))]`) is out of
-//! scope — do not add `repr(C)` here.
+//! **Layer E + `repr(C)`:** Archive structs in `multisig-encoding` `call_types`
+//! carry `#[archive_attr(repr(C))]`. Measured **DIFFERENT** 2026-08-03 on
+//! `MultisigAccountView`, `ChangeAccountArgs`, `AccountMeta`,
+//! `DiagnoseQuorumResult` (IDENTICAL on `SignatureEntry`, `VerifyQuorumArgs`,
+//! `CreateAccountArgs`, `VerifyQuorumAggregateArgs`). Constants below are
+//! after-pin bytes where they moved.
 //!
 //! Fixed inputs: `StdRng::seed_from_u64(0xa11ce_u64)`; message bytes
 //! `b"wave5-layout-golden-multisig"` for signatures and aggregate multisig.
 //!
-//! R9 corrupt-one-digit check performed 2026-08-01 on `GOLDEN_ACCOUNT_META_HEX`
-//! (flipped final `0` to `1`; `account_meta_golden` failed; reverted; green).
-//! Shared types: R9 recorded in `multisig-encoding/src/layout_goldens.rs`
-//! (2026-08-02, both consumers red then green).
+//! R9 corrupt-one-digit on **post-`repr(C)`** constants 2026-08-03:
+//! `GOLDEN_ACCOUNT_META_HEX` final digit flipped; `account_meta_golden`
+//! failed; reverted; green.
 
 extern crate alloc;
 
@@ -68,7 +70,7 @@ pub const GOLDEN_CREATE_ACCOUNT_ARGS_HEX: &str = concat!(
 /// `ChangeAccountArgs { account_id: 1, new_members: [pk2], new_threshold: 1, sigs: [one] }`.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
 pub const GOLDEN_CHANGE_ACCOUNT_ARGS_HEX: &str =
-    "99e317079d0813b10186109119eed0c881d13de10903e46188fd20511aaf9c1558564601889566e5c12e0a147213fe111e12df3a6a492224e13b5c7a375002f8452bc57d68bf4a7cd4742860903323b98fcedad84c3c7e10d826bab72bdb6802b454945d4ef56850364fcc3f181bb4377e77e936696d9ca8a3aad0a185cda0529ca59c17aa9d1535178fab2002bf001920d8826fb762f61d311b489de157d3270df9decf5525456671eeaf48f195585405891617a6be24b072eeb50d507845050000000000000000e3a945bd7dbd51365c255b3a7851432419f20ddb7bc948f5b60d677c5b02ff9e6255228ee75c9dd8a3bd4a86751e9b14cf501c89e69b4b2a2169c189accff3afc07b7ff80a0acfc75a4e073ee006624f722dd52ef90ae1828d8bfdcb6c1e260aad4c44e90e1b5e5c2067d4363ee978a0db41fdba0f29829a1263e43f33f231a9dc20fc5acafc235d9c920f2772cbd716ddb84cca39704625b55a01a011e7eeae177ef0949bce380f2d64afd6038e15ff70e7aaf4d9b92e8bf4188696e1264e090000000000000000374b44e24b396af6703685cae52d9efa06485d0954ed8303f47ff2b955438a2cc14672d519da0194c99f0af3c65a370e0df875cf13bc68530d224df5959be5496703761533d81f2a3d7f3343a5b8927cc044a8cfb03f1867e123aeb71aba5b160000000000000000010000000000000000feffff01000000c0feffff010000000100000000000000";
+    "99e317079d0813b10186109119eed0c881d13de10903e46188fd20511aaf9c1558564601889566e5c12e0a147213fe111e12df3a6a492224e13b5c7a375002f8452bc57d68bf4a7cd4742860903323b98fcedad84c3c7e10d826bab72bdb6802b454945d4ef56850364fcc3f181bb4377e77e936696d9ca8a3aad0a185cda0529ca59c17aa9d1535178fab2002bf001920d8826fb762f61d311b489de157d3270df9decf5525456671eeaf48f195585405891617a6be24b072eeb50d507845050000000000000000e3a945bd7dbd51365c255b3a7851432419f20ddb7bc948f5b60d677c5b02ff9e6255228ee75c9dd8a3bd4a86751e9b14cf501c89e69b4b2a2169c189accff3afc07b7ff80a0acfc75a4e073ee006624f722dd52ef90ae1828d8bfdcb6c1e260aad4c44e90e1b5e5c2067d4363ee978a0db41fdba0f29829a1263e43f33f231a9dc20fc5acafc235d9c920f2772cbd716ddb84cca39704625b55a01a011e7eeae177ef0949bce380f2d64afd6038e15ff70e7aaf4d9b92e8bf4188696e1264e090000000000000000374b44e24b396af6703685cae52d9efa06485d0954ed8303f47ff2b955438a2cc14672d519da0194c99f0af3c65a370e0df875cf13bc68530d224df5959be5496703761533d81f2a3d7f3343a5b8927cc044a8cfb03f1867e123aeb71aba5b160000000000000000010000000000000000feffff0100000001000000bcfeffff0100000000000000";
 
 /// `VerifyQuorumAggregateArgs` — two signers, aggregate over MSG.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
@@ -95,17 +97,12 @@ pub const GOLDEN_VERIFY_QUORUM_AGGREGATE_ARGS_HEX: &str = concat!(
 
 /// `AccountMeta { threshold: 2, nonce: 3, members_len: 2 }`.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
-pub const GOLDEN_ACCOUNT_META_HEX: &str = "03000000000000000200000002000000";
+pub const GOLDEN_ACCOUNT_META_HEX: &str = "020000000000000003000000000000000200000000000000";
 
 /// `DiagnoseQuorumResult` — exists=true, one 96-byte member pk row.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
-pub const GOLDEN_DIAGNOSE_QUORUM_RESULT_HEX: &str = concat!(
-    "93b30e683ad74bf6811ae1512963e38615e9e6fd086b3a8fd06fbfcbbf4bf12d",
-    "ce0352ab0ba23ae8f2d6b8ce4686efdc04e730080687cbee86a15a745b88328e",
-    "c578c3e2c4835d1b114f7932ad9d8a4a2b86893b73de1128a2684b446657090",
-    "ca0ffffff6000000002000000020000000100000001000000e8ffffff0100000001",
-    "000000"
-);
+pub const GOLDEN_DIAGNOSE_QUORUM_RESULT_HEX: &str =
+    "93b30e683ad74bf6811ae1512963e38615e9e6fd086b3a8fd06fbfcbbf4bf12dce0352ab0ba23ae8f2d6b8ce4686efdc04e730080687cbee86a15a745b88328ec578c3e2c4835d1b114f7932ad9d8a4a2b86893b73de1128a2684b446657090ca0ffffff600000000100000002000000020000000100000001000000e4ffffff01000000";
 
 fn archive_hex<T>(v: &T) -> String
 where
