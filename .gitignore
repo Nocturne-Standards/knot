@@ -4,3 +4,7 @@
 .DS_Store
 *.swp
 *~
+
+# Pituitary local index (commit curated .toml)
+.pituitary/*.db
+.pituitary/*.db-*
