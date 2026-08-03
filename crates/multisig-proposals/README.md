@@ -6,6 +6,11 @@ Signed bytes are the §4a digest from [`multisig-encoding`](../multisig-encoding
 
 ## Status
 
+- **v0.3.2** — Spec 23b Phase B `repr(C)` pin; measured **DIFFERENT**
+  (`ProposeArgs` / `MultisigAccountView`; IDENTICAL on `ApproveArgs` /
+  `ProposalView` / `ProposalStatus`). Status: **PINNED-DIFFERENT-REDEPLOYED**.
+  Prior live pin: **v0.3.1** (2026-07-28). Fieldless `ProposalStatus` keeps
+  `#[repr(u8)]` only (`archive_attr(repr(C))` rejected by rustc).
 - **v0.3.1** — CEI `finalize` (status + nonce before `call_raw`); `tombstone: bool`
   (default `false` → `Executed`); propose caps (`function_name` ≤ 64,
   `call_args` ≤ 4096); reject past deadlines at propose; `init_chain_id` wipes
@@ -13,18 +18,13 @@ Signed bytes are the §4a digest from [`multisig-encoding`](../multisig-encoding
   `proposal_digest` / `EncodingError` (audit 2026-07-28 #5).
 - Lab AC: `make test` green under `VM::ephemeral()` (includes `test-target`
   execute / reentrancy / failed-`call_raw` paths).
-- **Testnet:** **v0.3.1** live (2026-07-28 cutover); `init_registry` →
-  registry v0.1.4, `init_chain_id` = `2`. See
-  `../../../deployments/testnet.json`.
+- **Testnet:** **v0.3.2** live at
+  `cc3dec84edce7a685bf5799a671dba7d927b6b9214e501108f6fa9fa382749b6`
+  (2026-08-03 23b cutover); re-`init_registry` / `init_chain_id` against
+  registry v0.1.5 when wiring (may stay deferred / unwired). See monorepo
+  `deployments/testnet.json`.
 - Unit tests use `sign_insecure` (PreFork). Live clients must use secure `sign`.
-
-**Source divergence (Spec 26, `823ca2f` / extraction `117183c..823ca2f`):**
-`SignatureEntry` / `VerifyQuorumArgs` / `MultisigAccountView` now come from
-`multisig-encoding` behind the `call-types` feature. Source differs from
-deployed v0.3.1 wasm, but layout-golden hex is byte-identical
-(**IDENTICAL**). Carry indefinitely; no redeploy required (same Track 9 /
-2026-08-01 standing decision as Wave 3 byte-identical type moves). Derives
-moved unchanged (R12); no derive edits in the adoption commits.
+- Spec 26 source-carry paragraph cleared by this redeploy (R7).
 
 ## Functions
 
