@@ -34,3 +34,11 @@ Locked 2026-08-04.
 ## 2026-08-04T15:31:14.855Z — Council-resolve domain string pinned
 
 Locked 2026-08-04: after peel to wen, DOMAIN = `nocturne.wen.prediction-market.council-resolve.v3` (byte-exact). Knot generic digests stay `nocturne.knot.*`. Coordinated redeploy with wen.
+
+## 2026-08-04T16:11:32.988Z — PM audit fixes owned by wen plan; docs include website + nocturne-docs
+
+Locked 2026-08-04.
+
+- A1–A5 are not dropped: peel moves code to wen; wen paired plan must fix them (acceptance from audit leaves 010–014) before wen publicly claims pm-resolve.
+- Knot public launch plan covers strip + P1–P4 only; references moved findings.
+- P2 expanded: align repo READMEs, nocturne-docs /v1/knot/, and Lab/website copy to the same public claim.
