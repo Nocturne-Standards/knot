@@ -33,6 +33,7 @@ use crate::registry_types::call_types::{
 use crate::{chain, keystore};
 use multisig_tool::bls;
 use multisig_tool::collector_client::{self, CollectorClient};
+use multisig_tool::membership;
 use multisig_tool::mock_ledger::{DemoMode, MockLedger, MockProposal, MockProposalStatus};
 
 /// Chain id baked into mock proposals (matches live testnet `init_chain_id`).
@@ -803,6 +804,58 @@ fn msg_bytes(msg: &str, hex_flag: bool) -> Result<Vec<u8>, (StatusCode, String)>
     }
 }
 
+async fn fetch_registry_account(
+    state: &AppState,
+    account_id: u64,
+) -> Result<MultisigAccountView, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        let account = mock
+            .account(account_id)
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("account {account_id} not found")))?;
+        return Ok(account.to_account_view());
+    }
+    let bytes = chain::encode(&account_id).map_err(to_500)?;
+    let view: Option<MultisigAccountView> = chain::query("account", bytes).await.map_err(to_500)?;
+    view.ok_or_else(|| (StatusCode::BAD_REQUEST, format!("account {account_id} not found")))
+}
+
+async fn resolve_signer_pks_locked(
+    state: &AppState,
+    signer_names: &[String],
+) -> Result<Vec<BlsPublicKey>, (StatusCode, String)> {
+    let identities = state.identities.lock().await;
+    let mut pks = Vec::with_capacity(signer_names.len());
+    for name in signer_names {
+        let id = identities
+            .iter()
+            .find(|i| &i.name == name)
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("no identity named '{name}'")))?;
+        pks.push(id.pk);
+    }
+    Ok(pks)
+}
+
+async fn ensure_signers_are_members(
+    state: &AppState,
+    account_id: u64,
+    signer_names: &[String],
+) -> Result<(), (StatusCode, String)> {
+    let view = fetch_registry_account(state, account_id).await?;
+    let pks = resolve_signer_pks_locked(state, signer_names).await?;
+    membership::ensure_pks_are_members(account_id, &pks, &view)
+        .map_err(|e| (StatusCode::FORBIDDEN, e))
+}
+
+fn ensure_pks_are_members_view(
+    account_id: u64,
+    signer_pks: &[BlsPublicKey],
+    view: &MultisigAccountView,
+) -> Result<(), (StatusCode, String)> {
+    membership::ensure_pks_are_members(account_id, signer_pks, view)
+        .map_err(|e| (StatusCode::FORBIDDEN, e))
+}
+
 async fn build_sigs_locked(
     state: &AppState,
     signers: &[String],
@@ -852,6 +905,7 @@ async fn api_quorum_submit(
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
     mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
     let args = VerifyQuorumArgs {
@@ -881,6 +935,7 @@ async fn api_quorum_check(
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
     mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
     let args = VerifyQuorumArgs {
@@ -921,6 +976,7 @@ async fn api_quorum_agg_submit(
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
     mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let identities = state.identities.lock().await;
     let mut signer_keys = Vec::with_capacity(req.signers.len());
@@ -963,6 +1019,7 @@ async fn api_quorum_agg_check(
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
     mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let identities = state.identities.lock().await;
     let mut signer_keys = Vec::with_capacity(req.signers.len());
@@ -1026,6 +1083,7 @@ async fn api_change_account_submit(
         current.ok_or_else(|| (StatusCode::BAD_REQUEST, format!("account {} not found", req.account)))?;
 
     let msg = bls::change_account_message(req.account, current.nonce, &new_members, req.new_threshold);
+    ensure_pks_are_members_view(req.account, &resolve_signer_pks_locked(&state, &req.signers).await?, &current)?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
 
     let args = ChangeAccountArgs {
@@ -1289,6 +1347,7 @@ async fn api_proposal_approve(
                     "REFUSING TO SIGN: mock digest does not match recomputed intent".into(),
                 )
             })?;
+        ensure_signers_are_members(&state, mock_p.registry_account_id, &[req.signer.clone()]).await?;
         let intent_out = IntentDisplay {
             chain_id: intent.chain_id,
             committee_id: intent.committee_id,
@@ -1358,6 +1417,7 @@ async fn api_proposal_approve(
             "REFUSING TO SIGN: on-chain digest does not match recomputed intent".into(),
         )
     })?;
+    ensure_signers_are_members(&state, view.registry_account_id, &[req.signer.clone()]).await?;
     let intent_out = IntentDisplay {
         chain_id: intent.chain_id,
         committee_id: intent.committee_id,
@@ -1741,5 +1801,62 @@ mod generic_rpc_smoke {
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(body.contains("confirm required"));
+    }
+
+    #[tokio::test]
+    async fn approve_rejects_non_member() {
+        let state = test_state_with_identities(&["alice", "bob", "carol"]);
+        let app = build_router(state);
+
+        let create_account = serde_json::json!({
+            "members": ["alice", "bob"],
+            "threshold": 2
+        });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/account/create",
+            Some(create_account.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "create account: {body}");
+
+        let target = format!("0x{}", "33".repeat(32));
+        let create_proposal = serde_json::json!({
+            "account": 0,
+            "target": target,
+            "function": "set_value",
+            "args_hex": "0x01",
+            "deadline": 500
+        });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/create",
+            Some(create_proposal.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "create proposal: {body}");
+
+        let approve_carol = serde_json::json!({ "signer": "carol", "confirm": true });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve_carol.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "non-member approve: {body}");
+        assert!(body.contains("not a member"));
+
+        let approve_alice = serde_json::json!({ "signer": "alice", "confirm": true });
+        let (status, body) = oneshot_json(
+            app,
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve_alice.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "member approve: {body}");
     }
 }

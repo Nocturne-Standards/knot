@@ -60,12 +60,18 @@ wen admin cross-link.
 
 PM fix successors live on wen track pm-peel-and-fixes. Audit #10–14 superseded after this.
 
-## 2026-08-04 — A4 deferred for first public tag
+## 2026-08-04 — A4 implemented (generic Lab membership gate)
+
+Generic Lab live-membership pre-check before approve/quorum/change-account
+sign (audit #13 / leaf `007-a4-generic-membership-gate`) is **implemented**.
+Prove-mode on-chain mitigation remains the cryptographic guarantee.
+
+## 2026-08-04 — A4 deferred for first public tag (superseded)
 
 Optional generic Lab live-membership pre-check before approve/quorum/
-change-account sign (audit #13 / leaf `007-a4-generic-membership-gate`) is
-**not** required for first public tag. Prove-mode on-chain mitigation remains
-the guarantee. Recorded so launch is not blocked; leaf stays TODO or deferred.
+change-account sign (audit #13 / leaf `007-a4-generic-membership-gate`) was
+initially **not** required for first public tag. **Superseded** by
+implementation above.
 
 ## 2026-08-04 — Wen A1–A5 successors tracked
 

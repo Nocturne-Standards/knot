@@ -22,7 +22,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-use multisig_tool::{blob, bls, collector_client, mock_ledger};
+use multisig_tool::{blob, bls, collector_client, membership, mock_ledger};
 
 use proposals_types::call_types::{
     ApproveArgs, ProposalStatus, ProposalView, ProposeArgs,
@@ -673,6 +673,7 @@ async fn main() -> Result<()> {
         Cmd::Quorum { cmd } => match cmd {
             QuorumCmd::Submit { account, msg, hex, signers } => {
                 let (identities, _) = load_store(&store_path)?;
+                ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
                 let sigs = build_sigs(&identities, &signers, &msg_bytes)?;
                 let local_pks = signer_pk_hexs(&identities, &signers)?;
@@ -692,6 +693,7 @@ async fn main() -> Result<()> {
             }
             QuorumCmd::Check { account, msg, hex, signers } => {
                 let (identities, _) = load_store(&store_path)?;
+                ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
                 let sigs = build_sigs(&identities, &signers, &msg_bytes)?;
                 let local_pks = signer_pk_hexs(&identities, &signers)?;
@@ -704,6 +706,7 @@ async fn main() -> Result<()> {
             }
             QuorumCmd::Diagnose { account, msg, hex, signers } => {
                 let (identities, _) = load_store(&store_path)?;
+                ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
                 let sigs = build_sigs(&identities, &signers, &msg_bytes)?;
                 let local_pks = signer_pk_hexs(&identities, &signers)?;
@@ -719,6 +722,7 @@ async fn main() -> Result<()> {
         Cmd::QuorumAgg { cmd } => match cmd {
             QuorumAggCmd::Submit { account, msg, hex, signers } => {
                 let (identities, _) = load_store(&store_path)?;
+                ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
                 let (signer_keys, aggregate_sig) = build_aggregate(&identities, &signers, &msg_bytes)?;
                 let args = VerifyQuorumAggregateArgs {
@@ -733,6 +737,7 @@ async fn main() -> Result<()> {
             }
             QuorumAggCmd::Check { account, msg, hex, signers } => {
                 let (identities, _) = load_store(&store_path)?;
+                ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
                 let (signer_keys, aggregate_sig) = build_aggregate(&identities, &signers, &msg_bytes)?;
                 let args = VerifyQuorumAggregateArgs {
@@ -776,6 +781,7 @@ async fn main() -> Result<()> {
                 };
 
                 let msg = bls::change_account_message(account, nonce, &new_member_pks, new_threshold);
+                ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let sigs = build_sigs(&identities, &signers, &msg)?;
 
                 let args = ChangeAccountArgs {
@@ -897,6 +903,8 @@ async fn main() -> Result<()> {
                     multisig_encoding::digest_safety_number(&digest)
                 );
                 require_cli_confirm(confirm)?;
+                ensure_cli_signers_are_members(view.registry_account_id, &identities, &[signer.clone()])
+                    .await?;
                 let signature = bls::sign(sk, &digest);
                 let args = ApproveArgs {
                     proposal_id: id,
@@ -1155,6 +1163,25 @@ fn signer_pk_hexs(identities: &[keystore::Identity], signers: &[String]) -> Resu
             Ok(hex::encode(id.pk.to_bytes()))
         })
         .collect()
+}
+
+async fn fetch_registry_account(account_id: u64) -> Result<MultisigAccountView> {
+    let view: Option<MultisigAccountView> =
+        chain::query("account", chain::encode(&account_id)?).await?;
+    view.ok_or_else(|| anyhow::anyhow!("account {account_id} not found"))
+}
+
+async fn ensure_cli_signers_are_members(
+    account_id: u64,
+    identities: &[keystore::Identity],
+    signers: &[String],
+) -> Result<()> {
+    let view = fetch_registry_account(account_id).await?;
+    let pks: Vec<BlsPublicKey> = signers
+        .iter()
+        .map(|name| find_identity(identities, name).map(|id| id.pk))
+        .collect::<Result<_>>()?;
+    membership::ensure_pks_are_members(account_id, &pks, &view).map_err(anyhow::Error::msg)
 }
 
 fn build_sigs(
