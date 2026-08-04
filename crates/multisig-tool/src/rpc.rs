@@ -91,46 +91,7 @@ pub async fn serve_with_options(
         mock: Mutex::new(MockLedger::new()),
     });
 
-    let api = Router::new()
-        .route("/api/setup/status", get(api_setup_status))
-        .route("/api/party", get(api_party_list).post(api_party_signup))
-        .route("/api/identities", get(api_list_identities).post(api_new_identity))
-        .route("/api/identities/import-pk", post(api_import_pk))
-        .route("/api/account/create", post(api_account_create))
-        .route("/api/account/{id}", get(api_account_query))
-        .route("/api/account/{id}/meta", get(api_account_meta))
-        .route("/api/account/{id}/keys", get(api_account_keys))
-        .route("/api/account/next-id", get(api_account_next_id))
-        .route("/api/registry/accounts", get(api_registry_accounts))
-        .route("/api/quorum/submit", post(api_quorum_submit))
-        .route("/api/quorum/check", post(api_quorum_check))
-        .route("/api/quorum/diagnose", post(api_quorum_diagnose))
-        .route("/api/quorum-agg/submit", post(api_quorum_agg_submit))
-        .route("/api/quorum-agg/check", post(api_quorum_agg_check))
-        .route("/api/change-account/submit", post(api_change_account_submit))
-        .route("/api/proposal/create", post(api_proposal_create))
-        .route("/api/proposal/{id}/preview", get(api_proposal_preview))
-        .route("/api/proposal/{id}/approve", post(api_proposal_approve))
-        .route("/api/proposal/{id}", get(api_proposal_status))
-        .route("/api/proposal/{id}/finalize", post(api_proposal_finalize))
-        .route("/api/proposal/next-id", get(api_proposal_next_id))
-        .route("/api/blob/{id}/preview", get(api_blob_preview))
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
-
-    let app = Router::new()
-        .route("/", get(index))
-        .route("/app.js", get(app_js))
-        .route("/mock-ledger.js", get(mock_ledger_js))
-        .route("/style.css", get(style_css))
-        .route("/fonts.css", get(fonts_css))
-        .route("/fonts/{file}", get(serve_font))
-        .route("/lab/fonts.css", get(lab_fonts_css))
-        .route("/lab/tokens.css", get(lab_tokens_css))
-        .route("/lab/layout.css", get(lab_layout_css))
-        .route("/lab/components.css", get(lab_components_css))
-        .route("/lab/fonts/{file}", get(serve_lab_font))
-        .merge(api)
-        .with_state(state);
+    let app = build_router(state);
 
     let addr: std::net::SocketAddr = bind.parse()?;
     // Do not put the bearer token in the printed/opened URL (M8) — it is
@@ -1529,3 +1490,256 @@ async fn api_proposal_next_id(
     Ok(Json(next))
 }
 
+fn build_router(state: Arc<AppState>) -> Router {
+    let api = Router::new()
+        .route("/api/setup/status", get(api_setup_status))
+        .route("/api/party", get(api_party_list).post(api_party_signup))
+        .route("/api/identities", get(api_list_identities).post(api_new_identity))
+        .route("/api/identities/import-pk", post(api_import_pk))
+        .route("/api/account/create", post(api_account_create))
+        .route("/api/account/{id}", get(api_account_query))
+        .route("/api/account/{id}/meta", get(api_account_meta))
+        .route("/api/account/{id}/keys", get(api_account_keys))
+        .route("/api/account/next-id", get(api_account_next_id))
+        .route("/api/registry/accounts", get(api_registry_accounts))
+        .route("/api/quorum/submit", post(api_quorum_submit))
+        .route("/api/quorum/check", post(api_quorum_check))
+        .route("/api/quorum/diagnose", post(api_quorum_diagnose))
+        .route("/api/quorum-agg/submit", post(api_quorum_agg_submit))
+        .route("/api/quorum-agg/check", post(api_quorum_agg_check))
+        .route("/api/change-account/submit", post(api_change_account_submit))
+        .route("/api/proposal/create", post(api_proposal_create))
+        .route("/api/proposal/{id}/preview", get(api_proposal_preview))
+        .route("/api/proposal/{id}/approve", post(api_proposal_approve))
+        .route("/api/proposal/{id}", get(api_proposal_status))
+        .route("/api/proposal/{id}/finalize", post(api_proposal_finalize))
+        .route("/api/proposal/next-id", get(api_proposal_next_id))
+        .route("/api/blob/{id}/preview", get(api_blob_preview))
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
+
+    Router::new()
+        .route("/", get(index))
+        .route("/app.js", get(app_js))
+        .route("/mock-ledger.js", get(mock_ledger_js))
+        .route("/style.css", get(style_css))
+        .route("/fonts.css", get(fonts_css))
+        .route("/fonts/{file}", get(serve_font))
+        .route("/lab/fonts.css", get(lab_fonts_css))
+        .route("/lab/tokens.css", get(lab_tokens_css))
+        .route("/lab/layout.css", get(lab_layout_css))
+        .route("/lab/components.css", get(lab_components_css))
+        .route("/lab/fonts/{file}", get(serve_lab_font))
+        .merge(api)
+        .with_state(state)
+}
+
+#[cfg(test)]
+mod generic_rpc_smoke {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    const TEST_TOKEN: &str = "fixed-smoke-test-token";
+
+    fn test_state_with_identities(names: &[&str]) -> Arc<AppState> {
+        let identities: Vec<keystore::Identity> = names
+            .iter()
+            .map(|name| keystore::generate(name))
+            .collect();
+        Arc::new(AppState {
+            identities: Mutex::new(identities),
+            password: "smoke-test-password".into(),
+            store_path: PathBuf::from("/tmp/multisig-tool-smoke-identities.dat"),
+            token: TEST_TOKEN.into(),
+            demo_mode: DemoMode::Mock,
+            mock: Mutex::new(MockLedger::new()),
+        })
+    }
+
+    fn token_header() -> (&'static str, &'static str) {
+        ("X-Multisig-Tool-Token", TEST_TOKEN)
+    }
+
+    async fn oneshot_json(
+        app: Router,
+        method: &str,
+        uri: &str,
+        body: Option<String>,
+    ) -> (StatusCode, String) {
+        let (name, value) = token_header();
+        let mut builder = Request::builder().method(method).uri(uri).header(name, value);
+        let req = if let Some(json) = body {
+            builder = builder.header("content-type", "application/json");
+            builder.body(Body::from(json)).unwrap()
+        } else {
+            builder.body(Body::empty()).unwrap()
+        };
+        let resp = app.oneshot(req).await.expect("oneshot");
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        (status, String::from_utf8(bytes.to_vec()).expect("utf8 body"))
+    }
+
+    #[tokio::test]
+    async fn setup_status_mock_mode_and_token_gate() {
+        let state = test_state_with_identities(&["alice"]);
+        let app = build_router(state);
+
+        let no_token = Request::builder()
+            .method("GET")
+            .uri("/api/setup/status")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(no_token).await.expect("oneshot");
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let (status, body) = oneshot_json(app, "GET", "/api/setup/status", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_str(&body).expect("json");
+        assert_eq!(json["demo_mode"], "mock");
+        assert_eq!(json["identities_count"], 1);
+    }
+
+    #[tokio::test]
+    async fn mock_account_proposal_preview_approve_finalize_smoke() {
+        let state = test_state_with_identities(&["alice", "bob", "carol"]);
+        let app = build_router(state);
+
+        let create_account = serde_json::json!({
+            "members": ["alice", "bob", "carol"],
+            "threshold": 2
+        });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/account/create",
+            Some(create_account.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "create account: {body}");
+        let submit: serde_json::Value = serde_json::from_str(&body).expect("submit json");
+        assert_eq!(submit["outcome"], "ok");
+        assert!(submit["tx_hash"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("mock-create-account-"));
+
+        let (status, next_body) = oneshot_json(app.clone(), "GET", "/api/proposal/next-id", None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(next_body.trim(), "0");
+
+        let target = format!("0x{}", "11".repeat(32));
+        let create_proposal = serde_json::json!({
+            "account": 0,
+            "target": target,
+            "function": "set_value",
+            "args_hex": "0x0708",
+            "deadline": 1000
+        });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/create",
+            Some(create_proposal.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "create proposal: {body}");
+        let created: serde_json::Value = serde_json::from_str(&body).expect("created json");
+        assert_eq!(created["outcome"], "ok");
+        assert_eq!(created["allocated_id_hint"], 0);
+
+        let (status, preview_body) =
+            oneshot_json(app.clone(), "GET", "/api/proposal/0/preview", None).await;
+        assert_eq!(status, StatusCode::OK, "preview: {preview_body}");
+        let preview: serde_json::Value = serde_json::from_str(&preview_body).expect("preview json");
+        assert!(preview["digest_hex"].as_str().unwrap_or("").starts_with("0x"));
+        assert_eq!(preview["function_name"], "set_value");
+
+        let approve_alice = serde_json::json!({ "signer": "alice", "confirm": true });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve_alice.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "approve alice: {body}");
+        let approved: serde_json::Value = serde_json::from_str(&body).expect("approve json");
+        assert_eq!(approved["outcome"], "ok");
+        assert_eq!(approved["intent"]["function"], "set_value");
+
+        let (status, status_body) = oneshot_json(app.clone(), "GET", "/api/proposal/0", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let prop: serde_json::Value = serde_json::from_str(&status_body).expect("status json");
+        assert_eq!(prop["status"], "Open");
+        assert_eq!(prop["approvals_len"], 1);
+
+        let approve_bob = serde_json::json!({ "signer": "bob", "confirm": true });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve_bob.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "approve bob: {body}");
+
+        let (status, body) = oneshot_json(app.clone(), "POST", "/api/proposal/0/finalize", None).await;
+        assert_eq!(status, StatusCode::OK, "finalize: {body}");
+        let finalized: serde_json::Value = serde_json::from_str(&body).expect("finalize json");
+        assert_eq!(finalized["tx_hash"], "mock-finalize-0");
+
+        let (status, status_body) = oneshot_json(app, "GET", "/api/proposal/0", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let prop: serde_json::Value = serde_json::from_str(&status_body).expect("final status json");
+        assert_eq!(prop["status"], "Executed");
+        assert_eq!(prop["approvals_len"], 2);
+    }
+
+    #[tokio::test]
+    async fn approve_without_confirm_is_rejected() {
+        let state = test_state_with_identities(&["alice"]);
+        let app = build_router(state);
+
+        let target = format!("0x{}", "22".repeat(32));
+        let create_proposal = serde_json::json!({
+            "account": 0,
+            "target": target,
+            "function": "noop",
+            "args_hex": "",
+            "deadline": 0
+        });
+        let create_account = serde_json::json!({
+            "members": ["alice"],
+            "threshold": 1
+        });
+        oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/account/create",
+            Some(create_account.to_string()),
+        )
+        .await;
+        oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/create",
+            Some(create_proposal.to_string()),
+        )
+        .await;
+
+        let approve = serde_json::json!({ "signer": "alice", "confirm": false });
+        let (status, body) = oneshot_json(
+            app,
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body.contains("confirm required"));
+    }
+}
