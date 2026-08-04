@@ -6,6 +6,10 @@
 
 use std::collections::BTreeMap;
 
+use dusk_bytes::Serializable;
+use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
+use multisig_encoding::call_types::MultisigAccountView;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DemoMode {
     Mock,
@@ -43,6 +47,23 @@ pub struct MockAccount {
     pub threshold: u32,
     pub nonce: u64,
     pub members: Vec<[u8; 96]>,
+}
+
+impl MockAccount {
+    pub fn to_account_view(&self) -> MultisigAccountView {
+        let members = self
+            .members
+            .iter()
+            .map(|bytes| {
+                BlsPublicKey::from_bytes(bytes).expect("mock ledger stores valid BLS public keys")
+            })
+            .collect();
+        MultisigAccountView {
+            members,
+            threshold: self.threshold,
+            nonce: self.nonce,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

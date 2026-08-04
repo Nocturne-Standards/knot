@@ -118,13 +118,11 @@ the collector (see each crate’s `LICENSE` / `LICENSING.md`).
 - Prefer interactive password entry. `MULTISIG_TOOL_PWD` is only honored when
   `MULTISIG_TOOL_ALLOW_ENV_PWD=1` is also set (scripting opt-in); otherwise the
   tool errors with a clear message.
-- **Known gap (A4 / 2026-08-04 audit):** generic approve / quorum /
-  change-account sign paths do **not** pre-check the local signer PK against
-  live registry membership — only the digest-recompute gate runs. Prove-mode
-  on-chain re-verification makes a non-member signature harmless; the tool
-  may still burn a signing round with no warning. **Deferred** for first
-  public tag (see launch-form `DECISIONS.md`). PM-resolve paths are peeled;
-  council UX is wen `pm-council-tool` (A1–A5 addressed there).
+- **Lab membership pre-check (A4 / 2026-08-04 audit):** generic approve /
+  quorum / change-account sign paths fetch live registry `account` and refuse
+  to sign when a local signer PK is not in `view.members` (HTTP **403** /
+  CLI error). Prove-mode on-chain re-verification remains the cryptographic
+  guarantee if this gate is bypassed.
 
 ### Member public-key order (A8)
 

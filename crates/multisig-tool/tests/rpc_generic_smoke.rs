@@ -261,3 +261,90 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[tokio::test]
+async fn approve_rejects_non_member_identity() {
+    let pwd = "rpc-generic-smoke-pwd";
+    let dir = std::env::temp_dir().join(format!(
+        "multisig-rpc-smoke-nonmember-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let store = dir.join("identities.dat");
+
+    for name in ["alice", "bob", "carol"] {
+        run_identity_new(&store, name, pwd);
+    }
+
+    let port = free_port();
+    let bind = format!("127.0.0.1:{port}");
+    let base = format!("http://{bind}");
+    let mut serve = spawn_serve(&store, &bind, pwd);
+
+    let client = reqwest::Client::new();
+    wait_for_serve(&mut serve, &client, &base).await;
+
+    let html = client
+        .get(format!("{base}/"))
+        .send()
+        .await
+        .expect("index")
+        .text()
+        .await
+        .expect("index html");
+    let token = extract_token(&html);
+
+    let create_account = client
+        .post(format!("{base}/api/account/create"))
+        .header("X-Multisig-Tool-Token", &token)
+        .json(&serde_json::json!({
+            "members": ["alice", "bob"],
+            "threshold": 2
+        }))
+        .send()
+        .await
+        .expect("account create");
+    assert!(create_account.status().is_success());
+
+    let target = format!("0x{}", "cd".repeat(32));
+    let create_proposal = client
+        .post(format!("{base}/api/proposal/create"))
+        .header("X-Multisig-Tool-Token", &token)
+        .json(&serde_json::json!({
+            "account": 0,
+            "target": target,
+            "function": "set_value",
+            "args_hex": "0x0708",
+            "deadline": 500
+        }))
+        .send()
+        .await
+        .expect("proposal create");
+    assert!(create_proposal.status().is_success());
+
+    let non_member = client
+        .post(format!("{base}/api/proposal/0/approve"))
+        .header("X-Multisig-Tool-Token", &token)
+        .json(&serde_json::json!({ "signer": "carol", "confirm": true }))
+        .send()
+        .await
+        .expect("approve carol");
+    assert_eq!(non_member.status(), reqwest::StatusCode::FORBIDDEN);
+    let err_body = non_member.text().await.expect("error body");
+    assert!(err_body.contains("not a member"));
+
+    let member = client
+        .post(format!("{base}/api/proposal/0/approve"))
+        .header("X-Multisig-Tool-Token", &token)
+        .json(&serde_json::json!({ "signer": "alice", "confirm": true }))
+        .send()
+        .await
+        .expect("approve alice");
+    assert!(member.status().is_success());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
