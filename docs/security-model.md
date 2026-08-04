@@ -118,17 +118,27 @@ the collector (see each crate’s `LICENSE` / `LICENSING.md`).
 - Prefer interactive password entry. `MULTISIG_TOOL_PWD` is only honored when
   `MULTISIG_TOOL_ALLOW_ENV_PWD=1` is also set (scripting opt-in); otherwise the
   tool errors with a clear message.
-- **Known gap (2026-08-04 audit, see `docs/security-audit-2026-08-04.md`):**
-  no sign path (`/api/proposal/{id}/approve`, `/api/quorum/*`,
-  `/api/pm-resolve/{id}/sign`, `/api/change-account/submit`, or the CLI
-  equivalents) checks the local signer's PK against the account's *live*
-  registry membership before producing a signature — only the digest-recompute
-  gate runs. Relies on Prove-mode on-chain re-verification to make a
-  non-member signature harmless; still burns a signing round + collector slot
-  with no warning. `/api/pm-resolve/{id}/submit` also does not cross-check the
-  blob's `pm_contract_id` against a live-fetched PM deployment id before
-  submitting — a stale/redeployed target fails silently. Fix-leaf hints in
-  the audit report.
+- **Known gap (A4 / 2026-08-04 audit):** generic approve / quorum /
+  change-account sign paths do **not** pre-check the local signer PK against
+  live registry membership — only the digest-recompute gate runs. Prove-mode
+  on-chain re-verification makes a non-member signature harmless; the tool
+  may still burn a signing round with no warning. **Deferred** for first
+  public tag (see launch-form `DECISIONS.md`). PM-resolve paths are peeled;
+  council UX is wen `pm-council-tool` (A1–A5 addressed there).
+
+### Member public-key order (A8)
+
+`change_account_digest` folds `member_pks` in **caller-supplied order** (same
+order as `new_members` on-chain). Encoding does not sort or canonicalize.
+Co-signers must agree on that order; a permutation yields a different digest.
+
+### Owner gates vs `call_raw` (A9)
+
+Owner-only methods use `require_owner()` against `abi::public_sender()`. A
+proposals `finalize` that `call_raw`s an owner-gated method on the proposals
+contract itself can satisfy `abi::caller() == proposals` checks — do not
+propose those methods unless intentional. Execute targets should authorize
+via `abi::caller() == proposals` (checklist item 4).
 
 ### Collector
 
@@ -144,6 +154,8 @@ the collector (see each crate’s `LICENSE` / `LICENSING.md`).
 - Party-finder roster is upsert-only (no public DELETE); entries are discovery
   aids only — they do not prove key ownership and do not authorize chain
   actions.
+- Collector may still accept `kind=pm_council_resolve` JSON for **wen** wire
+  compatibility; Knot Lab product surface no longer creates those blobs.
 
 ## Integrator checklist
 
@@ -157,15 +169,14 @@ the collector (see each crate’s `LICENSE` / `LICENSING.md`).
 5. Never treat collector content or free RUES “verify” reads as authoritative
    for live signature correctness — use gated local recompute + on-chain
    writes / account reads.
-6. **Prediction-market council resolve (v2):** signers authorize
-   `keccak(DOMAIN_V2 || pm_contract_id[32] || registry_account_id_le64 ||
-   threshold_le32 || market_id_le64 || outcome_u8)`. On-chain uses
-   `abi::self_id()`, the stored dispute-council account id, and the account’s
-   **current** registry threshold (read at authorize time). Mid-flight
-   threshold changes stale partials; wrong submit target or account fails
-   verify. Tool preview/confirm before sign; never trust `human_summary`.
+6. **Prediction-market council resolve** lives in **wen** (`pm-council-tool` +
+   `pm-council-encoding`). Domain:
+   `nocturne.wen.prediction-market.council-resolve.v3`. Knot does not export
+   `council_resolve_*` digests.
 
 ## Related
 
 - Suite overview: [`../README.md`](../README.md)
 - Per-crate detail: each crate’s `README.md`
+- Public launch form: [`launch-form-knot.md`](launch-form-knot.md)
+- Domain redeploy: [`internal/redeploy-2026-08-domains.md`](internal/redeploy-2026-08-domains.md)
