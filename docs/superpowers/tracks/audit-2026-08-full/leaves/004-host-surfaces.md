@@ -1,8 +1,8 @@
 ---
 id: 4
 slug: host-surfaces
-status: TODO
-owner: null
+status: DONE
+owner: audit-worker
 deps:
   - 1
 scope:
@@ -11,8 +11,8 @@ acceptance:
   - CLI/HTTP/collector/facilitator untrusted input paths reviewed
   - Findings with path:line evidence
 acceptanceDone:
-  - false
-  - false
+  - true
+  - true
 ---
 # Host surfaces
 

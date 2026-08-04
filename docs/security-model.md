@@ -3,6 +3,48 @@
 How trust is split across the multisig suite. Read this before integrating
 `multisig-registry`, `multisig-proposals`, or hosting `multisig-collector`.
 
+## Dual posture: Coord vs Prove
+
+Two distinct trust postures show up when talking about "is this quorum
+valid?" — keep them separate, they are not interchangeable:
+
+- **Prove** — the chain independently re-derives the answer. A contract call
+  (`verify_quorum`, `verify_quorum_aggregate`, `change_account`, or
+  `multisig-proposals::approve`/`finalize`) itself checks the signer set
+  against the *live* on-chain member list and threshold, and cryptographically
+  verifies each BLS signature (or the aggregate) against that live state. The
+  caller's inputs (which signers, which sigs) are just evidence; the contract
+  never trusts them without re-checking. **This is what every write path in
+  `multisig-registry` and `multisig-proposals` actually does today** —
+  confirmed by code read (2026-08-04): `verify_quorum`/`verify_quorum_aggregate`
+  check membership + threshold + `abi::verify_bls`/`verify_bls_multisig`
+  in-contract; `multisig-proposals::approve` panics if `signer` isn't a
+  current registry member and re-verifies the BLS signature; `finalize` calls
+  `verify_quorum` again over the collected approvals before `call_raw`.
+- **Coord** — an off-chain coordinator (`multisig-tool`, or any last-mile
+  validator standing in front of a target) decides quorum is met and the
+  chain-side effect trusts that decision without an equivalent independent
+  re-check. Nothing in *this* suite's own contracts implements pure Coord —
+  every on-chain entry point above re-verifies. Coord-style trust currently
+  only exists **inside `multisig-tool` itself**, before anything reaches
+  chain: the tool's digest-recompute gate (anti-blind-signing) is real and
+  enforced, but membership/threshold gating before producing a signature is
+  not (see `crates/multisig-tool/` audit, 2026-08-04) — a signature the tool
+  produces for a non-member is *useless* on-chain (Prove rejects it), but the
+  tool does not tell the operator that before burning a signing round.
+
+**Decision:** Prove is the only mode this suite offers cryptographic
+guarantees for, and is not optional — it is what the deployed contracts do.
+Do not describe `multisig-tool` as providing an independent authorization
+gate ("Coord as final trust") for any flow whose target contract does not
+itself re-verify quorum on-chain the way `multisig-registry`/
+`multisig-proposals` do. If a *new* integrator's target trusts a
+tool-assembled decision without its own on-chain re-check (pure Coord), that
+target is taking on the tool's entire TCB — call this out explicitly in that
+target's own docs; do not assume this suite's docs cover it. See
+`docs/superpowers/tracks/audit-2026-08-full/DECISIONS.md` for the full
+writeup.
+
 ## Topology
 
 ```
@@ -76,6 +118,17 @@ the collector (see each crate’s `LICENSE` / `LICENSING.md`).
 - Prefer interactive password entry. `MULTISIG_TOOL_PWD` is only honored when
   `MULTISIG_TOOL_ALLOW_ENV_PWD=1` is also set (scripting opt-in); otherwise the
   tool errors with a clear message.
+- **Known gap (2026-08-04 audit, see `docs/security-audit-2026-08-04.md`):**
+  no sign path (`/api/proposal/{id}/approve`, `/api/quorum/*`,
+  `/api/pm-resolve/{id}/sign`, `/api/change-account/submit`, or the CLI
+  equivalents) checks the local signer's PK against the account's *live*
+  registry membership before producing a signature — only the digest-recompute
+  gate runs. Relies on Prove-mode on-chain re-verification to make a
+  non-member signature harmless; still burns a signing round + collector slot
+  with no warning. `/api/pm-resolve/{id}/submit` also does not cross-check the
+  blob's `pm_contract_id` against a live-fetched PM deployment id before
+  submitting — a stale/redeployed target fails silently. Fix-leaf hints in
+  the audit report.
 
 ### Collector
 

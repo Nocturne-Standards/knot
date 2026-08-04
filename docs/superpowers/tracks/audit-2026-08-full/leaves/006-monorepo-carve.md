@@ -1,8 +1,8 @@
 ---
 id: 6
 slug: monorepo-carve
-status: TODO
-owner: null
+status: DONE
+owner: audit-worker
 deps: []
 scope:
   - Cargo.toml
@@ -13,8 +13,8 @@ acceptance:
   - No nest path-deps; license Apache↛AGPL edges; private git pins; vendor copies checked
   - Findings with evidence
 acceptanceDone:
-  - false
-  - false
+  - true
+  - true
 ---
 # Monorepo carve invariants
 
