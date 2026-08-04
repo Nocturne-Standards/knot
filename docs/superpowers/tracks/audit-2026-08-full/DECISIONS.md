@@ -26,3 +26,7 @@ don't assume "tool decided" is sufficient without an on-chain re-check.
 Future integrators who do want pure Coord (trusting the tool's decision
 without independent on-chain re-verification) take on the tool's entire TCB
 and must document that themselves — not covered by this suite's guarantees.
+
+## 2026-08-04T13:54:35.074Z — Fix leaves queued from 2026-08-04 audit (Medium+)
+
+Opened leaves for Critical/High/Medium findings in docs/security-audit-2026-08-04.md. Dual-mode decision already recorded: Prove only. Implementation deferred.
