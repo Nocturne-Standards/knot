@@ -1,7 +1,7 @@
 ---
 id: 10
 slug: p2-docs-site-lab-align
-status: IN_PROGRESS
+status: DONE
 owner: worker-p2-docs
 deps: []
 scope:
@@ -15,7 +15,7 @@ acceptance:
 acceptanceDone:
   - true
   - true
-  - false
+  - true
 ---
 # P2 — Public docs + nocturne-docs + Lab copy alignment
 
@@ -32,7 +32,5 @@ Plan Tasks 7–9.
 **Task 8 (knot repo):**
 - Lab `static/index.html`: "Form the treasury" → "Form a multisig account"; "Treasury / DAO payout" → "Committee payout".
 
-**Task 9 (nocturne-docs) — pending separate PR:**
-- `nocturne-docs` repo not in this workspace; cannot edit `/v1/knot/` here. Knot-side claim is aligned; standards site still needs peel/Prove-only pass (follow-up PR in `nocturne-docs`).
-
-## Proposal (worker, if BLOCKED)
+**Task 9 (nocturne-docs):**
+- PR https://github.com/aichbindas/nocturne-docs/pull/3 — `/v1/knot/` rewrite + wen admin pm-resolve cross-link fix.
