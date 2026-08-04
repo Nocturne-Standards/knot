@@ -48,6 +48,14 @@ Locked 2026-08-04.
 Wen branch `feat/wen-pm-peel-plan` @ `7ae9728`. Digest in `pm-council-encoding`
 (`nocturne.wen.prediction-market.council-resolve.v3`). Knot may delete encoding helpers.
 
+## 2026-08-04 — nocturne-docs /v1/knot/ alignment PR
+
+P2 standards-site pass: https://github.com/aichbindas/nocturne-docs/pull/3
+
+Rewrites `/v1/knot/` for Prove-only generic multisig, `nocturne.knot.*` domains,
+AGPL collector split, `aichbindas/knot` links; removes pm-resolve-in-knot from
+wen admin cross-link.
+
 ## 2026-08-04T16:24:57.856Z — Plan leaves P0–P4 + migrated audit #13
 
 PM fix successors live on wen track pm-peel-and-fixes. Audit #10–14 superseded after this.
