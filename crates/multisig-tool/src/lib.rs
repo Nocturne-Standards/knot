@@ -8,4 +8,3 @@ pub mod blob;
 pub mod bls;
 pub mod collector_client;
 pub mod mock_ledger;
-pub mod pm_resolve_types;

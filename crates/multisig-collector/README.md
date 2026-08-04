@@ -18,7 +18,9 @@ be 64 hex; `DELETE /v1/party/:pk` removed; non-loopback bind requires
 `MULTISIG_COLLECTOR_ALLOW_NON_LOOPBACK=1`.
 
 **2026-07-24 — `kind` on proposal summaries** (`proposals` | `pm_council_resolve`) so
-clients can filter PM council-resolve blobs without pulling every body.
+clients can filter blob kinds without pulling every body. **`pm_council_resolve`**
+is **wen-facing wire compatibility** until collector carve — product UX for PM
+council resolve is wen `pm-council-tool`, not knot `multisig-tool`.
 
 **2026-07-23 — proposals + partials + party-finder API implemented.** Local/dev
 only; VPS deploy is an operator TODO (see deploy runbook).
