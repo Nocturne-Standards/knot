@@ -8,6 +8,9 @@ members = [
     "crates/multisig-collector",
 ]
 
+# Local symlink `deployments` → aichbindas/nocturne-deployments (gitignored).
+# Or set NOCTURNE_DEPLOYMENTS. Path dep expects worktree/deployments/...
+
 [workspace.package]
 edition = "2024"
 rust-version = "1.94"

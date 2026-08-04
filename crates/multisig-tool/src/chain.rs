@@ -4,8 +4,9 @@
 //! - **Reads**: direct RUES HTTP with raw rkyv bodies
 //!   (`Content-Type: application/octet-stream`).
 //!
-//! Supports `multisig-registry` and `multisig-proposals` ids from
-//! `deployments/testnet.json`. `--network testnet` is hard-coded.
+//! Supports `multisig-registry` and `multisig-proposals` ids from the shared
+//! pin home (`nocturne-deployments` / `aichbindas/nocturne-deployments/testnet.json`).
+//! `--network testnet` is hard-coded.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -34,36 +35,28 @@ impl Contract {
     }
 }
 
-/// Walk up from `crates/multisig-tool` until `deployments/testnet.json` is found
-/// (sme_platform root). Pre-nest this was one `parent()`; nested workspace needs
-/// `tool → crates → multisig → repo`.
-fn repo_root() -> PathBuf {
+/// Load shared pin file (`NOCTURNE_DEPLOYMENTS` or sibling `aichbindas/nocturne-deployments`).
+fn deployments() -> Result<nocturne_deployments::DeploymentsFile> {
     let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for dir in start.ancestors() {
-        if dir.join("deployments/testnet.json").is_file() {
-            return dir.to_path_buf();
-        }
-    }
-    panic!(
-        "could not find deployments/testnet.json walking up from {}",
-        start.display()
-    );
+    nocturne_deployments::load_from(&start).with_context(|| {
+        format!(
+            "could not load deployments/testnet.json from {} \
+             (set NOCTURNE_DEPLOYMENTS or seed aichbindas/nocturne-deployments)",
+            start.display()
+        )
+    })
 }
 
 pub fn contract_id_hex(which: Contract) -> Result<String> {
-    let path = repo_root().join("deployments/testnet.json");
-    let raw = std::fs::read_to_string(&path)
-        .with_context(|| format!("reading {}", path.display()))?;
-    let json: serde_json::Value = serde_json::from_str(&raw)?;
+    let file = deployments()?;
     let key = which.json_key();
-    json[key]["current"]["contract_id"]
-        .as_str()
+    file.contract_id(key)
         .map(str::to_string)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
+        .with_context(|| {
+            format!(
                 "no {key}.current.contract_id in {} — deploy it first \
-                 (scripts/deploy-contract.sh {key})",
-                path.display()
+                 (DEPLOYMENTS_FILE=... sme_platform/scripts/deploy-contract.sh {key})",
+                file.path().display()
             )
         })
 }
