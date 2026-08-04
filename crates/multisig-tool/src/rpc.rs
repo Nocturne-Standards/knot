@@ -30,9 +30,7 @@ use crate::registry_types::call_types::{
     AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
     SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
-use crate::pm_read_types::{MarketInfo, MarketStatus};
 use crate::{chain, keystore};
-use multisig_tool::blob::{self, BlobFile, BlobKind};
 use multisig_tool::bls;
 use multisig_tool::collector_client::{self, CollectorClient};
 use multisig_tool::mock_ledger::{DemoMode, MockLedger, MockProposal, MockProposalStatus};
@@ -47,8 +45,6 @@ struct AppState {
     password: String,
     store_path: PathBuf,
     token: String,
-    /// When true, `/` serves the standalone PM council-resolve UI.
-    standalone_pm_resolve: bool,
     demo_mode: DemoMode,
     /// In-process ledger; only read/written when `demo_mode == Mock`.
     mock: Mutex<MockLedger>,
@@ -56,14 +52,11 @@ struct AppState {
 
 #[derive(Default)]
 pub struct ServeOptions {
-    /// When set, open the default browser to this tab (`#pm-resolve`, etc.).
-    /// Ignored when [`Self::standalone_pm_resolve`] is true (opens `/` instead).
+    /// When set, open the default browser to this tab (e.g. `#proposals`).
     pub open_tab: Option<String>,
-    /// Extra query string (without leading `?`/`&`), e.g. `market=1&outcome=0`.
+    /// Extra query string (without leading `?`/`&`), e.g. `account=1`.
     pub query_extra: Option<String>,
-    /// Serve only the PM council-resolve UI (not the Multisig Lab treasury demo).
-    pub standalone_pm_resolve: bool,
-    /// Open the default browser after bind (standalone UI or `open_tab`).
+    /// Open the default browser after bind when `open_tab` is set.
     pub open_browser: bool,
 }
 
@@ -94,7 +87,6 @@ pub async fn serve_with_options(
         password,
         store_path,
         token: hex::encode(token_bytes),
-        standalone_pm_resolve: opts.standalone_pm_resolve,
         demo_mode,
         mock: Mutex::new(MockLedger::new()),
     });
@@ -109,9 +101,7 @@ pub async fn serve_with_options(
         .route("/api/account/{id}/meta", get(api_account_meta))
         .route("/api/account/{id}/keys", get(api_account_keys))
         .route("/api/account/next-id", get(api_account_next_id))
-        .route("/api/deployments/pm", get(api_deployments_pm))
         .route("/api/registry/accounts", get(api_registry_accounts))
-        .route("/api/pm/markets", get(api_pm_markets))
         .route("/api/quorum/submit", post(api_quorum_submit))
         .route("/api/quorum/check", post(api_quorum_check))
         .route("/api/quorum/diagnose", post(api_quorum_diagnose))
@@ -125,19 +115,12 @@ pub async fn serve_with_options(
         .route("/api/proposal/{id}/finalize", post(api_proposal_finalize))
         .route("/api/proposal/next-id", get(api_proposal_next_id))
         .route("/api/blob/{id}/preview", get(api_blob_preview))
-        .route("/api/pm-resolve/init", post(api_pm_resolve_init))
-        .route("/api/pm-resolve/list", get(api_pm_resolve_list))
-        .route("/api/pm-resolve/{id}/preview", get(api_pm_resolve_preview))
-        .route("/api/pm-resolve/{id}", get(api_pm_resolve_status))
-        .route("/api/pm-resolve/{id}/sign", post(api_pm_resolve_sign))
-        .route("/api/pm-resolve/{id}/submit", post(api_pm_resolve_submit))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
 
     let app = Router::new()
         .route("/", get(index))
         .route("/app.js", get(app_js))
         .route("/mock-ledger.js", get(mock_ledger_js))
-        .route("/pm-resolve-app.js", get(pm_resolve_app_js))
         .route("/style.css", get(style_css))
         .route("/fonts.css", get(fonts_css))
         .route("/fonts/{file}", get(serve_font))
@@ -160,20 +143,14 @@ pub async fn serve_with_options(
             url.push_str(extra.trim_start_matches('&').trim_start_matches('?'));
         }
     }
-    if !opts.standalone_pm_resolve {
-        if let Some(tab) = &opts.open_tab {
-            url.push('#');
-            url.push_str(tab.trim_start_matches('#'));
-        }
+    if let Some(tab) = &opts.open_tab {
+        url.push('#');
+        url.push_str(tab.trim_start_matches('#'));
     }
     eprintln!("multisig-tool listening on {url}");
     eprintln!("Authorize /api/* with header X-Multisig-Tool-Token (value injected into local HTML only).");
-    if opts.standalone_pm_resolve {
-        eprintln!("PM council resolve UI (standalone). TESTNET ONLY.");
-    } else {
-        eprintln!("TESTNET ONLY. Open the URL above in your browser.");
-    }
-    if opts.open_browser || (!opts.standalone_pm_resolve && opts.open_tab.is_some()) {
+    eprintln!("TESTNET ONLY. Open the URL above in your browser.");
+    if opts.open_browser || opts.open_tab.is_some() {
         open_default_browser(&url);
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -232,11 +209,7 @@ async fn require_token(
 }
 
 async fn index(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let template = if state.standalone_pm_resolve {
-        include_str!("../static/pm-resolve.html")
-    } else {
-        include_str!("../static/index.html")
-    };
+    let template = include_str!("../static/index.html");
     // Token is process-scoped; never cache HTML across restarts.
     (
         [
@@ -258,13 +231,6 @@ async fn mock_ledger_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "application/javascript")],
         include_str!("../static/mock-ledger.js"),
-    )
-}
-
-async fn pm_resolve_app_js() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "application/javascript")],
-        include_str!("../static/pm-resolve-app.js"),
     )
 }
 
@@ -781,24 +747,6 @@ async fn api_account_next_id(
     Ok(Json(next))
 }
 
-#[derive(Serialize)]
-struct DeploymentsPmOut {
-    pm_contract_id: String,
-    registry_contract_id: String,
-}
-
-async fn api_deployments_pm(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<DeploymentsPmOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let pm = chain::contract_id_hex(chain::Contract::PredictionMarket).map_err(to_500)?;
-    let registry = chain::contract_id_hex(chain::Contract::Registry).map_err(to_500)?;
-    Ok(Json(DeploymentsPmOut {
-        pm_contract_id: pm,
-        registry_contract_id: registry,
-    }))
-}
-
 #[derive(Deserialize)]
 struct RegistryAccountsQuery {
     /// Cap how many accounts to scan from 0 (default 64, max 256).
@@ -873,87 +821,6 @@ async fn api_registry_accounts(
             member_names,
             label,
         });
-    }
-    Ok(Json(rows))
-}
-
-#[derive(Deserialize)]
-struct PmMarketsQuery {
-    #[serde(default = "default_market_limit")]
-    limit: u64,
-    #[serde(default)]
-    offset: u64,
-    #[serde(default)]
-    under_review_only: bool,
-}
-
-fn default_market_limit() -> u64 {
-    50
-}
-
-#[derive(Serialize)]
-struct PmMarketRow {
-    id: u64,
-    status: String,
-    under_review: bool,
-    winning_outcome: Option<u8>,
-    yes_reserve: u64,
-    no_reserve: u64,
-    close_block: u64,
-    label: String,
-}
-
-async fn api_pm_markets(
-    State(state): State<Arc<AppState>>,
-    Query(q): Query<PmMarketsQuery>,
-) -> Result<Json<Vec<PmMarketRow>>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let limit = q.limit.clamp(1, 200);
-    // When filtering, scan a wider page so Under review rows still surface.
-    let fetch = if q.under_review_only {
-        limit.saturating_mul(4).clamp(limit, 200)
-    } else {
-        limit
-    };
-    let args = chain::encode(&(q.offset, fetch)).map_err(to_500)?;
-    let ids: Vec<u64> = chain::query_pm("list_market_ids", args)
-        .await
-        .map_err(to_500)?;
-    let mut rows = Vec::new();
-    for id in ids {
-        let info_args = chain::encode(&id).map_err(to_500)?;
-        let info: Option<MarketInfo> = chain::query_pm("market_info", info_args)
-            .await
-            .map_err(to_500)?;
-        let Some(info) = info else {
-            continue;
-        };
-        let under_review = info.status == MarketStatus::UnderReview;
-        if q.under_review_only && !under_review {
-            continue;
-        }
-        let status = info.status.as_str().to_string();
-        let outcome = info
-            .winning_outcome
-            .map(|o| format!(" outcome={o}"))
-            .unwrap_or_default();
-        let label = format!(
-            "market {id} · {status}{outcome} · yes={} no={}",
-            info.yes_reserve, info.no_reserve
-        );
-        rows.push(PmMarketRow {
-            id,
-            status,
-            under_review,
-            winning_outcome: info.winning_outcome,
-            yes_reserve: info.yes_reserve,
-            no_reserve: info.no_reserve,
-            close_block: info.close_block,
-            label,
-        });
-        if rows.len() as u64 >= limit {
-            break;
-        }
     }
     Ok(Json(rows))
 }
@@ -1662,350 +1529,3 @@ async fn api_proposal_next_id(
     Ok(Json(next))
 }
 
-// --- PM council resolve ---
-
-#[derive(Deserialize)]
-struct PmResolveInitReq {
-    market_id: u64,
-    winning_outcome: u8,
-    pm_contract_id: String,
-    registry_account_id: u64,
-    threshold: u32,
-    #[serde(default)]
-    summary: Option<String>,
-    /// When true (default), push to collector after creating the blob.
-    #[serde(default = "default_true")]
-    push: bool,
-}
-
-fn default_true() -> bool {
-    true
-}
-
-#[derive(Serialize)]
-struct PmResolveInitOut {
-    id: String,
-    signed_digest: String,
-    blob: BlobFile,
-    pushed: bool,
-}
-
-async fn api_pm_resolve_init(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<PmResolveInitReq>,
-) -> Result<Json<PmResolveInitOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    if req.winning_outcome > 1 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "winning_outcome must be 0 or 1".into(),
-        ));
-    }
-    let pm_bytes: [u8; 32] = hex::decode(req.pm_contract_id.trim_start_matches("0x"))
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("pm_contract_id hex: {e}")))?
-        .as_slice()
-        .try_into()
-        .map_err(|_| (StatusCode::BAD_REQUEST, "pm_contract_id must be 32 bytes".into()))?;
-    let file = blob::create_pm_blob_file(
-        req.market_id,
-        req.winning_outcome,
-        pm_bytes,
-        req.registry_account_id,
-        req.threshold,
-        req.summary,
-    );
-    blob::gate_pm_blob_for_signing(&file).map_err(to_500)?;
-    let id = blob::digest_id(&file.signed_digest);
-    let mut pushed = false;
-    if req.push {
-        let client = CollectorClient::resolve(None).map_err(to_500)?;
-        client.push(&file).await.map_err(to_500)?;
-        pushed = true;
-    }
-    Ok(Json(PmResolveInitOut {
-        id,
-        signed_digest: file.signed_digest.clone(),
-        blob: file,
-        pushed,
-    }))
-}
-
-#[derive(Serialize)]
-struct PmResolveListItem {
-    id: String,
-    signed_digest: String,
-    kind: String,
-    threshold: u32,
-    partials_count: usize,
-    created_at: i64,
-}
-
-async fn api_pm_resolve_list(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<PmResolveListItem>>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let all = client.list_proposals().await.map_err(to_500)?;
-    let items = all
-        .into_iter()
-        .filter(|s| s.kind == BlobKind::PmCouncilResolve)
-        .map(|s| PmResolveListItem {
-            id: s.id,
-            signed_digest: s.signed_digest,
-            kind: "pm_council_resolve".into(),
-            threshold: s.threshold,
-            partials_count: s.partials_count,
-            created_at: s.created_at,
-        })
-        .collect();
-    Ok(Json(items))
-}
-
-#[derive(Serialize)]
-struct PmResolveStatusOut {
-    id: String,
-    market_id: u64,
-    winning_outcome: u8,
-    pm_contract_id: String,
-    registry_account_id: u64,
-    threshold: u32,
-    partials_count: usize,
-    ready: bool,
-    signed_digest: String,
-    human_summary: Option<String>,
-    partials: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    registry_warn: Option<String>,
-}
-
-async fn api_pm_resolve_status(
-    State(state): State<Arc<AppState>>,
-    AxPath(id): AxPath<String>,
-) -> Result<Json<PmResolveStatusOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let file = client.pull(&id).await.map_err(to_500)?;
-    status_out_from_file(&file, &id).await
-}
-
-async fn status_out_from_file(
-    file: &BlobFile,
-    id: &str,
-) -> Result<Json<PmResolveStatusOut>, (StatusCode, String)> {
-    blob::gate_pm_blob_for_signing(file).map_err(to_500)?;
-    let blob::IntentFile::PmCouncilResolve(intent) = &file.intent else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "not a pm_council_resolve blob".into(),
-        ));
-    };
-    let registry_warn = match chain::query::<Option<MultisigAccountView>>(
-        "account",
-        chain::encode(&intent.registry_account_id).map_err(to_500)?,
-    )
-    .await
-    {
-        Ok(Some(view)) => {
-            let member_hexs: Vec<String> = view
-                .members
-                .iter()
-                .map(|pk| hex::encode(pk.to_bytes()))
-                .collect();
-            let mut missing = Vec::new();
-            for p in &file.partials {
-                let pk = p.signer_pk.trim_start_matches("0x").to_ascii_lowercase();
-                if !member_hexs.iter().any(|m| m.eq_ignore_ascii_case(&pk)) {
-                    missing.push(pk);
-                }
-            }
-            if missing.is_empty() {
-                None
-            } else {
-                Some(format!(
-                    "warn: {} partial signer(s) not found in registry account {} free-read (chain is source of truth)",
-                    missing.len(),
-                    intent.registry_account_id
-                ))
-            }
-        }
-        Ok(None) => Some(format!(
-            "warn: registry account {} not found on free-read",
-            intent.registry_account_id
-        )),
-        Err(e) => Some(format!("warn: registry free-read failed: {e}")),
-    };
-
-    Ok(Json(PmResolveStatusOut {
-        id: id.to_string(),
-        market_id: intent.market_id,
-        winning_outcome: intent.winning_outcome,
-        pm_contract_id: intent.pm_contract_id.clone(),
-        registry_account_id: intent.registry_account_id,
-        threshold: file.threshold,
-        partials_count: file.partials.len(),
-        ready: (file.partials.len() as u32) >= file.threshold,
-        signed_digest: file.signed_digest.clone(),
-        human_summary: intent.human_summary.clone(),
-        partials: file
-            .partials
-            .iter()
-            .map(|p| p.signer_pk.clone())
-            .collect(),
-        registry_warn,
-    }))
-}
-
-#[derive(Deserialize)]
-struct PmResolveSignReq {
-    signer: String,
-    #[serde(default)]
-    expect_digest: Option<String>,
-    /// Must be true — preview first, then confirm before signing.
-    #[serde(default)]
-    confirm: bool,
-}
-
-#[derive(Serialize)]
-struct PmResolvePreviewOut {
-    digest_hex: String,
-    digest_mnemonic: String,
-    digest_safety_number: String,
-    market_id: u64,
-    winning_outcome: u8,
-    pm_contract_id: String,
-    registry_account_id: u64,
-    threshold: u32,
-    human_summary: Option<String>,
-}
-
-#[derive(Serialize)]
-struct PmResolveSignOut {
-    id: String,
-    partials_count: usize,
-    threshold: u32,
-    ready: bool,
-    signer_pk: String,
-    digest_hex: String,
-    blob: BlobFile,
-}
-
-async fn api_pm_resolve_preview(
-    State(state): State<Arc<AppState>>,
-    AxPath(id): AxPath<String>,
-) -> Result<Json<PmResolvePreviewOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let file = client.pull(&id).await.map_err(to_500)?;
-    let digest = blob::gate_pm_blob_for_signing(&file).map_err(to_500)?;
-    let blob::IntentFile::PmCouncilResolve(intent) = &file.intent else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "not a pm_council_resolve blob".into(),
-        ));
-    };
-    Ok(Json(PmResolvePreviewOut {
-        digest_hex: format!("0x{}", hex::encode(digest)),
-        digest_mnemonic: multisig_encoding::digest_mnemonic(&digest),
-        digest_safety_number: multisig_encoding::digest_safety_number(&digest),
-        market_id: intent.market_id,
-        winning_outcome: intent.winning_outcome,
-        pm_contract_id: intent.pm_contract_id.clone(),
-        registry_account_id: intent.registry_account_id,
-        threshold: file.threshold,
-        human_summary: intent.human_summary.clone(),
-    }))
-}
-
-async fn api_pm_resolve_sign(
-    State(state): State<Arc<AppState>>,
-    AxPath(id): AxPath<String>,
-    Json(req): Json<PmResolveSignReq>,
-) -> Result<Json<PmResolveSignOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    if !req.confirm {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "confirm required — call /preview first, then POST with confirm:true".into(),
-        ));
-    }
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let file = client.pull(&id).await.map_err(to_500)?;
-    let digest = blob::gate_pm_blob_for_signing(&file).map_err(to_500)?;
-    if let Some(expected) = &req.expect_digest {
-        let want = hex::decode(expected.trim_start_matches("0x"))
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("expect_digest: {e}")))?;
-        if want.as_slice() != digest.as_slice() {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "REFUSING TO SIGN: digest does not match expect_digest".into(),
-            ));
-        }
-    }
-    let identities = state.identities.lock().await;
-    let id_rec = identities
-        .iter()
-        .find(|i| i.name == req.signer)
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("no identity named '{}'", req.signer),
-            )
-        })?;
-    let sk = id_rec
-        .require_sk()
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let pk = id_rec.pk;
-    let pk_hex = format!("0x{}", hex::encode(pk.to_bytes()));
-    if file.partials.iter().any(|p| {
-        p.signer_pk
-            .trim_start_matches("0x")
-            .eq_ignore_ascii_case(pk_hex.trim_start_matches("0x"))
-    }) {
-        return Err((
-            StatusCode::CONFLICT,
-            "this signer already has a partial in the blob".into(),
-        ));
-    }
-    let sig = bls::sign(sk, &digest);
-    let partial = blob::PartialFile {
-        signer_pk: pk_hex.clone(),
-        sig: format!("0x{}", hex::encode(sig.to_bytes())),
-    };
-    drop(identities);
-    let updated = client.append_partial(&id, &partial).await.map_err(to_500)?;
-    let ready = (updated.partials.len() as u32) >= updated.threshold;
-    Ok(Json(PmResolveSignOut {
-        id,
-        partials_count: updated.partials.len(),
-        threshold: updated.threshold,
-        ready,
-        signer_pk: pk_hex,
-        digest_hex: format!("0x{}", hex::encode(digest)),
-        blob: updated,
-    }))
-}
-
-async fn api_pm_resolve_submit(
-    State(state): State<Arc<AppState>>,
-    AxPath(id): AxPath<String>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let file = client.pull(&id).await.map_err(to_500)?;
-    let args = blob::build_pm_resolve_args(&file).map_err(to_500)?;
-    let blob::IntentFile::PmCouncilResolve(intent) = &file.intent else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "not a pm_council_resolve blob".into(),
-        ));
-    };
-    let pm_id = intent.pm_contract_id.clone();
-    let bytes = chain::encode(&args).map_err(to_500)?;
-    let result = tokio::task::spawn_blocking(move || {
-        chain::submit_call_to_contract_id(&pm_id, "resolve", &bytes)
-    })
-    .await
-    .map_err(to_500)?
-    .map_err(to_500)?;
-    Ok(Json(submit_from_log(result.stdout)))
-}

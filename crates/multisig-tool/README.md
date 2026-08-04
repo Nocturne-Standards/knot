@@ -57,10 +57,9 @@ leave their machine. Ops detail (htpasswd, nginx, participant checklist):
 [`docs/multisig/multisig-collector-deploy-runbook.md`](../../../docs/multisig/multisig-collector-deploy-runbook.md)
 §4–§5.
 
-**PM dispute council (after registry `create_account` in the UI):** still wire
-with `scripts/wire-contract.sh prediction-market init_dispute_council …` — see
-[`prediction-market/docs/council-resolve-testing.md`](../../../prediction-market/docs/council-resolve-testing.md)
-§4b. Standalone resolve UI: `multisig-tool pm-resolve ui`.
+**PM dispute council:** use wen
+[`pm-council-tool`](https://github.com/aichbindas/wen) (product UX for council
+resolve). Knot multisig-tool covers registry, proposals, and generic Lab only.
 
 ## Scope
 
@@ -146,37 +145,17 @@ submission goes two ways:
   demo studio / use cases slides; default path is a **five-beat** proposals
   walkthrough (Cast → Form council → Look up → Propose & first approve →
   Threshold & finalize); advanced panels (Setup, Aggregate, Rotate, Unsafe
-  UTF-8, Party finder, PM resolve) live in the **developer drawer**. Setup
-  works in mock; Aggregate, Rotate, Unsafe UTF-8, Party finder, and PM
-  resolve return 501 in mock — set `DEMO_MODE=testnet` and restart. Public
+  UTF-8, Party finder) live in the **developer drawer**. Setup
+  works in mock; Aggregate, Rotate, Unsafe UTF-8, and Party finder return 501 in mock — set `DEMO_MODE=testnet` and restart. Public
   story (no hosted signing):
   [`docs.nocturne-standards.org/v1/knot/`](https://docs.nocturne-standards.org/v1/knot/).
   Design (frozen):
   [`docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md`](../../../docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md).
-- **PM council resolve CLI + standalone UI (2026-07-24)** — `pm-resolve init|sign|status|submit|ui`
-  builds `kind=pm_council_resolve` blobs over **`council-resolve.v2`**
-  (`DOMAIN || pm_contract_id || registry_account_id || threshold || market_id ||
-  outcome`), gates that digest before sign, collects secure `sign` partials via
-  collector or file, and submits `prediction-market.resolve` to the ContractId
-  in the blob intent. Preview/confirm required (`GET …/preview`, then
-  `confirm:true` / CLI `--confirm`). **`pm-resolve ui`** (alias: `demo`) opens
-  a **standalone** local browser UI (not the Multisig Lab five-beat walkthrough);
-  Party finder / PM resolve also appear in the Lab **developer drawer**. Both UIs refresh on-chain
-  councils (`GET /api/registry/accounts`) and markets (`GET /api/pm/markets`)
-  plus `GET /api/deployments/pm` so operators rarely type contract/account ids.
-  CLI mirrors: `pm-resolve deployments`, `pm-resolve markets`, `account list`.
-  Prefills via query string.
-  Local AC: `cargo test -p multisig-tool` (blob gate/partial helpers) and
-  `cargo test -p multisig-tool --test collector_roundtrip` (PM push/pull/append).
-  **PM-focused UIs in the nest:** owner ops
-  [`pm-admin-tool`](../../../prediction-market/crates/pm-admin-tool/README.md)
-  (`:8798`); council workstation
-  [`pm-council-tool`](../../../prediction-market/crates/pm-council-tool/README.md)
-  (`:8879`) — preferred day-to-day council path; this crate stays the Multisig Lab
-  + scriptable `pm-resolve` CLI.
-  End-to-end / OPS steps:
-  [`prediction-market/docs/council-resolve-testing.md`](../../../prediction-market/docs/council-resolve-testing.md).
-- **Signing preview/confirm (2026-07-24)** — proposal approve and PM/blob sign
+- **PM council resolve** — peeled to wen `pm-council-tool` (2026-08-04 public-launch P0).
+  Knot no longer ships `pm-resolve` CLI/UI/RPC or `council_resolve_*` in
+  `multisig-encoding`. Collector may still relay `kind=pm_council_resolve` blobs
+  for wen wire compatibility — see `multisig-collector` README.
+- **Signing preview/confirm (2026-07-24)** — proposal approve and blob sign
   print the fingerprint first; CLI requires `--confirm`; HTTP sign endpoints
   require `"confirm": true` (400 otherwise). UI: Preview → show mnemonic →
   checkbox → Sign. Quorum “type any message” lab panels remain an **unsafe
@@ -364,11 +343,7 @@ multisig-tool blob sign --id <id> --signer bob --out proposal.json --confirm
 multisig-tool blob pull --id <id> --out proposal.json
 multisig-tool blob aggregate proposal.json
 
-# PM council resolve (council-resolve.v2)
-multisig-tool pm-resolve init --market 0 --outcome 1 --pm <32-byte-hex> --account 0 --threshold 2
-multisig-tool pm-resolve sign --file pm-resolve.json --as alice --confirm
-multisig-tool pm-resolve status --file pm-resolve.json
-multisig-tool pm-resolve submit --file pm-resolve.json
+# PM council resolve → wen pm-council-tool (not multisig-tool)
 
 multisig-tool party signup --name alice --pk <base58-or-hex-pk>
 multisig-tool party list

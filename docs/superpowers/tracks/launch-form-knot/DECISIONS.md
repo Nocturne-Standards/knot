@@ -43,6 +43,11 @@ Locked 2026-08-04.
 - Knot public launch plan covers strip + P1–P4 only; references moved findings.
 - P2 expanded: align repo READMEs, nocturne-docs /v1/knot/, and Lab/website copy to the same public claim.
 
+## Wen digest ready for peel (2026-08-04)
+
+Wen branch `feat/wen-pm-peel-plan` @ `7ae9728`. Digest in `pm-council-encoding`
+(`nocturne.wen.prediction-market.council-resolve.v3`). Knot may delete encoding helpers.
+
 ## 2026-08-04T16:24:57.856Z — Plan leaves P0–P4 + migrated audit #13
 
 PM fix successors live on wen track pm-peel-and-fixes. Audit #10–14 superseded after this.

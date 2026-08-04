@@ -41,11 +41,15 @@ pub struct PushResponse {
 pub struct ProposalSummary {
     pub id: String,
     pub signed_digest: String,
-    #[serde(default)]
-    pub kind: crate::blob::BlobKind,
+    #[serde(default = "default_summary_kind")]
+    pub kind: String,
     pub threshold: u32,
     pub partials_count: usize,
     pub created_at: i64,
+}
+
+fn default_summary_kind() -> String {
+    "proposals".into()
 }
 
 /// `POST /v1/party` request body — mirrors `multisig_collector::dto::PartySignupDto`.

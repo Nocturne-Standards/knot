@@ -4,9 +4,8 @@
 //! - **Reads**: direct RUES HTTP with raw rkyv bodies
 //!   (`Content-Type: application/octet-stream`).
 //!
-//! Supports `multisig-registry`, `multisig-proposals`, and
-//! `prediction-market` ids from `deployments/testnet.json`. `--network
-//! testnet` is hard-coded.
+//! Supports `multisig-registry` and `multisig-proposals` ids from
+//! `deployments/testnet.json`. `--network testnet` is hard-coded.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -24,7 +23,6 @@ const RUSK_VERSION: &str = "1.0.0";
 pub enum Contract {
     Registry,
     Proposals,
-    PredictionMarket,
 }
 
 impl Contract {
@@ -32,7 +30,6 @@ impl Contract {
         match self {
             Contract::Registry => "multisig-registry",
             Contract::Proposals => "multisig-proposals",
-            Contract::PredictionMarket => "prediction-market",
         }
     }
 }
@@ -141,15 +138,6 @@ where
     R::Archived: Deserialize<R, Infallible> + for<'b> CheckBytes<DefaultValidator<'b>>,
 {
     query_contract(Contract::Registry, fn_name, args_bytes).await
-}
-
-/// Free read against live `prediction-market` from `deployments/testnet.json`.
-pub async fn query_pm<R>(fn_name: &str, args_bytes: Vec<u8>) -> Result<R>
-where
-    R: Archive,
-    R::Archived: Deserialize<R, Infallible> + for<'b> CheckBytes<DefaultValidator<'b>>,
-{
-    query_contract(Contract::PredictionMarket, fn_name, args_bytes).await
 }
 
 pub struct WriteResult {
@@ -294,18 +282,7 @@ pub fn extract_tx_hash(log: &str) -> Option<String> {
 
 pub fn submit_call_to(which: Contract, fn_name: &str, args_bytes: &[u8]) -> Result<WriteResult> {
     let id = contract_id_hex(which)?;
-    submit_call_to_contract_id(&id, fn_name, args_bytes)
-}
-
-/// Shell `rusk-wallet contract-call` against an arbitrary 32-byte ContractId
-/// hex (with or without `0x`). Used by `pm-resolve submit` for the PM id
-/// stored in the blob intent.
-pub fn submit_call_to_contract_id(
-    contract_id_hex: &str,
-    fn_name: &str,
-    args_bytes: &[u8],
-) -> Result<WriteResult> {
-    let id = contract_id_hex.trim_start_matches("0x").to_ascii_lowercase();
+    let id = id.trim_start_matches("0x").to_ascii_lowercase();
     if id.len() != 64 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
         bail!("contract id must be 32-byte hex, got len={}", id.len());
     }
