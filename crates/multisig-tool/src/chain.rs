@@ -4,9 +4,9 @@
 //! - **Reads**: direct RUES HTTP with raw rkyv bodies
 //!   (`Content-Type: application/octet-stream`).
 //!
-//! Supports `multisig-registry`, `multisig-proposals`, and
-//! `prediction-market` ids from `deployments/testnet.json`. `--network
-//! testnet` is hard-coded.
+//! Supports `multisig-registry` and `multisig-proposals` ids from the shared
+//! pin home (`nocturne-deployments` / `aichbindas/nocturne-deployments/testnet.json`).
+//! `--network testnet` is hard-coded.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -24,7 +24,6 @@ const RUSK_VERSION: &str = "1.0.0";
 pub enum Contract {
     Registry,
     Proposals,
-    PredictionMarket,
 }
 
 impl Contract {
@@ -32,41 +31,32 @@ impl Contract {
         match self {
             Contract::Registry => "multisig-registry",
             Contract::Proposals => "multisig-proposals",
-            Contract::PredictionMarket => "prediction-market",
         }
     }
 }
 
-/// Walk up from `crates/multisig-tool` until `deployments/testnet.json` is found
-/// (sme_platform root). Pre-nest this was one `parent()`; nested workspace needs
-/// `tool → crates → multisig → repo`.
-fn repo_root() -> PathBuf {
+/// Load shared pin file (`NOCTURNE_DEPLOYMENTS` or sibling `aichbindas/nocturne-deployments`).
+fn deployments() -> Result<nocturne_deployments::DeploymentsFile> {
     let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for dir in start.ancestors() {
-        if dir.join("deployments/testnet.json").is_file() {
-            return dir.to_path_buf();
-        }
-    }
-    panic!(
-        "could not find deployments/testnet.json walking up from {}",
-        start.display()
-    );
+    nocturne_deployments::load_from(&start).with_context(|| {
+        format!(
+            "could not load deployments/testnet.json from {} \
+             (set NOCTURNE_DEPLOYMENTS or seed aichbindas/nocturne-deployments)",
+            start.display()
+        )
+    })
 }
 
 pub fn contract_id_hex(which: Contract) -> Result<String> {
-    let path = repo_root().join("deployments/testnet.json");
-    let raw = std::fs::read_to_string(&path)
-        .with_context(|| format!("reading {}", path.display()))?;
-    let json: serde_json::Value = serde_json::from_str(&raw)?;
+    let file = deployments()?;
     let key = which.json_key();
-    json[key]["current"]["contract_id"]
-        .as_str()
+    file.contract_id(key)
         .map(str::to_string)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
+        .with_context(|| {
+            format!(
                 "no {key}.current.contract_id in {} — deploy it first \
-                 (scripts/deploy-contract.sh {key})",
-                path.display()
+                 (DEPLOYMENTS_FILE=... sme_platform/scripts/deploy-contract.sh {key})",
+                file.path().display()
             )
         })
 }
@@ -141,15 +131,6 @@ where
     R::Archived: Deserialize<R, Infallible> + for<'b> CheckBytes<DefaultValidator<'b>>,
 {
     query_contract(Contract::Registry, fn_name, args_bytes).await
-}
-
-/// Free read against live `prediction-market` from `deployments/testnet.json`.
-pub async fn query_pm<R>(fn_name: &str, args_bytes: Vec<u8>) -> Result<R>
-where
-    R: Archive,
-    R::Archived: Deserialize<R, Infallible> + for<'b> CheckBytes<DefaultValidator<'b>>,
-{
-    query_contract(Contract::PredictionMarket, fn_name, args_bytes).await
 }
 
 pub struct WriteResult {
@@ -294,25 +275,16 @@ pub fn extract_tx_hash(log: &str) -> Option<String> {
 
 pub fn submit_call_to(which: Contract, fn_name: &str, args_bytes: &[u8]) -> Result<WriteResult> {
     let id = contract_id_hex(which)?;
-    submit_call_to_contract_id(&id, fn_name, args_bytes)
-}
-
-/// Shell `rusk-wallet contract-call` against an arbitrary 32-byte ContractId
-/// hex (with or without `0x`). Used by `pm-resolve submit` for the PM id
-/// stored in the blob intent.
-pub fn submit_call_to_contract_id(
-    contract_id_hex: &str,
-    fn_name: &str,
-    args_bytes: &[u8],
-) -> Result<WriteResult> {
-    let id = contract_id_hex.trim_start_matches("0x").to_ascii_lowercase();
+    let id = id.trim_start_matches("0x").to_ascii_lowercase();
     if id.len() != 64 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
         bail!("contract id must be 32-byte hex, got len={}", id.len());
     }
     let args_hex = hex::encode(args_bytes);
 
     if std::env::var("RUSK_WALLET_PWD").is_err() {
-        bail!("RUSK_WALLET_PWD is not set — see references/testnet-wallet.md");
+        bail!(
+            "RUSK_WALLET_PWD is not set — set this env var to the rusk-wallet keystore password for gas-paying chain writes on testnet"
+        );
     }
 
     let output = Command::new("rusk-wallet")
@@ -326,7 +298,9 @@ pub fn submit_call_to_contract_id(
         .arg("--fn-args")
         .arg(&args_hex)
         .output()
-        .context("failed to spawn rusk-wallet — is it on PATH? see references/testnet-wallet.md")?;
+        .context(
+            "failed to spawn rusk-wallet — install the rusk-wallet CLI and ensure it is on PATH; set RUSK_WALLET_PWD to the keystore password for testnet chain writes",
+        )?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();

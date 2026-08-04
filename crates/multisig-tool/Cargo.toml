@@ -42,11 +42,13 @@ pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 sha2 = "0.10"
 rpassword = "7"
 multisig-encoding = { path = "../multisig-encoding", features = ["call-types"] }
+nocturne-deployments = { git = "https://github.com/aichbindas/nocturne-deployments", rev = "d40ab407b5ad68a9710fd4520d94d51854276d9a", package = "nocturne-deployments" }
 zeroize = "1"
 subtle = "2"
 
 [dev-dependencies]
 dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
+tower = { version = "0.5", features = ["util"] }
 
 # Silences "unexpected cfg" warnings from multisig-registry/src/call_types.rs
 # (included via #[path = ...], see src/registry_types.rs) — that crate has a

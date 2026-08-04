@@ -30,11 +30,10 @@ use crate::registry_types::call_types::{
     AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
     SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
-use crate::pm_read_types::{MarketInfo, MarketStatus};
 use crate::{chain, keystore};
-use multisig_tool::blob::{self, BlobFile, BlobKind};
 use multisig_tool::bls;
 use multisig_tool::collector_client::{self, CollectorClient};
+use multisig_tool::membership;
 use multisig_tool::mock_ledger::{DemoMode, MockLedger, MockProposal, MockProposalStatus};
 
 /// Chain id baked into mock proposals (matches live testnet `init_chain_id`).
@@ -47,8 +46,6 @@ struct AppState {
     password: String,
     store_path: PathBuf,
     token: String,
-    /// When true, `/` serves the standalone PM council-resolve UI.
-    standalone_pm_resolve: bool,
     demo_mode: DemoMode,
     /// In-process ledger; only read/written when `demo_mode == Mock`.
     mock: Mutex<MockLedger>,
@@ -56,14 +53,11 @@ struct AppState {
 
 #[derive(Default)]
 pub struct ServeOptions {
-    /// When set, open the default browser to this tab (`#pm-resolve`, etc.).
-    /// Ignored when [`Self::standalone_pm_resolve`] is true (opens `/` instead).
+    /// When set, open the default browser to this tab (e.g. `#proposals`).
     pub open_tab: Option<String>,
-    /// Extra query string (without leading `?`/`&`), e.g. `market=1&outcome=0`.
+    /// Extra query string (without leading `?`/`&`), e.g. `account=1`.
     pub query_extra: Option<String>,
-    /// Serve only the PM council-resolve UI (not the Multisig Lab treasury demo).
-    pub standalone_pm_resolve: bool,
-    /// Open the default browser after bind (standalone UI or `open_tab`).
+    /// Open the default browser after bind when `open_tab` is set.
     pub open_browser: bool,
 }
 
@@ -94,60 +88,11 @@ pub async fn serve_with_options(
         password,
         store_path,
         token: hex::encode(token_bytes),
-        standalone_pm_resolve: opts.standalone_pm_resolve,
         demo_mode,
         mock: Mutex::new(MockLedger::new()),
     });
 
-    let api = Router::new()
-        .route("/api/setup/status", get(api_setup_status))
-        .route("/api/party", get(api_party_list).post(api_party_signup))
-        .route("/api/identities", get(api_list_identities).post(api_new_identity))
-        .route("/api/identities/import-pk", post(api_import_pk))
-        .route("/api/account/create", post(api_account_create))
-        .route("/api/account/{id}", get(api_account_query))
-        .route("/api/account/{id}/meta", get(api_account_meta))
-        .route("/api/account/{id}/keys", get(api_account_keys))
-        .route("/api/account/next-id", get(api_account_next_id))
-        .route("/api/deployments/pm", get(api_deployments_pm))
-        .route("/api/registry/accounts", get(api_registry_accounts))
-        .route("/api/pm/markets", get(api_pm_markets))
-        .route("/api/quorum/submit", post(api_quorum_submit))
-        .route("/api/quorum/check", post(api_quorum_check))
-        .route("/api/quorum/diagnose", post(api_quorum_diagnose))
-        .route("/api/quorum-agg/submit", post(api_quorum_agg_submit))
-        .route("/api/quorum-agg/check", post(api_quorum_agg_check))
-        .route("/api/change-account/submit", post(api_change_account_submit))
-        .route("/api/proposal/create", post(api_proposal_create))
-        .route("/api/proposal/{id}/preview", get(api_proposal_preview))
-        .route("/api/proposal/{id}/approve", post(api_proposal_approve))
-        .route("/api/proposal/{id}", get(api_proposal_status))
-        .route("/api/proposal/{id}/finalize", post(api_proposal_finalize))
-        .route("/api/proposal/next-id", get(api_proposal_next_id))
-        .route("/api/blob/{id}/preview", get(api_blob_preview))
-        .route("/api/pm-resolve/init", post(api_pm_resolve_init))
-        .route("/api/pm-resolve/list", get(api_pm_resolve_list))
-        .route("/api/pm-resolve/{id}/preview", get(api_pm_resolve_preview))
-        .route("/api/pm-resolve/{id}", get(api_pm_resolve_status))
-        .route("/api/pm-resolve/{id}/sign", post(api_pm_resolve_sign))
-        .route("/api/pm-resolve/{id}/submit", post(api_pm_resolve_submit))
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
-
-    let app = Router::new()
-        .route("/", get(index))
-        .route("/app.js", get(app_js))
-        .route("/mock-ledger.js", get(mock_ledger_js))
-        .route("/pm-resolve-app.js", get(pm_resolve_app_js))
-        .route("/style.css", get(style_css))
-        .route("/fonts.css", get(fonts_css))
-        .route("/fonts/{file}", get(serve_font))
-        .route("/lab/fonts.css", get(lab_fonts_css))
-        .route("/lab/tokens.css", get(lab_tokens_css))
-        .route("/lab/layout.css", get(lab_layout_css))
-        .route("/lab/components.css", get(lab_components_css))
-        .route("/lab/fonts/{file}", get(serve_lab_font))
-        .merge(api)
-        .with_state(state);
+    let app = build_router(state);
 
     let addr: std::net::SocketAddr = bind.parse()?;
     // Do not put the bearer token in the printed/opened URL (M8) — it is
@@ -160,20 +105,14 @@ pub async fn serve_with_options(
             url.push_str(extra.trim_start_matches('&').trim_start_matches('?'));
         }
     }
-    if !opts.standalone_pm_resolve {
-        if let Some(tab) = &opts.open_tab {
-            url.push('#');
-            url.push_str(tab.trim_start_matches('#'));
-        }
+    if let Some(tab) = &opts.open_tab {
+        url.push('#');
+        url.push_str(tab.trim_start_matches('#'));
     }
     eprintln!("multisig-tool listening on {url}");
     eprintln!("Authorize /api/* with header X-Multisig-Tool-Token (value injected into local HTML only).");
-    if opts.standalone_pm_resolve {
-        eprintln!("PM council resolve UI (standalone). TESTNET ONLY.");
-    } else {
-        eprintln!("TESTNET ONLY. Open the URL above in your browser.");
-    }
-    if opts.open_browser || (!opts.standalone_pm_resolve && opts.open_tab.is_some()) {
+    eprintln!("TESTNET ONLY. Open the URL above in your browser.");
+    if opts.open_browser || opts.open_tab.is_some() {
         open_default_browser(&url);
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -232,11 +171,7 @@ async fn require_token(
 }
 
 async fn index(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let template = if state.standalone_pm_resolve {
-        include_str!("../static/pm-resolve.html")
-    } else {
-        include_str!("../static/index.html")
-    };
+    let template = include_str!("../static/index.html");
     // Token is process-scoped; never cache HTML across restarts.
     (
         [
@@ -258,13 +193,6 @@ async fn mock_ledger_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "application/javascript")],
         include_str!("../static/mock-ledger.js"),
-    )
-}
-
-async fn pm_resolve_app_js() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "application/javascript")],
-        include_str!("../static/pm-resolve-app.js"),
     )
 }
 
@@ -781,24 +709,6 @@ async fn api_account_next_id(
     Ok(Json(next))
 }
 
-#[derive(Serialize)]
-struct DeploymentsPmOut {
-    pm_contract_id: String,
-    registry_contract_id: String,
-}
-
-async fn api_deployments_pm(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<DeploymentsPmOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let pm = chain::contract_id_hex(chain::Contract::PredictionMarket).map_err(to_500)?;
-    let registry = chain::contract_id_hex(chain::Contract::Registry).map_err(to_500)?;
-    Ok(Json(DeploymentsPmOut {
-        pm_contract_id: pm,
-        registry_contract_id: registry,
-    }))
-}
-
 #[derive(Deserialize)]
 struct RegistryAccountsQuery {
     /// Cap how many accounts to scan from 0 (default 64, max 256).
@@ -878,87 +788,6 @@ async fn api_registry_accounts(
 }
 
 #[derive(Deserialize)]
-struct PmMarketsQuery {
-    #[serde(default = "default_market_limit")]
-    limit: u64,
-    #[serde(default)]
-    offset: u64,
-    #[serde(default)]
-    under_review_only: bool,
-}
-
-fn default_market_limit() -> u64 {
-    50
-}
-
-#[derive(Serialize)]
-struct PmMarketRow {
-    id: u64,
-    status: String,
-    under_review: bool,
-    winning_outcome: Option<u8>,
-    yes_reserve: u64,
-    no_reserve: u64,
-    close_block: u64,
-    label: String,
-}
-
-async fn api_pm_markets(
-    State(state): State<Arc<AppState>>,
-    Query(q): Query<PmMarketsQuery>,
-) -> Result<Json<Vec<PmMarketRow>>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let limit = q.limit.clamp(1, 200);
-    // When filtering, scan a wider page so Under review rows still surface.
-    let fetch = if q.under_review_only {
-        limit.saturating_mul(4).clamp(limit, 200)
-    } else {
-        limit
-    };
-    let args = chain::encode(&(q.offset, fetch)).map_err(to_500)?;
-    let ids: Vec<u64> = chain::query_pm("list_market_ids", args)
-        .await
-        .map_err(to_500)?;
-    let mut rows = Vec::new();
-    for id in ids {
-        let info_args = chain::encode(&id).map_err(to_500)?;
-        let info: Option<MarketInfo> = chain::query_pm("market_info", info_args)
-            .await
-            .map_err(to_500)?;
-        let Some(info) = info else {
-            continue;
-        };
-        let under_review = info.status == MarketStatus::UnderReview;
-        if q.under_review_only && !under_review {
-            continue;
-        }
-        let status = info.status.as_str().to_string();
-        let outcome = info
-            .winning_outcome
-            .map(|o| format!(" outcome={o}"))
-            .unwrap_or_default();
-        let label = format!(
-            "market {id} · {status}{outcome} · yes={} no={}",
-            info.yes_reserve, info.no_reserve
-        );
-        rows.push(PmMarketRow {
-            id,
-            status,
-            under_review,
-            winning_outcome: info.winning_outcome,
-            yes_reserve: info.yes_reserve,
-            no_reserve: info.no_reserve,
-            close_block: info.close_block,
-            label,
-        });
-        if rows.len() as u64 >= limit {
-            break;
-        }
-    }
-    Ok(Json(rows))
-}
-
-#[derive(Deserialize)]
 struct QuorumSubmitReq {
     account: u64,
     msg: String,
@@ -973,6 +802,58 @@ fn msg_bytes(msg: &str, hex_flag: bool) -> Result<Vec<u8>, (StatusCode, String)>
     } else {
         Ok(msg.as_bytes().to_vec())
     }
+}
+
+async fn fetch_registry_account(
+    state: &AppState,
+    account_id: u64,
+) -> Result<MultisigAccountView, (StatusCode, String)> {
+    if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        let account = mock
+            .account(account_id)
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("account {account_id} not found")))?;
+        return Ok(account.to_account_view());
+    }
+    let bytes = chain::encode(&account_id).map_err(to_500)?;
+    let view: Option<MultisigAccountView> = chain::query("account", bytes).await.map_err(to_500)?;
+    view.ok_or_else(|| (StatusCode::BAD_REQUEST, format!("account {account_id} not found")))
+}
+
+async fn resolve_signer_pks_locked(
+    state: &AppState,
+    signer_names: &[String],
+) -> Result<Vec<BlsPublicKey>, (StatusCode, String)> {
+    let identities = state.identities.lock().await;
+    let mut pks = Vec::with_capacity(signer_names.len());
+    for name in signer_names {
+        let id = identities
+            .iter()
+            .find(|i| &i.name == name)
+            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("no identity named '{name}'")))?;
+        pks.push(id.pk);
+    }
+    Ok(pks)
+}
+
+async fn ensure_signers_are_members(
+    state: &AppState,
+    account_id: u64,
+    signer_names: &[String],
+) -> Result<(), (StatusCode, String)> {
+    let view = fetch_registry_account(state, account_id).await?;
+    let pks = resolve_signer_pks_locked(state, signer_names).await?;
+    membership::ensure_pks_are_members(account_id, &pks, &view)
+        .map_err(|e| (StatusCode::FORBIDDEN, e))
+}
+
+fn ensure_pks_are_members_view(
+    account_id: u64,
+    signer_pks: &[BlsPublicKey],
+    view: &MultisigAccountView,
+) -> Result<(), (StatusCode, String)> {
+    membership::ensure_pks_are_members(account_id, signer_pks, view)
+        .map_err(|e| (StatusCode::FORBIDDEN, e))
 }
 
 async fn build_sigs_locked(
@@ -1024,6 +905,7 @@ async fn api_quorum_submit(
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
     mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
     let args = VerifyQuorumArgs {
@@ -1053,6 +935,7 @@ async fn api_quorum_check(
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
     mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
     let args = VerifyQuorumArgs {
@@ -1093,6 +976,7 @@ async fn api_quorum_agg_submit(
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
     mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let identities = state.identities.lock().await;
     let mut signer_keys = Vec::with_capacity(req.signers.len());
@@ -1135,6 +1019,7 @@ async fn api_quorum_agg_check(
     Json(req): Json<QuorumSubmitReq>,
 ) -> Result<Json<SubmitOut>, (StatusCode, String)> {
     mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
     let identities = state.identities.lock().await;
     let mut signer_keys = Vec::with_capacity(req.signers.len());
@@ -1198,6 +1083,7 @@ async fn api_change_account_submit(
         current.ok_or_else(|| (StatusCode::BAD_REQUEST, format!("account {} not found", req.account)))?;
 
     let msg = bls::change_account_message(req.account, current.nonce, &new_members, req.new_threshold);
+    ensure_pks_are_members_view(req.account, &resolve_signer_pks_locked(&state, &req.signers).await?, &current)?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
 
     let args = ChangeAccountArgs {
@@ -1461,6 +1347,7 @@ async fn api_proposal_approve(
                     "REFUSING TO SIGN: mock digest does not match recomputed intent".into(),
                 )
             })?;
+        ensure_signers_are_members(&state, mock_p.registry_account_id, &[req.signer.clone()]).await?;
         let intent_out = IntentDisplay {
             chain_id: intent.chain_id,
             committee_id: intent.committee_id,
@@ -1530,6 +1417,7 @@ async fn api_proposal_approve(
             "REFUSING TO SIGN: on-chain digest does not match recomputed intent".into(),
         )
     })?;
+    ensure_signers_are_members(&state, view.registry_account_id, &[req.signer.clone()]).await?;
     let intent_out = IntentDisplay {
         chain_id: intent.chain_id,
         committee_id: intent.committee_id,
@@ -1662,350 +1550,313 @@ async fn api_proposal_next_id(
     Ok(Json(next))
 }
 
-// --- PM council resolve ---
+fn build_router(state: Arc<AppState>) -> Router {
+    let api = Router::new()
+        .route("/api/setup/status", get(api_setup_status))
+        .route("/api/party", get(api_party_list).post(api_party_signup))
+        .route("/api/identities", get(api_list_identities).post(api_new_identity))
+        .route("/api/identities/import-pk", post(api_import_pk))
+        .route("/api/account/create", post(api_account_create))
+        .route("/api/account/{id}", get(api_account_query))
+        .route("/api/account/{id}/meta", get(api_account_meta))
+        .route("/api/account/{id}/keys", get(api_account_keys))
+        .route("/api/account/next-id", get(api_account_next_id))
+        .route("/api/registry/accounts", get(api_registry_accounts))
+        .route("/api/quorum/submit", post(api_quorum_submit))
+        .route("/api/quorum/check", post(api_quorum_check))
+        .route("/api/quorum/diagnose", post(api_quorum_diagnose))
+        .route("/api/quorum-agg/submit", post(api_quorum_agg_submit))
+        .route("/api/quorum-agg/check", post(api_quorum_agg_check))
+        .route("/api/change-account/submit", post(api_change_account_submit))
+        .route("/api/proposal/create", post(api_proposal_create))
+        .route("/api/proposal/{id}/preview", get(api_proposal_preview))
+        .route("/api/proposal/{id}/approve", post(api_proposal_approve))
+        .route("/api/proposal/{id}", get(api_proposal_status))
+        .route("/api/proposal/{id}/finalize", post(api_proposal_finalize))
+        .route("/api/proposal/next-id", get(api_proposal_next_id))
+        .route("/api/blob/{id}/preview", get(api_blob_preview))
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
 
-#[derive(Deserialize)]
-struct PmResolveInitReq {
-    market_id: u64,
-    winning_outcome: u8,
-    pm_contract_id: String,
-    registry_account_id: u64,
-    threshold: u32,
-    #[serde(default)]
-    summary: Option<String>,
-    /// When true (default), push to collector after creating the blob.
-    #[serde(default = "default_true")]
-    push: bool,
+    Router::new()
+        .route("/", get(index))
+        .route("/app.js", get(app_js))
+        .route("/mock-ledger.js", get(mock_ledger_js))
+        .route("/style.css", get(style_css))
+        .route("/fonts.css", get(fonts_css))
+        .route("/fonts/{file}", get(serve_font))
+        .route("/lab/fonts.css", get(lab_fonts_css))
+        .route("/lab/tokens.css", get(lab_tokens_css))
+        .route("/lab/layout.css", get(lab_layout_css))
+        .route("/lab/components.css", get(lab_components_css))
+        .route("/lab/fonts/{file}", get(serve_lab_font))
+        .merge(api)
+        .with_state(state)
 }
 
-fn default_true() -> bool {
-    true
-}
+#[cfg(test)]
+mod generic_rpc_smoke {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
 
-#[derive(Serialize)]
-struct PmResolveInitOut {
-    id: String,
-    signed_digest: String,
-    blob: BlobFile,
-    pushed: bool,
-}
+    const TEST_TOKEN: &str = "fixed-smoke-test-token";
 
-async fn api_pm_resolve_init(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<PmResolveInitReq>,
-) -> Result<Json<PmResolveInitOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    if req.winning_outcome > 1 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "winning_outcome must be 0 or 1".into(),
-        ));
-    }
-    let pm_bytes: [u8; 32] = hex::decode(req.pm_contract_id.trim_start_matches("0x"))
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("pm_contract_id hex: {e}")))?
-        .as_slice()
-        .try_into()
-        .map_err(|_| (StatusCode::BAD_REQUEST, "pm_contract_id must be 32 bytes".into()))?;
-    let file = blob::create_pm_blob_file(
-        req.market_id,
-        req.winning_outcome,
-        pm_bytes,
-        req.registry_account_id,
-        req.threshold,
-        req.summary,
-    );
-    blob::gate_pm_blob_for_signing(&file).map_err(to_500)?;
-    let id = blob::digest_id(&file.signed_digest);
-    let mut pushed = false;
-    if req.push {
-        let client = CollectorClient::resolve(None).map_err(to_500)?;
-        client.push(&file).await.map_err(to_500)?;
-        pushed = true;
-    }
-    Ok(Json(PmResolveInitOut {
-        id,
-        signed_digest: file.signed_digest.clone(),
-        blob: file,
-        pushed,
-    }))
-}
-
-#[derive(Serialize)]
-struct PmResolveListItem {
-    id: String,
-    signed_digest: String,
-    kind: String,
-    threshold: u32,
-    partials_count: usize,
-    created_at: i64,
-}
-
-async fn api_pm_resolve_list(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<PmResolveListItem>>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let all = client.list_proposals().await.map_err(to_500)?;
-    let items = all
-        .into_iter()
-        .filter(|s| s.kind == BlobKind::PmCouncilResolve)
-        .map(|s| PmResolveListItem {
-            id: s.id,
-            signed_digest: s.signed_digest,
-            kind: "pm_council_resolve".into(),
-            threshold: s.threshold,
-            partials_count: s.partials_count,
-            created_at: s.created_at,
-        })
-        .collect();
-    Ok(Json(items))
-}
-
-#[derive(Serialize)]
-struct PmResolveStatusOut {
-    id: String,
-    market_id: u64,
-    winning_outcome: u8,
-    pm_contract_id: String,
-    registry_account_id: u64,
-    threshold: u32,
-    partials_count: usize,
-    ready: bool,
-    signed_digest: String,
-    human_summary: Option<String>,
-    partials: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    registry_warn: Option<String>,
-}
-
-async fn api_pm_resolve_status(
-    State(state): State<Arc<AppState>>,
-    AxPath(id): AxPath<String>,
-) -> Result<Json<PmResolveStatusOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let file = client.pull(&id).await.map_err(to_500)?;
-    status_out_from_file(&file, &id).await
-}
-
-async fn status_out_from_file(
-    file: &BlobFile,
-    id: &str,
-) -> Result<Json<PmResolveStatusOut>, (StatusCode, String)> {
-    blob::gate_pm_blob_for_signing(file).map_err(to_500)?;
-    let blob::IntentFile::PmCouncilResolve(intent) = &file.intent else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "not a pm_council_resolve blob".into(),
-        ));
-    };
-    let registry_warn = match chain::query::<Option<MultisigAccountView>>(
-        "account",
-        chain::encode(&intent.registry_account_id).map_err(to_500)?,
-    )
-    .await
-    {
-        Ok(Some(view)) => {
-            let member_hexs: Vec<String> = view
-                .members
-                .iter()
-                .map(|pk| hex::encode(pk.to_bytes()))
-                .collect();
-            let mut missing = Vec::new();
-            for p in &file.partials {
-                let pk = p.signer_pk.trim_start_matches("0x").to_ascii_lowercase();
-                if !member_hexs.iter().any(|m| m.eq_ignore_ascii_case(&pk)) {
-                    missing.push(pk);
-                }
-            }
-            if missing.is_empty() {
-                None
-            } else {
-                Some(format!(
-                    "warn: {} partial signer(s) not found in registry account {} free-read (chain is source of truth)",
-                    missing.len(),
-                    intent.registry_account_id
-                ))
-            }
-        }
-        Ok(None) => Some(format!(
-            "warn: registry account {} not found on free-read",
-            intent.registry_account_id
-        )),
-        Err(e) => Some(format!("warn: registry free-read failed: {e}")),
-    };
-
-    Ok(Json(PmResolveStatusOut {
-        id: id.to_string(),
-        market_id: intent.market_id,
-        winning_outcome: intent.winning_outcome,
-        pm_contract_id: intent.pm_contract_id.clone(),
-        registry_account_id: intent.registry_account_id,
-        threshold: file.threshold,
-        partials_count: file.partials.len(),
-        ready: (file.partials.len() as u32) >= file.threshold,
-        signed_digest: file.signed_digest.clone(),
-        human_summary: intent.human_summary.clone(),
-        partials: file
-            .partials
+    fn test_state_with_identities(names: &[&str]) -> Arc<AppState> {
+        let identities: Vec<keystore::Identity> = names
             .iter()
-            .map(|p| p.signer_pk.clone())
-            .collect(),
-        registry_warn,
-    }))
-}
-
-#[derive(Deserialize)]
-struct PmResolveSignReq {
-    signer: String,
-    #[serde(default)]
-    expect_digest: Option<String>,
-    /// Must be true — preview first, then confirm before signing.
-    #[serde(default)]
-    confirm: bool,
-}
-
-#[derive(Serialize)]
-struct PmResolvePreviewOut {
-    digest_hex: String,
-    digest_mnemonic: String,
-    digest_safety_number: String,
-    market_id: u64,
-    winning_outcome: u8,
-    pm_contract_id: String,
-    registry_account_id: u64,
-    threshold: u32,
-    human_summary: Option<String>,
-}
-
-#[derive(Serialize)]
-struct PmResolveSignOut {
-    id: String,
-    partials_count: usize,
-    threshold: u32,
-    ready: bool,
-    signer_pk: String,
-    digest_hex: String,
-    blob: BlobFile,
-}
-
-async fn api_pm_resolve_preview(
-    State(state): State<Arc<AppState>>,
-    AxPath(id): AxPath<String>,
-) -> Result<Json<PmResolvePreviewOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let file = client.pull(&id).await.map_err(to_500)?;
-    let digest = blob::gate_pm_blob_for_signing(&file).map_err(to_500)?;
-    let blob::IntentFile::PmCouncilResolve(intent) = &file.intent else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "not a pm_council_resolve blob".into(),
-        ));
-    };
-    Ok(Json(PmResolvePreviewOut {
-        digest_hex: format!("0x{}", hex::encode(digest)),
-        digest_mnemonic: multisig_encoding::digest_mnemonic(&digest),
-        digest_safety_number: multisig_encoding::digest_safety_number(&digest),
-        market_id: intent.market_id,
-        winning_outcome: intent.winning_outcome,
-        pm_contract_id: intent.pm_contract_id.clone(),
-        registry_account_id: intent.registry_account_id,
-        threshold: file.threshold,
-        human_summary: intent.human_summary.clone(),
-    }))
-}
-
-async fn api_pm_resolve_sign(
-    State(state): State<Arc<AppState>>,
-    AxPath(id): AxPath<String>,
-    Json(req): Json<PmResolveSignReq>,
-) -> Result<Json<PmResolveSignOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    if !req.confirm {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "confirm required — call /preview first, then POST with confirm:true".into(),
-        ));
+            .map(|name| keystore::generate(name))
+            .collect();
+        Arc::new(AppState {
+            identities: Mutex::new(identities),
+            password: "smoke-test-password".into(),
+            store_path: PathBuf::from("/tmp/multisig-tool-smoke-identities.dat"),
+            token: TEST_TOKEN.into(),
+            demo_mode: DemoMode::Mock,
+            mock: Mutex::new(MockLedger::new()),
+        })
     }
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let file = client.pull(&id).await.map_err(to_500)?;
-    let digest = blob::gate_pm_blob_for_signing(&file).map_err(to_500)?;
-    if let Some(expected) = &req.expect_digest {
-        let want = hex::decode(expected.trim_start_matches("0x"))
-            .map_err(|e| (StatusCode::BAD_REQUEST, format!("expect_digest: {e}")))?;
-        if want.as_slice() != digest.as_slice() {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "REFUSING TO SIGN: digest does not match expect_digest".into(),
-            ));
-        }
-    }
-    let identities = state.identities.lock().await;
-    let id_rec = identities
-        .iter()
-        .find(|i| i.name == req.signer)
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("no identity named '{}'", req.signer),
-            )
-        })?;
-    let sk = id_rec
-        .require_sk()
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let pk = id_rec.pk;
-    let pk_hex = format!("0x{}", hex::encode(pk.to_bytes()));
-    if file.partials.iter().any(|p| {
-        p.signer_pk
-            .trim_start_matches("0x")
-            .eq_ignore_ascii_case(pk_hex.trim_start_matches("0x"))
-    }) {
-        return Err((
-            StatusCode::CONFLICT,
-            "this signer already has a partial in the blob".into(),
-        ));
-    }
-    let sig = bls::sign(sk, &digest);
-    let partial = blob::PartialFile {
-        signer_pk: pk_hex.clone(),
-        sig: format!("0x{}", hex::encode(sig.to_bytes())),
-    };
-    drop(identities);
-    let updated = client.append_partial(&id, &partial).await.map_err(to_500)?;
-    let ready = (updated.partials.len() as u32) >= updated.threshold;
-    Ok(Json(PmResolveSignOut {
-        id,
-        partials_count: updated.partials.len(),
-        threshold: updated.threshold,
-        ready,
-        signer_pk: pk_hex,
-        digest_hex: format!("0x{}", hex::encode(digest)),
-        blob: updated,
-    }))
-}
 
-async fn api_pm_resolve_submit(
-    State(state): State<Arc<AppState>>,
-    AxPath(id): AxPath<String>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
-    mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let file = client.pull(&id).await.map_err(to_500)?;
-    let args = blob::build_pm_resolve_args(&file).map_err(to_500)?;
-    let blob::IntentFile::PmCouncilResolve(intent) = &file.intent else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "not a pm_council_resolve blob".into(),
-        ));
-    };
-    let pm_id = intent.pm_contract_id.clone();
-    let bytes = chain::encode(&args).map_err(to_500)?;
-    let result = tokio::task::spawn_blocking(move || {
-        chain::submit_call_to_contract_id(&pm_id, "resolve", &bytes)
-    })
-    .await
-    .map_err(to_500)?
-    .map_err(to_500)?;
-    Ok(Json(submit_from_log(result.stdout)))
+    fn token_header() -> (&'static str, &'static str) {
+        ("X-Multisig-Tool-Token", TEST_TOKEN)
+    }
+
+    async fn oneshot_json(
+        app: Router,
+        method: &str,
+        uri: &str,
+        body: Option<String>,
+    ) -> (StatusCode, String) {
+        let (name, value) = token_header();
+        let mut builder = Request::builder().method(method).uri(uri).header(name, value);
+        let req = if let Some(json) = body {
+            builder = builder.header("content-type", "application/json");
+            builder.body(Body::from(json)).unwrap()
+        } else {
+            builder.body(Body::empty()).unwrap()
+        };
+        let resp = app.oneshot(req).await.expect("oneshot");
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        (status, String::from_utf8(bytes.to_vec()).expect("utf8 body"))
+    }
+
+    #[tokio::test]
+    async fn setup_status_mock_mode_and_token_gate() {
+        let state = test_state_with_identities(&["alice"]);
+        let app = build_router(state);
+
+        let no_token = Request::builder()
+            .method("GET")
+            .uri("/api/setup/status")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(no_token).await.expect("oneshot");
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let (status, body) = oneshot_json(app, "GET", "/api/setup/status", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_str(&body).expect("json");
+        assert_eq!(json["demo_mode"], "mock");
+        assert_eq!(json["identities_count"], 1);
+    }
+
+    #[tokio::test]
+    async fn mock_account_proposal_preview_approve_finalize_smoke() {
+        let state = test_state_with_identities(&["alice", "bob", "carol"]);
+        let app = build_router(state);
+
+        let create_account = serde_json::json!({
+            "members": ["alice", "bob", "carol"],
+            "threshold": 2
+        });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/account/create",
+            Some(create_account.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "create account: {body}");
+        let submit: serde_json::Value = serde_json::from_str(&body).expect("submit json");
+        assert_eq!(submit["outcome"], "ok");
+        assert!(submit["tx_hash"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("mock-create-account-"));
+
+        let (status, next_body) = oneshot_json(app.clone(), "GET", "/api/proposal/next-id", None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(next_body.trim(), "0");
+
+        let target = format!("0x{}", "11".repeat(32));
+        let create_proposal = serde_json::json!({
+            "account": 0,
+            "target": target,
+            "function": "set_value",
+            "args_hex": "0x0708",
+            "deadline": 1000
+        });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/create",
+            Some(create_proposal.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "create proposal: {body}");
+        let created: serde_json::Value = serde_json::from_str(&body).expect("created json");
+        assert_eq!(created["outcome"], "ok");
+        assert_eq!(created["allocated_id_hint"], 0);
+
+        let (status, preview_body) =
+            oneshot_json(app.clone(), "GET", "/api/proposal/0/preview", None).await;
+        assert_eq!(status, StatusCode::OK, "preview: {preview_body}");
+        let preview: serde_json::Value = serde_json::from_str(&preview_body).expect("preview json");
+        assert!(preview["digest_hex"].as_str().unwrap_or("").starts_with("0x"));
+        assert_eq!(preview["function_name"], "set_value");
+
+        let approve_alice = serde_json::json!({ "signer": "alice", "confirm": true });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve_alice.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "approve alice: {body}");
+        let approved: serde_json::Value = serde_json::from_str(&body).expect("approve json");
+        assert_eq!(approved["outcome"], "ok");
+        assert_eq!(approved["intent"]["function"], "set_value");
+
+        let (status, status_body) = oneshot_json(app.clone(), "GET", "/api/proposal/0", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let prop: serde_json::Value = serde_json::from_str(&status_body).expect("status json");
+        assert_eq!(prop["status"], "Open");
+        assert_eq!(prop["approvals_len"], 1);
+
+        let approve_bob = serde_json::json!({ "signer": "bob", "confirm": true });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve_bob.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "approve bob: {body}");
+
+        let (status, body) = oneshot_json(app.clone(), "POST", "/api/proposal/0/finalize", None).await;
+        assert_eq!(status, StatusCode::OK, "finalize: {body}");
+        let finalized: serde_json::Value = serde_json::from_str(&body).expect("finalize json");
+        assert_eq!(finalized["tx_hash"], "mock-finalize-0");
+
+        let (status, status_body) = oneshot_json(app, "GET", "/api/proposal/0", None).await;
+        assert_eq!(status, StatusCode::OK);
+        let prop: serde_json::Value = serde_json::from_str(&status_body).expect("final status json");
+        assert_eq!(prop["status"], "Executed");
+        assert_eq!(prop["approvals_len"], 2);
+    }
+
+    #[tokio::test]
+    async fn approve_without_confirm_is_rejected() {
+        let state = test_state_with_identities(&["alice"]);
+        let app = build_router(state);
+
+        let target = format!("0x{}", "22".repeat(32));
+        let create_proposal = serde_json::json!({
+            "account": 0,
+            "target": target,
+            "function": "noop",
+            "args_hex": "",
+            "deadline": 0
+        });
+        let create_account = serde_json::json!({
+            "members": ["alice"],
+            "threshold": 1
+        });
+        oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/account/create",
+            Some(create_account.to_string()),
+        )
+        .await;
+        oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/create",
+            Some(create_proposal.to_string()),
+        )
+        .await;
+
+        let approve = serde_json::json!({ "signer": "alice", "confirm": false });
+        let (status, body) = oneshot_json(
+            app,
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body.contains("confirm required"));
+    }
+
+    #[tokio::test]
+    async fn approve_rejects_non_member() {
+        let state = test_state_with_identities(&["alice", "bob", "carol"]);
+        let app = build_router(state);
+
+        let create_account = serde_json::json!({
+            "members": ["alice", "bob"],
+            "threshold": 2
+        });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/account/create",
+            Some(create_account.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "create account: {body}");
+
+        let target = format!("0x{}", "33".repeat(32));
+        let create_proposal = serde_json::json!({
+            "account": 0,
+            "target": target,
+            "function": "set_value",
+            "args_hex": "0x01",
+            "deadline": 500
+        });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/create",
+            Some(create_proposal.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "create proposal: {body}");
+
+        let approve_carol = serde_json::json!({ "signer": "carol", "confirm": true });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve_carol.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "non-member approve: {body}");
+        assert!(body.contains("not a member"));
+
+        let approve_alice = serde_json::json!({ "signer": "alice", "confirm": true });
+        let (status, body) = oneshot_json(
+            app,
+            "POST",
+            "/api/proposal/0/approve",
+            Some(approve_alice.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "member approve: {body}");
+    }
 }

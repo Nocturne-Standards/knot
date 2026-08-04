@@ -66,18 +66,11 @@ pub fn checked_u32_len(field: &'static str, len: usize) -> Result<u32, EncodingE
 }
 
 /// Versioned domain tag for the proposal signing preimage.
-pub const DOMAIN_PROPOSAL_V1: &[u8] = b"sme-platform.multisig.proposal.v1";
+pub const DOMAIN_PROPOSAL_V2: &[u8] = b"nocturne.knot.multisig.proposal.v2";
 
 /// Domain tag for registry `change_account` quorum message.
-pub const DOMAIN_CHANGE_ACCOUNT_V1: &[u8] =
-    b"sme-platform.multisig-registry.change_account.v1";
-
-/// Domain tag for prediction-market council-resolve.v2 quorum message.
-///
-/// Must match `prediction-market-logic` `DOMAIN_COUNCIL_RESOLVE` and the tools'
-/// `council_resolve_digest` preimage.
-pub const DOMAIN_COUNCIL_RESOLVE_V2: &[u8] =
-    b"sme-platform.prediction-market.council-resolve.v2";
+pub const DOMAIN_CHANGE_ACCOUNT_V2: &[u8] =
+    b"nocturne.knot.multisig-registry.change_account.v2";
 
 /// Full 32-byte digest members must sign to authorize a committee change.
 ///
@@ -92,7 +85,7 @@ pub fn change_account_digest(
     new_threshold: u32,
 ) -> [u8; 32] {
     let mut hasher = Keccak::v256();
-    hasher.update(DOMAIN_CHANGE_ACCOUNT_V1);
+    hasher.update(DOMAIN_CHANGE_ACCOUNT_V2);
     hasher.update(&account_id.to_le_bytes());
     hasher.update(&nonce.to_le_bytes());
     for pk in member_pks {
@@ -113,49 +106,6 @@ pub fn change_account_message(
     new_threshold: u32,
 ) -> Vec<u8> {
     change_account_digest(account_id, nonce, member_pks, new_threshold).to_vec()
-}
-
-/// Full 32-byte digest council members must sign to authorize a contested resolve.
-///
-/// Layout (no length prefixes): `DOMAIN || contract_id[32] ||
-/// registry_account_id_le64 || threshold_le32 || market_id_le64 ||
-/// winning_outcome_u8`, then Keccak-256.
-pub fn council_resolve_digest(
-    pm_contract_id: &[u8; 32],
-    registry_account_id: u64,
-    threshold: u32,
-    market_id: u64,
-    winning_outcome: u8,
-) -> [u8; 32] {
-    let mut hasher = Keccak::v256();
-    hasher.update(DOMAIN_COUNCIL_RESOLVE_V2);
-    hasher.update(pm_contract_id);
-    hasher.update(&registry_account_id.to_le_bytes());
-    hasher.update(&threshold.to_le_bytes());
-    hasher.update(&market_id.to_le_bytes());
-    hasher.update(&[winning_outcome]);
-    let mut out = [0u8; 32];
-    hasher.finalize(&mut out);
-    out
-}
-
-/// Same digest as [`council_resolve_digest`], returned as a `Vec` for
-/// host/`abi::verify_bls` message buffers.
-pub fn council_resolve_message(
-    pm_contract_id: &[u8; 32],
-    registry_account_id: u64,
-    threshold: u32,
-    market_id: u64,
-    winning_outcome: u8,
-) -> Vec<u8> {
-    council_resolve_digest(
-        pm_contract_id,
-        registry_account_id,
-        threshold,
-        market_id,
-        winning_outcome,
-    )
-    .to_vec()
 }
 
 /// Fields that fully determine the §4a preimage / digest.
@@ -236,7 +186,7 @@ pub fn proposal_preimage(
     let fn_len = checked_u32_len("function_name", function_name.len())?;
     let args_len = checked_u32_len("call_args", call_args.len())?;
 
-    let capacity = DOMAIN_PROPOSAL_V1
+    let capacity = DOMAIN_PROPOSAL_V2
         .len()
         .checked_add(8)
         .and_then(|n| n.checked_add(8))
@@ -249,7 +199,7 @@ pub fn proposal_preimage(
         .and_then(|n| n.checked_add(8))
         .ok_or(EncodingError::CapacityOverflow)?;
     let mut out = Vec::with_capacity(capacity);
-    out.extend_from_slice(DOMAIN_PROPOSAL_V1);
+    out.extend_from_slice(DOMAIN_PROPOSAL_V2);
     out.extend_from_slice(&chain_id.to_le_bytes());
     out.extend_from_slice(&committee_id.to_le_bytes());
     out.extend_from_slice(&nonce.to_le_bytes());
@@ -340,7 +290,7 @@ mod tests {
     fn sample_intent_digest_golden() {
         let digest = sample_intent().digest().unwrap();
         let expected = hex_decode(
-            "8c649841361db8afeb6225e11a9fa104e99f9a8c9a81bf39d9a419d5c8f549ed",
+            "8426c1fa5895fe6b2e3a3fe0e3588eaff4b123fde07b075352264f41dfd9c9dd",
         );
         assert_eq!(digest, expected);
     }
@@ -356,33 +306,14 @@ mod tests {
         ));
     }
 
-    /// Locked known vector for PM council-resolve.v2 encoding.
-    /// Inputs: contract_id=[0x11;32], registry_account_id=1, threshold=2,
-    /// market_id=7, winning_outcome=0.
-    #[test]
-    fn council_resolve_digest_matches_known_vector() {
-        let contract_id = [0x11u8; 32];
-        let digest = council_resolve_digest(&contract_id, 1, 2, 7, 0);
-        let msg = council_resolve_message(&contract_id, 1, 2, 7, 0);
-        assert_eq!(digest.as_slice(), msg.as_slice());
-        // Hex locked 2026-07-31 from `multisig-tool` `council_resolve_digest`.
-        let expected = hex_decode(
-            "489ae66c1d5edf98b949c49447cb39ced3017daaec4d5ef69b32b06df4cacffd",
-        );
-        assert_eq!(digest, expected);
-    }
-
-    /// Locked known vector for registry `change_account` encoding.
-    /// Inputs: account_id=1, nonce=0, pks=[[0;96],[1;96]], threshold=2.
     #[test]
     fn change_account_digest_known_vector() {
         let digest = change_account_digest(1, 0, &[[0u8; 96], [1u8; 96]], 2);
         let msg = change_account_message(1, 0, &[[0u8; 96], [1u8; 96]], 2);
         assert_eq!(digest.as_slice(), msg.as_slice());
-        // Hex locked 2026-07-24 from the same layout as historical
-        // registry `change_message` / tool `change_account_message`.
+        // Hex locked 2026-08-04 after nocturne.knot domain bump (v2 tags).
         let expected = hex_decode(
-            "b0a4bf2e90969fc4cc5f8a6c65cb3f1abcda971794aeee8806ba240abec6557c",
+            "ab2fc0f6d9b490a645b0b5768bcfbfabfce53392251f28bc776e10b6ad22c457",
         );
         assert_eq!(digest, expected);
     }
