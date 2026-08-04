@@ -1,8 +1,8 @@
 ---
 id: 5
 slug: logic-invariants
-status: TODO
-owner: null
+status: DONE
+owner: audit-worker
 deps:
   - 1
 scope:
@@ -12,8 +12,8 @@ acceptance:
   - Core business logic vs docs/specs reviewed
   - Findings with path:line evidence
 acceptanceDone:
-  - false
-  - false
+  - true
+  - true
 ---
 # Logic invariants
 

@@ -1,8 +1,8 @@
 ---
 id: 3
 slug: authz-capabilities
-status: TODO
-owner: null
+status: DONE
+owner: audit-worker
 deps:
   - 1
 scope:
@@ -11,8 +11,8 @@ acceptance:
   - Who may call/spend/revoke documented; on-chain vs host gates checked
   - Findings with path:line evidence
 acceptanceDone:
-  - false
-  - false
+  - true
+  - true
 ---
 # Authz and capabilities
 

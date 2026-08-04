@@ -1,8 +1,8 @@
 ---
 id: 7
 slug: report-rollup
-status: TODO
-owner: null
+status: DONE
+owner: audit-worker
 deps:
   - 2
   - 3
@@ -18,9 +18,9 @@ acceptance:
   - Critical/High independently re-verified
   - Fix-leaf hints listed for Medium+
 acceptanceDone:
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
 ---
 # Report rollup
 

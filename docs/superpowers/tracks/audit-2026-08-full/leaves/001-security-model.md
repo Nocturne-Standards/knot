@@ -1,8 +1,8 @@
 ---
 id: 1
 slug: security-model
-status: TODO
-owner: null
+status: DONE
+owner: audit-worker
 deps: []
 scope:
   - docs/security-model.md
@@ -11,8 +11,8 @@ acceptance:
   - Trust topology + crate roles table landed or verified current
   - Documented vs code trust boundaries listed for review leaves
 acceptanceDone:
-  - false
-  - false
+  - true
+  - true
 ---
 # Security model
 

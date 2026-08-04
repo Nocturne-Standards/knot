@@ -1,8 +1,8 @@
 ---
 id: 8
 slug: signing-tool-tcb
-status: TODO
-owner: null
+status: DONE
+owner: audit-worker
 deps:
   - 1
   - 4
@@ -16,10 +16,10 @@ acceptance:
   - Bearer/loopback/keystore bounds reviewed
   - Aggregate subset honesty reviewed
 acceptanceDone:
-  - false
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
+  - true
 ---
 # Signing tool TCB (multisig-tool)
 

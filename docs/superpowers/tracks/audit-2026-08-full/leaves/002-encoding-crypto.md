@@ -1,8 +1,8 @@
 ---
 id: 2
 slug: encoding-crypto
-status: TODO
-owner: null
+status: DONE
+owner: audit-worker
 deps:
   - 1
 scope:
@@ -11,8 +11,8 @@ acceptance:
   - Canonical encoding, domain separation, key/commitment binding reviewed
   - Findings recorded in draft report sections with path:line evidence
 acceptanceDone:
-  - false
-  - false
+  - true
+  - true
 ---
 # Encoding and crypto
 

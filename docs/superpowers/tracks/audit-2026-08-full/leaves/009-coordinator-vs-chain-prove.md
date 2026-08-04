@@ -1,8 +1,8 @@
 ---
 id: 9
 slug: coordinator-vs-chain-prove
-status: TODO
-owner: null
+status: DONE
+owner: audit-worker
 deps:
   - 1
   - 8
@@ -14,8 +14,8 @@ acceptance:
   - Written comparison of Coord (tool last-mile) vs Prove (on-chain verify_quorum / Moonlight-bound BLS)
   - decision_add recorded with recommendation on offering both
 acceptanceDone:
-  - false
-  - false
+  - true
+  - true
 ---
 # Dual mode: Coord vs Prove
 
