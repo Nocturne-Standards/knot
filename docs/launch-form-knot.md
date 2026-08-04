@@ -29,6 +29,7 @@ tooling lives with that product (wen), not as a first-class knot surface.
 | L6 | Lab demo is generic proposals walkthrough — **not** a wen demo; rename “treasury” UI copy to avoid clash with wen treasury contracts (intent locked; exact copy TODO) |
 | L7 | **`council_resolve_digest` / message / domain leave `multisig-encoding`** — live with wen/PM (types crate or PM encoding module). Knot encoding = proposal + change_account only |
 | L8 | After peel, knot does **not** depend on wen; wen depends on knot registry + generic encoding |
+| L9 | Council-resolve domain string **pinned**: `nocturne.wen.prediction-market.council-resolve.v3` |
 
 ### Domain rename targets (prefix locked; exact strings pin in impl plan)
 
@@ -36,7 +37,7 @@ tooling lives with that product (wen), not as a first-class knot surface.
 |---|---|
 | `DOMAIN_PROPOSAL_V1` = `sme-platform.multisig.proposal.v1` | → `nocturne.knot.multisig.proposal.v2` (**stays in knot encoding**) |
 | `DOMAIN_CHANGE_ACCOUNT_V1` = `sme-platform.multisig-registry.change_account.v1` | → `nocturne.knot.multisig-registry.change_account.v2` (**stays in knot encoding**) |
-| `DOMAIN_COUNCIL_RESOLVE_V2` = `sme-platform.prediction-market.council-resolve.v2` | → move to wen/PM; rename e.g. `nocturne.wen.prediction-market.council-resolve.v3` or `nocturne.knot.…` only if still co-versioned — **pin in wen impl plan** |
+| `DOMAIN_COUNCIL_RESOLVE_V2` = `sme-platform.prediction-market.council-resolve.v2` | → move to wen/PM; **pinned** `nocturne.wen.prediction-market.council-resolve.v3` |
 
 ## Open (TODO)
 

@@ -30,3 +30,7 @@ Locked 2026-08-04.
 - Move `council_resolve_digest` / `council_resolve_message` / `DOMAIN_COUNCIL_RESOLVE_*` out of `multisig-encoding` into the PM/wen side (shared types crate or prediction-market-logic encoding module). Knot encoding keeps only generic proposal + change_account digests (still renamed to nocturne.knot.*).
 - Wen depends on knot for registry verify_quorum + generic encoding; knot does not depend on wen.
 - Goal: knot stays clean general multisig; no PM message layout in encoding.
+
+## 2026-08-04T15:31:14.855Z — Council-resolve domain string pinned
+
+Locked 2026-08-04: after peel to wen, DOMAIN = `nocturne.wen.prediction-market.council-resolve.v3` (byte-exact). Knot generic digests stay `nocturne.knot.*`. Coordinated redeploy with wen.
