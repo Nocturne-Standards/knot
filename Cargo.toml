@@ -8,8 +8,9 @@ members = [
     "crates/multisig-collector",
 ]
 
-# Local symlink `deployments` → aichbindas/nocturne-deployments (gitignored).
-# Or set NOCTURNE_DEPLOYMENTS. Path dep expects worktree/deployments/...
+# Pins: multisig-tool depends on aichbindas/nocturne-deployments (git).
+# Local: optional [patch] or NOCTURNE_DEPLOYMENTS env for pin JSON.
+# CI: GH_PRIVATE_REPO_TOKEN (see .github/workflows/ci.yml).
 
 [workspace.package]
 edition = "2024"
