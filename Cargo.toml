@@ -8,6 +8,10 @@ members = [
     "crates/multisig-collector",
 ]
 
+# Pins: multisig-tool depends on aichbindas/nocturne-deployments (git).
+# Local: optional [patch] or NOCTURNE_DEPLOYMENTS env for pin JSON.
+# CI: GH_PRIVATE_REPO_TOKEN (see .github/workflows/ci.yml).
+
 [workspace.package]
 edition = "2024"
 rust-version = "1.94"

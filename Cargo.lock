@@ -2190,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "multisig-proposals"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "bytecheck",
  "dusk-bls12_381",
@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "multisig-registry"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "bytecheck",
  "dusk-bls12_381",
@@ -2238,6 +2238,7 @@ dependencies = [
  "dusk-vm",
  "hex",
  "multisig-encoding",
+ "nocturne-deployments",
  "pbkdf2",
  "rand 0.8.7",
  "reqwest",
@@ -2249,7 +2250,18 @@ dependencies = [
  "subtle",
  "tiny-keccak",
  "tokio",
+ "tower",
  "zeroize",
+]
+
+[[package]]
+name = "nocturne-deployments"
+version = "0.1.0"
+source = "git+https://github.com/aichbindas/nocturne-deployments?rev=d40ab407b5ad68a9710fd4520d94d51854276d9a#d40ab407b5ad68a9710fd4520d94d51854276d9a"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
 ]
 
 [[package]]

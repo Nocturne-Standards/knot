@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to `multisig-collector` are documented here.
-Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versioning.md](../../../docs/versioning.md).
+Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versioning.md](../../docs/versioning.md).
 
 ## [0.2.0] — 2026-07-24
 

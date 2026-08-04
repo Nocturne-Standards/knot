@@ -5,6 +5,9 @@
 *.swp
 *~
 
+# Local symlink to aichbindas/nocturne-deployments pin home (see that repo README).
+/deployments
+
 # Pituitary local index (commit curated .toml)
 .pituitary/*.db
 .pituitary/*.db-*
