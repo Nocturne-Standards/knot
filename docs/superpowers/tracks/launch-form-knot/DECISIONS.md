@@ -21,3 +21,12 @@ Exact final strings to be pinned in implementation plan; prefix MUST be `nocturn
 Coordinate: multisig-encoding goldens/tests + wen/prediction-market-logic matching bytes + any tool fixtures. Redeploy required — accepted (redeploy wave anyway).
 
 Related: PM-specific tooling moves to wen/prediction-market; generic Lab stays in knot.
+
+## 2026-08-04T15:27:28.207Z — council_resolve_digest leaves encoding; PM tooling → wen
+
+Locked 2026-08-04.
+
+- Move PM-specific host tooling (pm-resolve CLI/UI/RPC, mirrored ResolveArgs/read types, standalone PM UI, collector PM blob kind if purely PM-shaped — review at impl) to wen/prediction-market.
+- Move `council_resolve_digest` / `council_resolve_message` / `DOMAIN_COUNCIL_RESOLVE_*` out of `multisig-encoding` into the PM/wen side (shared types crate or prediction-market-logic encoding module). Knot encoding keeps only generic proposal + change_account digests (still renamed to nocturne.knot.*).
+- Wen depends on knot for registry verify_quorum + generic encoding; knot does not depend on wen.
+- Goal: knot stays clean general multisig; no PM message layout in encoding.

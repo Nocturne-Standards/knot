@@ -25,29 +25,29 @@ tooling lives with that product (wen), not as a first-class knot surface.
 | L2 | Dual posture: **Prove only** (no pure-Coord product offer) |
 | L3 | **Move PM-specific tooling** (pm-resolve CLI/UI/RPC, mirrored PM ABI types, standalone PM UI) to the **wen / prediction-market** repo |
 | L4 | Keep in knot: encoding, registry, proposals, **generic** Lab/CLI, collector |
-| L5 | Domain tags: rename **all three** off `sme-platform.*` to prefix **`nocturne.knot.`**, version-bump suffixes, coordinated redeploy with wen (accepted) |
+| L5 | Domain tags: rename **generic** digests off `sme-platform.*` to prefix **`nocturne.knot.`**, version-bump, coordinated redeploy (accepted) |
 | L6 | Lab demo is generic proposals walkthrough — **not** a wen demo; rename “treasury” UI copy to avoid clash with wen treasury contracts (intent locked; exact copy TODO) |
+| L7 | **`council_resolve_digest` / message / domain leave `multisig-encoding`** — live with wen/PM (types crate or PM encoding module). Knot encoding = proposal + change_account only |
+| L8 | After peel, knot does **not** depend on wen; wen depends on knot registry + generic encoding |
 
 ### Domain rename targets (prefix locked; exact strings pin in impl plan)
 
 | Constant (today) | Direction |
 |---|---|
-| `DOMAIN_PROPOSAL_V1` = `sme-platform.multisig.proposal.v1` | → `nocturne.knot.multisig.proposal.v2` |
-| `DOMAIN_CHANGE_ACCOUNT_V1` = `sme-platform.multisig-registry.change_account.v1` | → `nocturne.knot.multisig-registry.change_account.v2` |
-| `DOMAIN_COUNCIL_RESOLVE_V2` = `sme-platform.prediction-market.council-resolve.v2` | → `nocturne.knot.prediction-market.council-resolve.v3` |
-
-`council_resolve_*` may remain in `multisig-encoding` as a shared preimage helper for wen, or move next to PM types when tooling moves — **TODO** (packaging only; bytes must match either way).
+| `DOMAIN_PROPOSAL_V1` = `sme-platform.multisig.proposal.v1` | → `nocturne.knot.multisig.proposal.v2` (**stays in knot encoding**) |
+| `DOMAIN_CHANGE_ACCOUNT_V1` = `sme-platform.multisig-registry.change_account.v1` | → `nocturne.knot.multisig-registry.change_account.v2` (**stays in knot encoding**) |
+| `DOMAIN_COUNCIL_RESOLVE_V2` = `sme-platform.prediction-market.council-resolve.v2` | → move to wen/PM; rename e.g. `nocturne.wen.prediction-market.council-resolve.v3` or `nocturne.knot.…` only if still co-versioned — **pin in wen impl plan** |
 
 ## Open (TODO)
 
 - [ ] Exact public README one-paragraph claim
 - [ ] Crates in first public tag (collector AGPL callout?)
-- [ ] Launch-blocking Kind A after PM peel (A1–A5 largely move with tooling; A10/A12–A15 remain)
+- [ ] Launch-blocking Kind A after PM peel (A1–A5 + A3 move with tooling/digest; A10 shrinks; A12–A15 remain)
 - [ ] Kind B docs (Prove claim at top level, versioning.md, dead links)
 - [ ] Kind C defer list final
-- [ ] Where `council_resolve_digest` lives after peel
 - [ ] Required tests/goldens bar for public tag
 - [ ] Doc hygiene: what moves to `docs/internal/` vs nocturne-docs
+- [ ] Collector: keep generic blob relay only vs also peel `pm_council_resolve` DTO kind to wen
 
 ## Out of scope this launch form
 
