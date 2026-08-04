@@ -2257,10 +2257,10 @@ dependencies = [
 [[package]]
 name = "nocturne-deployments"
 version = "0.1.0"
+source = "git+https://github.com/aichbindas/nocturne-deployments?rev=d40ab407b5ad68a9710fd4520d94d51854276d9a#d40ab407b5ad68a9710fd4520d94d51854276d9a"
 dependencies = [
  "serde",
  "serde_json",
- "tempfile",
  "thiserror 2.0.19",
 ]
 

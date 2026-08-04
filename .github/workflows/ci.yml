@@ -9,12 +9,25 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # libgit2 ignores url.insteadOf; force cargo to shell out to git.
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.94.0"
           targets: wasm32-unknown-unknown
+      - name: Private deps auth
+        env:
+          TOKEN: ${{ secrets.GH_PRIVATE_REPO_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::GH_PRIVATE_REPO_TOKEN secret is unset or empty"
+            echo "Need a PAT (or fine-grained token) with contents:read on private aichbindas/nocturne-deployments."
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
       # Workspace root = knot nest. Collector is AGPL; encoding/registry/proposals/tool Apache.
       # Contract tests `include_bytes!` release WASM under nest `target/contract/`.
       - name: build contract WASM
