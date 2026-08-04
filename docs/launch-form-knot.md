@@ -62,15 +62,21 @@ as a first-class Knot surface.
 
 ## Audit × gap crosswalk (after peel)
 
-### Leaves knot with the peel (wen owns residual risk)
+### Leaves knot with the peel — **must be fixed in wen, not dropped**
+
+These are **not** “wontfix.” They move with the code. Tracking:
+
+- Knot audit leaves `audit-2026-08-full/010–014` stay as the finding record / acceptance hints.
+- **Wen (or prediction-market) paired plan** owns implementation: peel **and** close A1–A5 (membership gate, submit target crosscheck, shared/golden ABI, threshold warn) **before** wen publicly claims pm-resolve.
+- Knot P0 only requires: paths gone from knot + wen has a tracked plan/leaves pointing at those findings. Closing Critical/High is a **wen launch bar**, not a knot tag bar.
 
 | Gap | Audit | Action |
 |---|---|---|
-| A1 Critical membership gate | PM-resolve sign | Move tooling → fix in wen (or delete path from knot) |
-| A2 High submit target | PM-resolve submit | Same |
-| A3 High mirrored ABI | `pm_*_types.rs` | Same |
-| A5 Medium threshold warn | PM-resolve init | Same |
-| Council digest / L7–L9 | encoding + PM | Move + rename domain in wen |
+| A1 Critical membership gate | PM-resolve sign | Peel → **fix in wen** (acceptance from leaf 010) |
+| A2 High submit target | PM-resolve submit | Peel → **fix in wen** (leaf 011) |
+| A3 High mirrored ABI | `pm_*_types.rs` | Peel → **extract/goldens in wen** (leaf 012) |
+| A5 Medium threshold warn | PM-resolve init | Peel → **fix in wen** (leaf 014) |
+| Council digest / L7–L9 | encoding + PM | Peel + domain `nocturne.wen…v3` in wen |
 
 ### Remains knot launch work
 
@@ -110,9 +116,10 @@ flowchart LR
 2. Move `council_resolve_*` out of `multisig-encoding` into wen; set domain **L9**.  
 3. Strip PM routes/flags from `multisig-tool`; collector: remove or relocate `pm_council_resolve` kind.  
 4. Update wen docs that pointed at knot pm-resolve.  
-5. Knot tree must not expose PM-resolve as a product surface.
+5. Knot tree must not expose PM-resolve as a product surface.  
+6. **Open wen plan/leaves** that import audit A1–A5 acceptance; schedule fixes in that plan (same wave as peel preferred; **required before wen public claim** of pm-resolve).
 
-**Exit:** `cargo test` / contract tests green on both sides for touched crates; no PM-resolve entrypoints in knot tool README.
+**Exit:** tests green on touched crates; no PM-resolve entrypoints in knot; wen has explicit fix tracking for A1–A5.
 
 ### P1 — Domain rename + redeploy (knot generics)
 
@@ -122,15 +129,28 @@ flowchart LR
 
 **Exit:** known-vector tests pass; testnet Status IDs updated once (then Status leaves public README — see P2).
 
-### P2 — Public doc surface
+### P2 — Public doc + **website + standards docs** alignment
+
+One claim everywhere. Review and align **all** of:
+
+| Surface | Location (typical) |
+|---|---|
+| Repo front door | knot root + crate READMEs |
+| In-repo docs | `docs/security-model.md`, new `versioning.md`, hygiene moves |
+| Standards site | `nocturne-docs` → `/v1/knot/` (and any PM pages that still say pm-resolve lives in knot) |
+| Marketing / Lab website copy | Multisig Lab HTML/JS strings (“treasury”, feature lists); any nocturne-standards marketing pages that mention Knot |
+
+Work:
 
 1. Rewrite root + crate READMEs: public claim (above), Prove-first, AGPL callout, no Wave/carve/§ Status dump.  
 2. Execute [`doc-hygiene-inventory.md`](doc-hygiene-inventory.md): keep / move-to-`docs/internal/` or nocturne-docs / delete-duplicate.  
 3. Add `docs/versioning.md`.  
 4. Fix A12–A15 (versions, GitHub links, dead relatives, CLI error text).  
 5. Lab copy: drop “treasury”; use committee / multisig account.  
+6. **Pass over nocturne-docs `/v1/knot/`** (+ cross-links from wen/PM docs): peel story, Prove-only, no dead monorepo paths, no “pm-resolve in knot”.  
+7. **Pass over website / Lab UI copy** for the same claim; file doc PRs in `nocturne-docs` (and any site repo) as part of this phase or a tightly paired PR.
 
-**Exit:** fresh clone reader can use Knot without parent monorepo paths; claim matches tree.
+**Exit:** fresh clone + docs site + Lab UI tell the same story; no parent-monorepo-only links; claim matches tree.
 
 ### P3 — Remaining knot fixes + tests
 
@@ -160,9 +180,12 @@ flowchart LR
 
 ## Next step
 
-Write implementation plan:  
-`docs/superpowers/plans/2026-08-04-knot-public-launch.md`  
-(tasks for P0–P4; wen peel may be a paired plan in wen repo).
+Two implementation plans (paired):
+
+1. **Knot:** `docs/superpowers/plans/YYYY-MM-DD-knot-public-launch.md` — P0 (strip) + P1–P4, including nocturne-docs + website alignment tasks.  
+2. **Wen:** paired plan in wen/prediction-market — receive peel + **fix A1–A5** + domain L9 + doc updates.
+
+Audit fix leaves 010–014 remain the acceptance source for the wen plan; knot plan references them as “moved,” does not close them as fixed in knot.
 
 ## Out of scope
 
