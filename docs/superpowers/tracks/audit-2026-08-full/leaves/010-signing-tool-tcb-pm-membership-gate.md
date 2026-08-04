@@ -1,8 +1,8 @@
 ---
 id: 10
 slug: signing-tool-tcb-pm-membership-gate
-status: TODO
-owner: null
+status: superseded
+owner: planner-migrate
 deps: []
 scope:
   - crates/multisig-tool/src/rpc.rs
@@ -23,4 +23,8 @@ Planner context…
 
 ## Evidence (worker)
 
+Work relocated per launch-form L3/L7. Goals preserved on successor leaf. Successor: wen://pm-peel-and-fixes#2 a1-membership-gate-sign. Old leaf kept in git as finding record; must not be claimed for knot-local PM tooling fixes.
+
 ## Proposal (worker, if BLOCKED)
+
+Supersede this leaf. Execute successor wen://pm-peel-and-fixes#2 a1-membership-gate-sign instead.

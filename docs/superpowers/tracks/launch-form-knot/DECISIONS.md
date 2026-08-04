@@ -42,3 +42,7 @@ Locked 2026-08-04.
 - A1–A5 are not dropped: peel moves code to wen; wen paired plan must fix them (acceptance from audit leaves 010–014) before wen publicly claims pm-resolve.
 - Knot public launch plan covers strip + P1–P4 only; references moved findings.
 - P2 expanded: align repo READMEs, nocturne-docs /v1/knot/, and Lab/website copy to the same public claim.
+
+## 2026-08-04T16:24:57.856Z — Plan leaves P0–P4 + migrated audit #13
+
+PM fix successors live on wen track pm-peel-and-fixes. Audit #10–14 superseded after this.
