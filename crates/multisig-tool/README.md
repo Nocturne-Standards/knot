@@ -16,7 +16,7 @@ docs name: **Knot**.
 
 Architecture and crate interaction diagram:
 [docs.nocturne-standards.org — Knot](https://docs.nocturne-standards.org/v1/knot/)
-· [source on GitHub](https://github.com/aichbindas/sme_platform/blob/main/nocturne-docs/docs/v1/knot/index.md)
+· [source on GitHub](https://github.com/aichbindas/knot)
 
 Cold-start: `./scripts/multisig-first-run.sh --serve` from repo root.
 
@@ -24,10 +24,10 @@ Everything below is lab **Status**, env, and maintainer run notes. Dense on purp
 
 ## Quick start
 
-From the **sme_platform** repo root (not this crate alone):
+From this repo root:
 
 ```bash
-export RUSK_WALLET_PWD=sme-platform-testnet-dev   # see references/testnet-wallet.md
+export RUSK_WALLET_PWD=sme-platform-testnet-dev   # rusk-wallet keystore password (testnet)
 # Optional scripting — both required, or omit both and type the keystore password:
 export MULTISIG_TOOL_ALLOW_ENV_PWD=1
 export MULTISIG_TOOL_PWD='local-dev-only'                      # unlocks ~/.multisig-tool/identities.dat
@@ -53,9 +53,9 @@ an existing store only unlocks + summarizes — it does not wipe identities.
 
 **Share the collector with co-signers:** give them the three `MULTISIG_COLLECTOR_*`
 values (out of band). They run the same Quick start on their laptop — keys never
-leave their machine. Ops detail (htpasswd, nginx, participant checklist):
-[`docs/multisig/multisig-collector-deploy-runbook.md`](../../../docs/multisig/multisig-collector-deploy-runbook.md)
-§4–§5.
+leave their machine. Ops detail (htpasswd, nginx, participant checklist): bring
+your own reverse-proxy wiring — the collector HTTP API in
+`crates/multisig-collector/README.md` is the contract.
 
 **PM dispute council:** use wen
 [`pm-council-tool`](https://github.com/aichbindas/wen) (product UX for council
@@ -73,7 +73,7 @@ submission goes two ways:
 - **Writes** (`create_account`, `verify_quorum`, `verify_quorum_aggregate`,
   `change_account`): shell out to the `rusk-wallet` CLI binary, same pattern
   as `scripts/wire-contract.sh` — real testnet transaction, costs gas, needs
-  `RUSK_WALLET_PWD` set (see `references/testnet-wallet.md`).
+  `RUSK_WALLET_PWD` set (unlock password for `rusk-wallet` gas-paying writes).
 - **Reads** (`account`, `account_meta`, `member_key_bytes`, `next_account_id`,
   …): a direct RUES HTTP call (`POST /on/contracts:<id>/<fn>`) — free, no
   gas, no wallet. Request and response bodies are **raw rkyv bytes** with
@@ -116,15 +116,13 @@ submission goes two ways:
   (`member_matches=1, sigs_ok=0` under insecure; secure `change_account`
   succeeds). `VM::ephemeral()` unit tests in `multisig-registry` still
   sign with `_insecure` because dusk-vm defaults host-query policy to
-  `HardFork::PreFork` with no public override — see
-  `references/dusk-native/dusk-vm-issue-1-ephemeral-hardfork-policy-unreachable.md`.
+  `HardFork::PreFork` with no public override — ephemeral VM tests cannot
+  reach post-hardfork signing policy without upstream dusk-vm support.
   Matching the test suite's `_insecure` calls in this tool is wrong for
   live testnet.
 - **RUES free-reads must use raw bodies** (see Scope). An early client bug
   hex-encoded requests and looked like “stuck `account` not found” /
-  upstream lag; that was not a node or contract-state failure. Historical
-  write-up: [`docs/multisig/testnet-read-lag-2026-07-22.md`](../../../docs/multisig/testnet-read-lag-2026-07-22.md)
-  (frozen).
+  upstream lag; that was not a node or contract-state failure.
 - **Free-read `verify_quorum` / `verify_quorum_aggregate` / `diagnose_quorum`:**
   with raw RUES these no longer 500, but can report `false` /
   `sigs_ok=0` for secure signatures that succeed in transaction
@@ -133,11 +131,9 @@ submission goes two ways:
 
 ## Status
 
-- **Package version `0.2.0`** — see [CHANGELOG.md](CHANGELOG.md). Policy: [docs/versioning.md](../../../docs/versioning.md). `multisig-tool --version` prints the same string.
-- **Nocturne Lab UI (2026-07-28)** — static HTML links synced `static/lab/*` from
-  [`nocturne-lab`](../../../nocturne-lab/) (tokens, layout, components, self-hosted
-  Literata/Sora). Product override: `--you: #2b6cb0` in `static/style.css`. Re-sync:
-  `bash nocturne-lab/scripts/sync-assets.sh`.
+- **Package version `0.2.0`** — see [CHANGELOG.md](CHANGELOG.md). Policy: [docs/versioning.md](../../docs/versioning.md). `multisig-tool --version` prints the same string.
+- **Nocturne Lab UI (2026-07-28)** — static HTML uses synced `static/lab/*`
+  tokens/layout. Product override: `--you: #2b6cb0` in `static/style.css`.
 - **Website demo Lab (2026-07-26)** — `DEMO_MODE=mock` (**default**) uses an
   in-process `MockLedger` for account/proposal APIs (approve still signs the
   digest with real local BLS; chain submit is skipped in mock only).
@@ -149,8 +145,6 @@ submission goes two ways:
   works in mock; Aggregate, Rotate, Unsafe UTF-8, and Party finder return 501 in mock — set `DEMO_MODE=testnet` and restart. Public
   story (no hosted signing):
   [`docs.nocturne-standards.org/v1/knot/`](https://docs.nocturne-standards.org/v1/knot/).
-  Design (frozen):
-  [`docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md`](../../../docs/superpowers/specs/2026-07-26-multisig-website-demo-design.md).
 - **PM council resolve** — peeled to wen `pm-council-tool` (2026-08-04 public-launch P0).
   Knot no longer ships `pm-resolve` CLI/UI/RPC or `council_resolve_*` in
   `multisig-encoding`. Collector may still relay `kind=pm_council_resolve` blobs
@@ -197,10 +191,8 @@ submission goes two ways:
   (target / function / args / deadline), approve recomputes §4a digest and
   prints **canonical fields first** (refuses on digest mismatch). Web UI
   mirrors the same gate.
-- Against `multisig-registry` / `multisig-proposals` testnet ids in
-  `../../../deployments/testnet.json` (registry **v0.1.4**, proposals
-  **v0.3.1**, 2026-07-28 cutover). Atlas + treasury-data/logic also on
-  testnet — see those READMEs.
+- Against `multisig-registry` / `multisig-proposals` on Dusk testnet — confirm
+  contract IDs with your operator before live writes.
 
 | Check | Result |
 |---|---|
@@ -212,9 +204,6 @@ submission goes two ways:
 | Pk-only import + refuse as signer | Pass |
 | File/BYO blob 2-of-3 → aggregate → `verify_quorum_aggregate` | Pass (local `VM::ephemeral`) |
 | Out-of-band full-digest mnemonic / safety-number | Pass (`multisig-encoding` fingerprint tests) |
-
-Frozen investigation of the earlier false alarms:
-[`docs/multisig/testnet-read-lag-2026-07-22.md`](../../../docs/multisig/testnet-read-lag-2026-07-22.md).
 
 ### Multi-person runbook (two machines)
 
@@ -254,9 +243,8 @@ our preimage shape. **No follow-up work in the current suite plan.**
 
 ### Monitoring note
 
-Atlas authority / service-repoint changes are timelocked (see `atlas/README.md`).
-Operators should alarm on the change *and* on unexpected silence (Ronin went
-six days undetected). Registry `change_account` remains the membership path
+Atlas authority / service-repoint changes are timelocked (Atlas is outside this
+repo). Operators should alarm on the change *and* on unexpected silence. Registry `change_account` remains the membership path
 with built-in nonce replay protection.
 
 ## Usage
@@ -284,7 +272,7 @@ unlock-check + summary.
 ### CLI
 
 ```bash
-export RUSK_WALLET_PWD=...      # see references/testnet-wallet.md
+export RUSK_WALLET_PWD=...      # rusk-wallet keystore password (testnet)
 # Scripting only — both required or the tool refuses the env password:
 export MULTISIG_TOOL_ALLOW_ENV_PWD=1
 export MULTISIG_TOOL_PWD=...    # or omit both to be prompted (init prompts twice on first creation)
