@@ -47,6 +47,7 @@ subtle = "2"
 
 [dev-dependencies]
 dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
+tower = { version = "0.5", features = ["util"] }
 
 # Silences "unexpected cfg" warnings from multisig-registry/src/call_types.rs
 # (included via #[path = ...], see src/registry_types.rs) — that crate has a

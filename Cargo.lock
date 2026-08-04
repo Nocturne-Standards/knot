@@ -2249,6 +2249,7 @@ dependencies = [
  "subtle",
  "tiny-keccak",
  "tokio",
+ "tower",
  "zeroize",
 ]
 
