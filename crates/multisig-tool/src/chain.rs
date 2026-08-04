@@ -289,7 +289,9 @@ pub fn submit_call_to(which: Contract, fn_name: &str, args_bytes: &[u8]) -> Resu
     let args_hex = hex::encode(args_bytes);
 
     if std::env::var("RUSK_WALLET_PWD").is_err() {
-        bail!("RUSK_WALLET_PWD is not set — see references/testnet-wallet.md");
+        bail!(
+            "RUSK_WALLET_PWD is not set — set this env var to the rusk-wallet keystore password for gas-paying chain writes on testnet"
+        );
     }
 
     let output = Command::new("rusk-wallet")
@@ -303,7 +305,9 @@ pub fn submit_call_to(which: Contract, fn_name: &str, args_bytes: &[u8]) -> Resu
         .arg("--fn-args")
         .arg(&args_hex)
         .output()
-        .context("failed to spawn rusk-wallet — is it on PATH? see references/testnet-wallet.md")?;
+        .context(
+            "failed to spawn rusk-wallet — install the rusk-wallet CLI and ensure it is on PATH; set RUSK_WALLET_PWD to the keystore password for testnet chain writes",
+        )?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();

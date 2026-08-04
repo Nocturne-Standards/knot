@@ -9,7 +9,7 @@ never submits on-chain. See
 
 ## Status
 
-**Package version `0.2.0`** — see [CHANGELOG.md](CHANGELOG.md). Policy: [docs/versioning.md](../../../docs/versioning.md).
+**Package version `0.2.0`** — see [CHANGELOG.md](CHANGELOG.md). Policy: [docs/versioning.md](../../docs/versioning.md).
 
 **2026-07-24 — availability hardening (audit I8/I9/I10/M10):** last-write-wins
 partial replace (same `signer_pk`); sig capped at 48 bytes (BLS); max 32
@@ -89,9 +89,9 @@ cargo run -p multisig-collector
 curl http://127.0.0.1:8899/v1/health   # {"ok":true,"version":"0.2.0"}
 ```
 
-**VPS deploy (operator TODO):** follow
-[`docs/multisig/multisig-collector-deploy-runbook.md`](../../../docs/multisig/multisig-collector-deploy-runbook.md)
-when ready to stand up `collector.nocturne-standards.org`.
+**VPS deploy (operator TODO):** bring your own ops (TLS, auth, SQLite backup).
+The HTTP API table above is the full contract — no separate runbook ships in
+this repo.
 
 ## License
 

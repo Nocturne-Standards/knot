@@ -18,11 +18,9 @@ cannot drift.
 - **M3 fingerprint (2026-07-23)** — `digest_hex` / `digest_mnemonic` (BIP39
   24-word over full 32-byte digest) / `digest_safety_number` for out-of-band
   co-signer compare. Never truncate.
-- **Layer E (`call-types`, 2026-08-02 / spec 26)** — default-off feature holding
+- **Layer E (`call-types`, 2026-08-02)** — default-off feature holding
   shared registry/proposals ABI types. Serde derives behind `data-driver`.
   Both contracts re-export from `call_types`.
-- Spec: [`docs/multisig/multisig-suite-and-atlas-implementation-plan.md`](../../../docs/multisig/multisig-suite-and-atlas-implementation-plan.md) §4 / M3;
-  call types: [`26-multisig-shared-call-types.md`](../../../docs/superpowers/specs/2026-07-31-shared-code/26-multisig-shared-call-types.md).
 - Host `rlib` (`no_std` + `alloc`); path-dep from contracts and the tool.
   Default features stay free of `dusk-core` / `rkyv`.
 

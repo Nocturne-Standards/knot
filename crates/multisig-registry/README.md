@@ -7,17 +7,10 @@ threshold logic themselves.
 ## Scope
 
 This is a **verification** registry, not a custody wallet. It never holds
-Dusk or any token — unlike Dusk's own [`multisig-contract` example]
-(`references/repos/multisig-contract`), which deposits/transfers Dusk to
-Moonlight accounts. This contract answers one question: *did enough of this
-account's members sign this message?* Callers build authorization on top of
-that answer — e.g. `prediction-market`'s dispute council
-(`init_dispute_council(registry, account_id)` + `resolve` → `verify_quorum`
-over `council-resolve.v2`; lab green 2026-07-24, live redeploy/wire still
-open — see `prediction-market/crates/prediction-market/README.md`), or a
-future `compliance-gate` operator council.
-
-[`multisig-contract` example]: ../../../references/repos/multisig-contract
+Dusk or any token — unlike Dusk's own multisig-contract example (deposits/
+transfers to Moonlight accounts). This contract answers one question: *did
+enough of this account's members sign this message?* Callers build
+authorization on top of that answer.
 
 ## Functions
 
@@ -52,9 +45,7 @@ future `compliance-gate` operator council.
   just failing to count. This is the Dusk-specific win over a
   general-purpose EVM chain: BLS signature aggregation collapses an O(N)
   cost (N pairing checks) into O(1) (one), natively, no precompile
-  workaround needed — see
-  `references/dusk-native/crate-source-locations.md` for where
-  `bls12_381-bls`'s aggregation logic actually lives.
+  workaround needed — BLS aggregation is native on Dusk.
 
 ### Diagnostic helpers (ops / investigation)
 
@@ -72,7 +63,7 @@ future `compliance-gate` operator council.
 
 **v0.1.5** on testnet (2026-08-03 — Spec 23b Phase B `repr(C)` pin; measured
 **DIFFERENT**). Contract id `3e3c5be563e8b085d4e66b048b4794457382cf3f578699a55e5c4a9fe9c94045`
-(see monorepo `deployments/testnet.json` key `multisig-registry`). Prior live
+(see operator deploy notes). Prior live
 pin: **v0.1.4** (2026-07-28 audit #6 `checked_add`). Status:
 **PINNED-DIFFERENT-REDEPLOYED**.
 
@@ -81,9 +72,9 @@ pattern (wasm32-unknown-unknown, Rust 1.94.0, `#[dusk_forge::contract]`).
 `verify_quorum_aggregate`'s tests exercise the real `verify_bls_multisig`
 host query under `VM::ephemeral()` (not mocked) — signing uses
 `sign_multisig_insecure`, not the default secure `sign_multisig`, because
-of a `dusk-vm` gotcha: see
-`references/dusk-native/dusk-vm-issue-1-ephemeral-hardfork-policy-unreachable.md`.
-**Live testnet clients must use secure `sign`/`sign_multisig`** — see
+`VM::ephemeral()` unit tests cannot reach post-hardfork signing policy in
+dusk-vm (PreFork default). **Live testnet clients must use secure
+`sign`/`sign_multisig`** — see
 [`../multisig-tool/README.md`](../multisig-tool/README.md).
 
 **23b Phase B (2026-08-03):** `#[archive_attr(repr(C))]` on shared
@@ -96,17 +87,7 @@ council) may stay deferred/unwired — OK per Phase B lessons.
 
 ## Next steps
 
-- Wire `prediction-market::resolve`'s council path (currently
-  `verify_quorum`, the per-signature form) over to
-  `verify_quorum_aggregate`. The off-chain aggregation flow this needs now
-  exists — `multisig-tool`'s `blob create|sign|aggregate|submit-agg` (M2)
-  assembles a `MultisigSignature` aggregate off-chain and submits it into
-  `verify_quorum_aggregate` (see [`../multisig-tool/README.md`](../multisig-tool/README.md)
-  and its `tests/blob_aggregate_local.rs`). What remains is pointing
-  prediction-market's council at that path.
-- Watch for dusk-forge v0.3.0's two-`ContractId`-in-one-argument codegen
-  bug (see root `CLAUDE.md`) if a future method here ever needs to
-  reference another contract's `ContractId` alongside anything else.
-- See `rusk-experiments/multisig-approval` for a standalone sandbox demo of
-  the same `verify_bls_multisig` primitive (predates this module) — worth
-  comparing notes if either one's approach changes.
+- Consumer contracts (e.g. prediction-market council resolve) own their
+  `verify_quorum_aggregate` wiring — see **wen** / prediction-market repos.
+- Watch for dusk-forge codegen edge cases if a future method needs two
+  `ContractId` arguments in one ABI call.
