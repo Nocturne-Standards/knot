@@ -170,13 +170,15 @@ Work:
 
 ## Success criteria (public Knot)
 
-- [ ] No PM-resolve product surface in knot  
-- [ ] Encoding has no council-resolve digest  
-- [ ] Domains use pinned `nocturne.knot.*` / wen string as above  
-- [ ] Public READMEs match claim; dead monorepo links gone  
-- [ ] Audit Critical/High either fixed in wen (moved) or absent from knot  
-- [ ] Collector AGPL disclosed  
-- [ ] Prove-only stated on front door  
+- [x] No PM-resolve product surface in knot  
+- [x] Encoding has no council-resolve digest  
+- [x] Domains use pinned `nocturne.knot.*` / wen string as above  
+- [x] Public READMEs match claim; dead monorepo links gone  
+- [x] Audit Critical/High either fixed in wen (moved) or absent from knot  
+- [x] Collector AGPL disclosed  
+- [x] Prove-only stated on front door  
+
+_Verified 2026-08-04 on `feat/launch-form-knot` (`b4e5895`). Operator: redeploy registry+proposals, then tag._
 
 ## Next step
 
