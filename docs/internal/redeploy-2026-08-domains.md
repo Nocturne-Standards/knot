@@ -17,7 +17,27 @@ Constants: `DOMAIN_PROPOSAL_V2`, `DOMAIN_CHANGE_ACCOUNT_V2` in
 
 1. **Rebuild WASM** — `multisig-registry` and `multisig-proposals` (both
    depend on `multisig-encoding` for digest verification).
-2. **Deploy** both contracts to target network (testnet first).
+2. **Deploy** both contracts to target network (testnet first). Use the
+   `sme_platform` wrappers — they exec shared scripts in `nocturne-deployments`
+   and dual-write primary + local mirror pins:
+
+   ```bash
+   # from sme_platform (wallet .env.testnet loaded via CALLER_REPO_ROOT):
+   ./scripts/deploy-contract.sh /path/to/knot/crates/multisig-registry -y
+   ./scripts/deploy-contract.sh /path/to/knot/crates/multisig-proposals -y
+   ```
+
+   Primary pin lands in `nocturne-deployments/testnet.json`; mirror in
+   `sme_platform/deployments/testnet.json`. From knot without sme wrapper:
+
+   ```bash
+   export CALLER_REPO_ROOT=/path/to/knot
+   export NOCTURNE_DEPLOYMENTS_ROOT=/path/to/nocturne-deployments
+   $NOCTURNE_DEPLOYMENTS_ROOT/scripts/deploy-contract.sh crates/multisig-registry -y
+   ```
+
+   Override primary pin only if needed: `export DEPLOYMENTS_FILE=…` before deploy.
+
 3. **Invalidate old committee messages** — any partial signatures or quorum
    blobs signed under `sme-platform.*` domains will fail verification after
    redeploy. Operators must:
@@ -25,6 +45,8 @@ Constants: `DOMAIN_PROPOSAL_V2`, `DOMAIN_CHANGE_ACCOUNT_V2` in
    - Re-collect `change_account` quorum signatures if a rotation was in flight.
 4. **Update tooling** — ensure `multisig-tool` / `multisig-collector` are on
    the same `multisig-encoding` revision before asking signers to approve.
+   Pin lookup uses `nocturne-deployments` (symlink `deployments` →
+   `aichbindas/nocturne-deployments`, or `NOCTURNE_DEPLOYMENTS`).
 
 ## Verification
 
