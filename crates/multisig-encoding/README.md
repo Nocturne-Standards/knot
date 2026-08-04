@@ -35,7 +35,8 @@ cannot drift.
   `human_summary` for trust (display must use canonical fields).
 - `digest_mnemonic(digest)` / `digest_hex` / `digest_safety_number` — full-hash
   out-of-band fingerprints (M3).
-- Domain tag: `sme-platform.multisig.proposal.v1`.
+- Domain tags: `nocturne.knot.multisig.proposal.v2` (proposal preimage),
+  `nocturne.knot.multisig-registry.change_account.v2` (registry quorum).
 - `--features call-types` — `call_types::{SignatureEntry, VerifyQuorumArgs,
   MultisigAccountView}`.
 
