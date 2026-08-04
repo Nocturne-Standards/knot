@@ -9,6 +9,24 @@
         "--transport",
         "stdio"
       ]
+    },
+    "nocturne-mcp-gates": {
+      "command": "node",
+      "args": [
+        "/Users/leonidas/dev/aichbindas/nocturne-mcp-gates/mcp/server.mjs"
+      ],
+      "env": {
+        "GATES_ROOT": "${workspaceFolder}"
+      }
+    },
+    "nocturne-mcp-tracks": {
+      "command": "node",
+      "args": [
+        "/Users/leonidas/dev/aichbindas/nocturne-mcp-tracks/mcp/server.mjs"
+      ],
+      "env": {
+        "TRACKS_ROOT": "${workspaceFolder}"
+      }
     }
   }
 }
