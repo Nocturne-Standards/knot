@@ -59,3 +59,16 @@ wen admin cross-link.
 ## 2026-08-04T16:24:57.856Z — Plan leaves P0–P4 + migrated audit #13
 
 PM fix successors live on wen track pm-peel-and-fixes. Audit #10–14 superseded after this.
+
+## 2026-08-04 — A4 deferred for first public tag
+
+Optional generic Lab live-membership pre-check before approve/quorum/
+change-account sign (audit #13 / leaf `007-a4-generic-membership-gate`) is
+**not** required for first public tag. Prove-mode on-chain mitigation remains
+the guarantee. Recorded so launch is not blocked; leaf stays TODO or deferred.
+
+## 2026-08-04 — Wen A1–A5 successors tracked
+
+Wen track `pm-peel-and-fixes` on `feat/wen-pm-peel-plan`: A1/A2/A3/A5 re-verify
+**Pass** (`docs/superpowers/specs/2026-08-04-pm-council-a1-a5-checklist.md`,
+commit `7ae9728`). Knot tag not blocked on wen DONE; council UX SSOT is wen.
