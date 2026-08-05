@@ -27,26 +27,27 @@ evidence and reasoning behind each finding are useful; the instructions are not.
 
 ## Where to start
 
-- **Implementing a fix** → `IMPLEMENTATION.md`. §1–§3 are ready to build.
-  §4 is agreed but unspecified — do not implement from it.
+- **Implementing a fix** → `IMPLEMENTATION.md`. §1–§5 LOCKED. Read per-item markers.
+- **Execution order** → `IMPLEMENTATION.md` §10 (phasing). Leaves after §10 accepted.
 - **Preparing the public repo** → `IMPLEMENTATION.md` §5.
 - **Setting up a new public repo** → `PUBLIC-REPO-STANDARD.md`.
 - **Checking what was decided and why** → `IMPLEMENTATION.md` §8 (decision log).
 - **Product scope, framing, roadmap** → `IMPLEMENTATION.md` §9. Not audit findings.
 
-## Status at `7e58d4c`
+## Status at `46a64b4`
 
 | | |
 |---|---|
-| Ready to implement | **Everything in §1–§5.** Blockers, contracts v3, keystore v2, tool blobs, collector, registry, repo hygiene — all LOCKED |
-| Open | `blst` only, and deprioritised — not blocking (§8) |
-| Product scope | Per-council collector, role split, signer UI, `call_args` decoding (§9) |
-| Not yet audited | `rpc.rs` (1862 lines), `main.rs` (1588), `chain.rs`, `store.rs`, `dto.rs`, `collector_client.rs`, `mock_ledger.rs`, static JS |
+| Ready to implement | **§1–§5 LOCKED** — blockers, contracts v3, keystore v2, tool, collector, registry, hygiene |
+| Settled this pass | Deadline forbid-0, TTL/`MAX_PROPOSAL_TTL`, uniquifier, events/decoder, dusk-core doc rewrite (§8) |
+| Phasing | `IMPLEMENTATION.md` §10 — accept before cutting leaves |
+| Open / later | `blst` deprioritised; §9.3/§9.4 product; `nocturne-event-decoder` extract DEFERRED |
+| Not yet audited | `rpc.rs`, `main.rs`, `chain.rs`, tool `store`/`dto`/`collector_client`/`mock_ledger`, Lab JS — phase 1 |
 
 Triage on the unaudited files found no high-severity issues: SQL is parameterized,
 the Lab escapes HTML at every sink, the API token compares in constant time, and
 `rusk-wallet` is invoked with argument arrays rather than a shell string. A full read
-is still outstanding.
+is still outstanding (phase 1).
 
 ## Rules
 
@@ -55,3 +56,4 @@ is still outstanding.
 2. Decisions are recorded in `IMPLEMENTATION.md` only — never in two places.
 3. Superseded content is corrected in `IMPLEMENTATION.md` §7, not edited in place in
    the frozen audit.
+4. Do not invent compatibility work for private, unused prior deployments.
