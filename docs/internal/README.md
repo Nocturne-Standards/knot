@@ -28,26 +28,20 @@ evidence and reasoning behind each finding are useful; the instructions are not.
 ## Where to start
 
 - **Implementing a fix** → `IMPLEMENTATION.md`. §1–§5 LOCKED. Read per-item markers.
-- **Execution order** → `IMPLEMENTATION.md` §10 (phasing). Leaves after §10 accepted.
+- **Execution order** → `IMPLEMENTATION.md` §10. Track: `public-ready-v3`.
+- **Residual findings** → `IMPLEMENTATION.md` §11 — **review before phase 2**.
 - **Preparing the public repo** → `IMPLEMENTATION.md` §5.
-- **Setting up a new public repo** → `PUBLIC-REPO-STANDARD.md`.
-- **Checking what was decided and why** → `IMPLEMENTATION.md` §8 (decision log).
-- **Product scope, framing, roadmap** → `IMPLEMENTATION.md` §9. Not audit findings.
+- **Checking what was decided and why** → `IMPLEMENTATION.md` §8.
+- **Product scope** → `IMPLEMENTATION.md` §9.
 
-## Status at `46a64b4`
+## Status at `b1d883d`
 
 | | |
 |---|---|
-| Ready to implement | **§1–§5 LOCKED** — blockers, contracts v3, keystore v2, tool, collector, registry, hygiene |
-| Settled this pass | Deadline forbid-0, TTL/`MAX_PROPOSAL_TTL`, uniquifier, events/decoder, dusk-core doc rewrite (§8) |
-| Phasing | `IMPLEMENTATION.md` §10 — accept before cutting leaves |
-| Open / later | `blst` deprioritised; §9.3/§9.4 product; `nocturne-event-decoder` extract DEFERRED |
-| Not yet audited | `rpc.rs`, `main.rs`, `chain.rs`, tool `store`/`dto`/`collector_client`/`mock_ledger`, Lab JS — phase 1 |
-
-Triage on the unaudited files found no high-severity issues: SQL is parameterized,
-the Lab escapes HTML at every sink, the API token compares in constant time, and
-`rusk-wallet` is invoked with argument arrays rather than a shell string. A full read
-is still outstanding (phase 1).
+| Ready to implement | **§1–§5 LOCKED** |
+| Residual audit | **Done** — §11 (R1/R2 HIGH: Lab token in HTML; multi-key sign sans confirm) |
+| Next | Human review §11, then phase 2 rename (`public-ready-v3` leaf #3) |
+| Deferred | Launch ops §10; `nocturne-event-decoder` extract; product §9 |
 
 ## Rules
 
