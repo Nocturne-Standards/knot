@@ -1,8 +1,8 @@
 ---
 id: 14
 slug: lab-rpc-hardening
-status: TODO
-owner: null
+status: IN_PROGRESS
+owner: cursor-agent
 deps:
   - 1
 scope:
