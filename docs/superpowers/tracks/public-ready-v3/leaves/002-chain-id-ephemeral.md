@@ -39,6 +39,6 @@ Planner context…
 metadata unset and `abi::chain_id()` panics. All Knot contract tests already use
 `genesis_session`; v3 contracts may call `abi::chain_id()` directly in tests.
 
-**IMPLEMENTATION.md:** §2.5 + §2.14 item 1 amended (stamp `276b19e`).
+**IMPLEMENTATION.md:** §2.5 + §2.14 item 1 amended (stamp `603754e`).
 
 ## Proposal (worker, if BLOCKED)
