@@ -4,7 +4,7 @@
 //!
 //! Axum oneshot coverage lives in `rpc::generic_rpc_smoke` (binary unit tests).
 
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::net::TcpListener;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -63,12 +63,19 @@ fn spawn_serve(store: &Path, bind: &str, pwd: &str) -> ServeProcess {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn serve");
-    if let Some(mut stderr) = child.stderr.take() {
+    if let Some(stderr) = child.stderr.take() {
         std::thread::spawn(move || {
-            let mut collected = String::new();
-            stderr.read_to_string(&mut collected).ok();
-            if let Ok(mut guard) = buf_clone.lock() {
-                *guard = collected;
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                match line {
+                    Ok(line) => {
+                        if let Ok(mut guard) = buf_clone.lock() {
+                            guard.push_str(&line);
+                            guard.push('\n');
+                        }
+                    }
+                    Err(_) => break,
+                }
             }
         });
     }
