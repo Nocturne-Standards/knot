@@ -25,6 +25,7 @@ use rand::RngCore;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::bls;
+use crate::hex_util::{decode_hex, strip_single_0x};
 
 /// Caller-supplied proposal uniquifier (§2.6). Default CSPRNG `u64`.
 pub fn random_proposal_nonce() -> u64 {
@@ -201,13 +202,7 @@ impl<'de> Deserialize<'de> for BlobFile {
 }
 
 fn hex32(s: &str) -> Result<[u8; 32]> {
-    let stripped = s
-        .trim()
-        .strip_prefix("0x")
-        .unwrap_or(s.trim());
-    if stripped.starts_with("0x") {
-        bail!("repeated 0x prefix");
-    }
+    let stripped = strip_single_0x(s)?;
     let bytes = hex::decode(stripped).context("expected hex")?;
     bytes
         .as_slice()
@@ -216,13 +211,7 @@ fn hex32(s: &str) -> Result<[u8; 32]> {
 }
 
 fn hex96(s: &str) -> Result<[u8; 96]> {
-    let stripped = s
-        .trim()
-        .strip_prefix("0x")
-        .unwrap_or(s.trim());
-    if stripped.starts_with("0x") {
-        bail!("repeated 0x prefix");
-    }
+    let stripped = strip_single_0x(s)?;
     let bytes = hex::decode(stripped).context("expected hex")?;
     bytes
         .as_slice()
@@ -235,8 +224,9 @@ fn encode_hex(bytes: &[u8]) -> String {
 }
 
 /// Content-addressed collector id = lowercase hex of the 32-byte digest (no `0x`).
-pub fn digest_id(digest_hex: &str) -> String {
-    digest_hex.trim_start_matches("0x").to_ascii_lowercase()
+pub fn digest_id(digest_hex: &str) -> Result<String> {
+    Ok(strip_single_0x(digest_hex)?
+        .to_ascii_lowercase())
 }
 
 /// Gate locally before pushing any blob to the collector.
@@ -287,8 +277,7 @@ impl BlobFile {
                 self.version
             );
         }
-        let call_args =
-            hex::decode(self.intent.call_args.trim_start_matches("0x")).context("call_args hex")?;
+        let call_args = decode_hex(&self.intent.call_args, "call_args")?;
         let proposal_intent = ProposalIntent {
             chain_id: self.intent.chain_id,
             committee_id: self.intent.committee_id,
@@ -302,7 +291,7 @@ impl BlobFile {
         for p in &self.partials {
             partials.push(PartialSig {
                 signer_pk: hex96(&p.signer_pk)?,
-                sig: hex::decode(p.sig.trim_start_matches("0x")).context("partial sig hex")?,
+                sig: decode_hex(&p.sig, "partial sig")?,
             });
         }
         Ok(ProposalBlob {
@@ -495,6 +484,43 @@ mod tests {
         let sk = BlsSecretKey::random(rng);
         let pk = BlsPublicKey::from(&sk);
         (sk, pk)
+    }
+
+    #[test]
+    fn digest_id_rejects_double_0x_prefix() {
+        assert!(super::digest_id("0x0xab").is_err());
+        assert_eq!(super::digest_id("0xAb").unwrap(), "ab");
+    }
+
+    #[test]
+    fn to_proposal_blob_rejects_double_0x_in_call_args() {
+        let digest = format!("0x{}", "11".repeat(32));
+        let target = format!("0x{}", "22".repeat(32));
+        let json = format!(
+            r#"{{
+                "version": 1,
+                "kind": "proposals",
+                "intent": {{
+                    "chain_id": 1,
+                    "committee_id": 0,
+                    "nonce": 0,
+                    "target_contract_id": "{target}",
+                    "function_name": "noop",
+                    "call_args": "0x0x00",
+                    "deadline": 0,
+                    "human_summary": null
+                }},
+                "signed_digest": "{digest}",
+                "threshold": 1,
+                "partials": []
+            }}"#
+        );
+        let file: BlobFile = serde_json::from_str(&json).unwrap();
+        let err = file.to_proposal_blob().unwrap_err().to_string();
+        assert!(
+            err.contains("repeated 0x prefix") || err.contains("call_args malformed"),
+            "unexpected: {err}"
+        );
     }
 
     #[test]
