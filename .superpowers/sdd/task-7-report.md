@@ -39,3 +39,10 @@ Full `cargo test -p knot-tool` — all suites pass.
 - Default path now uses platform data dir (`directories`); legacy paths logged on fallback only.
 - Argon2id 64 MiB may be slow on low-memory CI — acceptable for test tooling.
 - `identity export` / `import-pk` unchanged (already present); full sk export not added (out of scope).
+
+## Fix-pass (review)
+
+- **Critical:** `save()` no longer renames primary away before atomic write; tmp→fsync, copy→`.bak`, rename tmp→primary.
+- **Important:** `hex_util` centralizes L5 strip; `blob.rs` `digest_id` / `call_args` / partial `sig` fixed.
+- Review: `.superpowers/sdd/task-7-review.md`
+- Tests: `cargo test -p knot-tool` — **69 passed** (added `save_copies_previous_primary_to_bak`, blob `0x0x` rejects).

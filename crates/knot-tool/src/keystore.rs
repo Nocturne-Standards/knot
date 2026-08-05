@@ -18,6 +18,7 @@ use anyhow::{bail, Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
 use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
+use knot_tool::hex_util::strip_single_0x;
 use pbkdf2::pbkdf2_hmac;
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -163,7 +164,7 @@ fn cleanup_stale_tmp(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+fn write_tmp(path: &Path, bytes: &[u8]) -> Result<()> {
     let dir = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -198,16 +199,24 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         f.sync_all()?;
         drop(f);
     }
+    Ok(())
+}
 
+fn commit_tmp(path: &Path) -> Result<()> {
+    let dir = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .context("store path has no parent")?;
+    let tmp = tmp_path(path);
     fs::rename(&tmp, path)?;
-
     let dfd = File::open(dir)?;
     dfd.sync_all()?;
     full_fsync(&dfd)?;
     Ok(())
 }
 
-fn rotate_backup(path: &Path) -> Result<()> {
+/// Copy the current primary to `.bak` (primary stays in place).
+fn copy_backup(path: &Path) -> Result<()> {
     if !path.exists() {
         return Ok(());
     }
@@ -215,9 +224,9 @@ fn rotate_backup(path: &Path) -> Result<()> {
     if bak.exists() {
         fs::remove_file(&bak)?;
     }
-    fs::rename(path, &bak).with_context(|| {
+    fs::copy(path, &bak).with_context(|| {
         format!(
-            "rotating backup {} -> {}",
+            "copying backup {} -> {}",
             path.display(),
             bak.display()
         )
@@ -511,17 +520,6 @@ fn encrypt_v2(password: &str, identities: &[Identity]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn strip_single_0x(s: &str) -> Result<&str> {
-    let t = s.trim();
-    match t.strip_prefix("0x") {
-        None => Ok(t),
-        Some(rest) if rest.starts_with("0x") => {
-            bail!("repeated 0x prefix")
-        }
-        Some(rest) => Ok(rest),
-    }
-}
-
 fn pk_from_hex(hex_s: &str) -> Result<BlsPublicKey> {
     let stripped = strip_single_0x(hex_s).context("pk_hex malformed")?;
     let bytes = hex::decode(stripped).context("pk_hex malformed")?;
@@ -579,11 +577,12 @@ pub fn load(path: &Path, password: &str) -> Result<Vec<Identity>> {
     Ok(identities)
 }
 
-/// Encrypts and saves `identities` to `path` (v2 format, atomic write, `.bak` rotation).
+/// Encrypts and saves `identities` to `path` (v2 format, atomic write, `.bak` copy).
 pub fn save(path: &Path, password: &str, identities: &[Identity]) -> Result<()> {
     let bytes = encrypt_v2(password, identities)?;
-    rotate_backup(path)?;
-    write_atomic(path, &bytes)?;
+    write_tmp(path, &bytes)?;
+    copy_backup(path)?;
+    commit_tmp(path)?;
     Ok(())
 }
 
@@ -697,6 +696,27 @@ mod tests {
         assert_eq!(loaded[0].name, "alice");
         let after = fs::read(&path).unwrap();
         assert_eq!(before, after);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn save_copies_previous_primary_to_bak() {
+        let dir = test_dir("bakcopy");
+        let path = dir.join("identities.dat");
+        let password = "pw";
+        save(&path, password, &[generate("alice")]).expect("first save");
+        let first = fs::read(&path).unwrap();
+        save(&path, password, &[generate("bob")]).expect("second save");
+        let bak = bak_path(&path);
+        assert!(bak.exists(), ".bak should exist after second save");
+        assert_eq!(
+            fs::read(&bak).unwrap(),
+            first,
+            ".bak should hold previous primary bytes"
+        );
+        let loaded = load(&path, password).expect("load new");
+        assert_eq!(loaded[0].name, "bob");
+        assert!(path.exists(), "primary must exist after save");
         std::fs::remove_dir_all(&dir).ok();
     }
 
