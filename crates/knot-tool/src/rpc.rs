@@ -1373,14 +1373,14 @@ async fn api_proposal_create(
     Json(req): Json<ProposalCreateReq>,
 ) -> ApiResult<Json<ProposalCreateOut>> {
     let target_bytes: [u8; 32] = hex::decode(req.target.trim_start_matches("0x"))
-        .map_err(RpcError::internal)?
+        .map_err(RpcError::invalid_hex)?
         .as_slice()
         .try_into()
         .map_err(|_| RpcError::invalid_target())?;
     let call_args = if req.args_hex.is_empty() {
         Vec::new()
     } else {
-        hex::decode(req.args_hex.trim_start_matches("0x")).map_err(RpcError::internal)?
+        hex::decode(req.args_hex.trim_start_matches("0x")).map_err(RpcError::invalid_hex)?
     };
     if state.demo_mode == DemoMode::Mock {
         let mut mock = state.mock.lock().await;
@@ -2235,5 +2235,49 @@ mod generic_rpc_smoke {
         )
         .await;
         assert_eq!(status, StatusCode::OK, "member approve: {body}");
+    }
+
+    #[tokio::test]
+    async fn proposal_create_rejects_invalid_hex() {
+        let state = test_state_with_identities(&["alice"]);
+        let app = build_router(state);
+
+        let bad_target = serde_json::json!({
+            "account": 0,
+            "target": "0xZZZZ",
+            "function": "noop",
+            "args_hex": "",
+            "deadline": 0
+        });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/proposal/create",
+            Some(bad_target.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "bad target: {body}");
+        let err: serde_json::Value = serde_json::from_str(&body).expect("error json");
+        assert_eq!(err["code"], "invalid_hex");
+        assert_eq!(err["message"], "Invalid hex encoding.");
+
+        let bad_args = serde_json::json!({
+            "account": 0,
+            "target": format!("0x{}", "44".repeat(32)),
+            "function": "noop",
+            "args_hex": "0xGG",
+            "deadline": 0
+        });
+        let (status, body) = oneshot_json(
+            app,
+            "POST",
+            "/api/proposal/create",
+            Some(bad_args.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "bad args_hex: {body}");
+        let err: serde_json::Value = serde_json::from_str(&body).expect("error json");
+        assert_eq!(err["code"], "invalid_hex");
+        assert_eq!(err["message"], "Invalid hex encoding.");
     }
 }
