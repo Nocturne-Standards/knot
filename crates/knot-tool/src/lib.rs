@@ -7,7 +7,6 @@
 pub mod blob;
 pub mod bls;
 pub mod collector_client;
-#[cfg(not(feature = "deployments-crate"))]
 pub mod deployments;
 pub mod diagnose;
 pub mod hex_util;

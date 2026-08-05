@@ -43,7 +43,6 @@ pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 sha2 = "0.10"
 rpassword = "7"
 knot-encoding = { path = "../knot-encoding", features = ["call-types"] }
-nocturne-deployments = { git = "https://github.com/aichbindas/nocturne-deployments", rev = "d40ab407b5ad68a9710fd4520d94d51854276d9a", package = "nocturne-deployments", optional = true }
 zeroize = "1"
 subtle = "2"
 libc = "0.2"
@@ -64,6 +63,3 @@ tempfile = "3"
 [features]
 default = []
 data-driver = []
-# Opt into the git-pinned nocturne-deployments crate (internal convenience).
-# Default build reads pin JSON via NOCTURNE_DEPLOYMENTS / walk-up discovery.
-deployments-crate = ["dep:nocturne-deployments"]

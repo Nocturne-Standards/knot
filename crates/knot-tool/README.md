@@ -66,9 +66,7 @@ resolve). Knot knot-tool covers registry, proposals, and generic Lab only.
 
 `knot-tool` loads `deployments/testnet.json` via `NOCTURNE_DEPLOYMENTS` or by
 walking up from the crate directory (`deployments/` or `nocturne-deployments/`
-sibling). No private git fetch is required for the default build. Enable
-`--features deployments-crate` to use the optional `nocturne-deployments` git
-dependency instead.
+sibling). No private git dependency.
 
 ## Scope
 

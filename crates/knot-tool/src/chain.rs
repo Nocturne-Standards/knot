@@ -35,19 +35,6 @@ impl Contract {
     }
 }
 
-#[cfg(feature = "deployments-crate")]
-fn deployments() -> Result<nocturne_deployments::DeploymentsFile> {
-    let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    nocturne_deployments::load_from(&start).with_context(|| {
-        format!(
-            "could not load deployments/testnet.json from {} \
-             (set NOCTURNE_DEPLOYMENTS or place deployments/testnet.json)",
-            start.display()
-        )
-    })
-}
-
-#[cfg(not(feature = "deployments-crate"))]
 fn deployments() -> Result<crate::deployments::DeploymentsFile> {
     let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     crate::deployments::load_from(&start).with_context(|| {

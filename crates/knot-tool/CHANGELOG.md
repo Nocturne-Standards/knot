@@ -7,9 +7,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Added
 
-- Optional Cargo feature `deployments-crate` (off by default) for the
-  `nocturne-deployments` git pin reader. Default builds load `testnet.json` via
-  `NOCTURNE_DEPLOYMENTS` or a walk-up path — no private git fetch required.
+- Local `deployments/testnet.json` pin loader (`NOCTURNE_DEPLOYMENTS` or walk-up).
+  Dropped the private `nocturne-deployments` git dependency so default CI/builds
+  need no org token.
 
 ### Changed
 
