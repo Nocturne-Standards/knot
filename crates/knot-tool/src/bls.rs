@@ -13,12 +13,14 @@
 //! the real node.
 
 use dusk_core::signatures::bls::{
-    MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey, Signature as BlsSignature,
+    aggregate as aggregate_multisig_pk,
+    verify_multisig as dusk_verify_multisig,
+    BlsVersion, MultisigPublicKey, MultisigSignature, PublicKey as BlsPublicKey,
+    SecretKey as BlsSecretKey, Signature as BlsSignature,
 };
 use knot_encoding::call_types::ProposalView;
 use knot_encoding::{ProposalIntentV3, recompute_and_verify_v3};
 
-/// Chain id for v3 digests on testnet (`init_chain_id=2` in deploy-history).
 pub const DIGEST_CHAIN_ID: u64 = 2;
 
 pub fn digest_chain_id() -> u64 {
@@ -38,9 +40,30 @@ pub fn sign_multisig(sk: &BlsSecretKey, pk: &BlsPublicKey, msg: &[u8]) -> Multis
 
 /// Combines individual `sign_multisig` outputs into one aggregate — order
 /// doesn't matter, `MultisigSignature::aggregate` just sums points.
-pub fn aggregate(sigs: &[MultisigSignature]) -> MultisigSignature {
-    let (first, rest) = sigs.split_first().expect("at least one signature to aggregate");
-    first.aggregate(rest)
+pub fn aggregate(sigs: &[MultisigSignature]) -> Result<MultisigSignature, &'static str> {
+    let (first, rest) = sigs
+        .split_first()
+        .ok_or("no signatures to aggregate")?;
+    Ok(first.aggregate(rest))
+}
+
+/// Local partial verification before aggregation (M9).
+///
+/// Tries secure V2 first (live testnet), then V1 insecure for `VM::ephemeral` tests.
+pub fn verify_multisig(pk: &BlsPublicKey, msg: &[u8], sig: &MultisigSignature) -> bool {
+    for version in [BlsVersion::V2, BlsVersion::V1] {
+        let apk = match version {
+            BlsVersion::V2 => aggregate_multisig_pk(core::slice::from_ref(pk), version).ok(),
+            BlsVersion::V1 => MultisigPublicKey::aggregate_insecure(core::slice::from_ref(pk)).ok(),
+        };
+        let Some(apk) = apk else {
+            continue;
+        };
+        if dusk_verify_multisig(&apk, sig, msg, version).is_ok() {
+            return true;
+        }
+    }
+    false
 }
 
 /// Thin wrap of [`knot_encoding::change_account_message_v3`] — the fixed
@@ -123,4 +146,14 @@ pub fn message_fingerprint_display(msg: &[u8]) -> (String, String, String) {
         knot_encoding::digest_mnemonic(&digest),
         knot_encoding::digest_safety_number(&digest),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn aggregate_empty_returns_err() {
+        assert_eq!(aggregate(&[]), Err("no signatures to aggregate"));
+    }
 }

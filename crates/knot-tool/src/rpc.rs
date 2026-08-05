@@ -38,6 +38,7 @@ use crate::registry_types::call_types::{
 };
 use crate::{chain, keystore};
 use knot_tool::bls;
+use knot_tool::blob;
 use knot_tool::collector_client::{self, CollectorClient};
 use knot_tool::membership;
 use knot_tool::mock_ledger::{
@@ -1324,7 +1325,7 @@ async fn api_quorum_agg_submit(
         per_signer_sigs.push(bls::sign_multisig(sk, &id.pk, &msg));
     }
     drop(identities);
-    let aggregate_sig = bls::aggregate(&per_signer_sigs);
+    let aggregate_sig = bls::aggregate(&per_signer_sigs).map_err(RpcError::invalid_input)?;
 
     let args = VerifyQuorumAggregateArgs {
         account_id: req.account,
@@ -1367,7 +1368,7 @@ async fn api_quorum_agg_check(
         per_signer_sigs.push(bls::sign_multisig(sk, &id.pk, &msg));
     }
     drop(identities);
-    let aggregate_sig = bls::aggregate(&per_signer_sigs);
+    let aggregate_sig = bls::aggregate(&per_signer_sigs).map_err(RpcError::invalid_input)?;
     let args = VerifyQuorumAggregateArgs {
         account_id: req.account,
         msg,
@@ -1510,9 +1511,9 @@ struct ProposalCreateReq {
     args_hex: String,
     #[serde(default)]
     deadline: u64,
-    /// Caller uniquifier (§2.12 v3); defaults to 0 for lab/demo.
+    /// Caller uniquifier (§2.12 v3); CSPRNG default when omitted.
     #[serde(default)]
-    nonce: u64,
+    nonce: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -1539,6 +1540,7 @@ async fn api_proposal_create(
     if state.demo_mode == DemoMode::Mock {
         let mut mock = state.mock.lock().await;
         let before = mock.next_proposal_id();
+        let nonce = blob::resolve_proposal_nonce(req.nonce);
         let id = mock
             .create_proposal(
                 req.account,
@@ -1546,7 +1548,7 @@ async fn api_proposal_create(
                 req.function,
                 call_args,
                 req.deadline,
-                req.nonce,
+                nonce,
             )
             .map_err(RpcError::invalid_input)?;
         return Ok(Json(ProposalCreateOut {
@@ -1564,12 +1566,13 @@ async fn api_proposal_create(
     )
     .await
     .map_err(RpcError::internal)?;
+    let nonce = blob::resolve_proposal_nonce(req.nonce);
     let args = ProposeArgs {
         registry_account_id: req.account,
         target: ContractId::from_bytes(target_bytes),
         function_name: req.function,
         call_args,
-        nonce: req.nonce,
+        nonce,
         deadline: req.deadline,
     };
     let bytes = chain::encode(&args).map_err(RpcError::internal)?;
@@ -1691,8 +1694,10 @@ async fn api_blob_preview(
     let client = CollectorClient::resolve(None).map_err(RpcError::collector_config)?;
     let file = client.pull(&id).await.map_err(RpcError::internal)?;
     let proposal = file.to_proposal_blob().map_err(RpcError::internal)?;
-    let digest = knot_encoding::gate_blob_for_signing(&proposal)
-        .map_err(|_| RpcError::digest_mismatch("blob §4a digest mismatch"))?;
+    let digest = blob::gate_blob(&proposal).map_err(|e| match e {
+        blob::GateError::DigestMismatch => RpcError::digest_mismatch("blob §4a digest mismatch"),
+        blob::GateError::Encoding(enc) => RpcError::invalid_input(&enc.to_string()),
+    })?;
     let i = &proposal.intent.intent;
     Ok(Json(SignPreviewOut {
         digest_hex: format!("0x{}", hex::encode(digest)),

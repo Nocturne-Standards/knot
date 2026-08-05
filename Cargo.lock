@@ -2109,6 +2109,7 @@ dependencies = [
  "dusk-vm",
  "hex",
  "knot-encoding",
+ "libc",
  "nocturne-deployments",
  "pbkdf2",
  "rand 0.8.7",
@@ -2122,6 +2123,7 @@ dependencies = [
  "tiny-keccak",
  "tokio",
  "tower",
+ "url",
  "zeroize",
 ]
 
