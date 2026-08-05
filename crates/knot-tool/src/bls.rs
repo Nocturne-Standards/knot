@@ -115,7 +115,7 @@ pub fn verify_proposal_view_digest(
     proposals_self_id: &[u8; 32],
 ) -> Result<[u8; 32], ()> {
     let intent = proposal_intent_v3_from_view(view, chain_id, proposals_self_id);
-    recompute_and_verify_v3(&intent, &view.signed_digest)
+    recompute_and_verify_v3(&intent, &view.signed_digest).map_err(|_| ())
 }
 
 /// 32-byte fingerprint for out-of-band compare before BLS signing.

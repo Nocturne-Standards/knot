@@ -17,8 +17,9 @@ use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
 };
 use knot_encoding::{
-    DecodedIntent, EncodingError, PartialSig, ProposalBlob, ProposalIntent,
+    gate_blob_for_signing, DecodedIntent, PartialSig, ProposalBlob, ProposalIntent,
 };
+pub use knot_encoding::{EncodingError, GateError};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -37,25 +38,6 @@ pub fn resolve_proposal_nonce(cli_nonce: Option<u64>) -> u64 {
     cli_nonce.unwrap_or_else(random_proposal_nonce)
 }
 
-/// Typed gate errors (L14) — distinguish digest mismatch from encoding limits.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum GateError {
-    DigestMismatch,
-    Encoding(EncodingError),
-}
-
-impl core::fmt::Display for GateError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            GateError::DigestMismatch => {
-                write!(f, "signed_digest does not match recomputed digest")
-            }
-            GateError::Encoding(e) => write!(f, "{e}"),
-        }
-    }
-}
-
-impl std::error::Error for GateError {}
 
 fn gate_error_to_anyhow(err: GateError) -> anyhow::Error {
     match err {
@@ -66,15 +48,9 @@ fn gate_error_to_anyhow(err: GateError) -> anyhow::Error {
     }
 }
 
-/// Signer-side anti-blind-signing gate with typed errors (L14).
+/// Signer-side anti-blind-signing gate — delegates to `knot-encoding` (L14).
 pub fn gate_blob(blob: &ProposalBlob) -> Result<[u8; 32], GateError> {
-    let _ = blob.intent.human_summary.as_ref();
-    let got = blob.intent.intent.digest().map_err(GateError::Encoding)?;
-    if &got == &blob.signed_digest {
-        Ok(got)
-    } else {
-        Err(GateError::DigestMismatch)
-    }
+    gate_blob_for_signing(blob)
 }
 
 /// Threshold source for M8 aggregate guard.
