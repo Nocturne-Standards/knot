@@ -33,7 +33,7 @@ hex = "0.4"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "cookies"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util"] }
 axum = "0.8"
 bs58 = "0.5"
@@ -49,6 +49,7 @@ subtle = "2"
 [dev-dependencies]
 dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
 tower = { version = "0.5", features = ["util"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "cookies"] }
 
 # Silences "unexpected cfg" warnings from knot-registry/src/call_types.rs
 # (included via #[path = ...], see src/registry_types.rs) — that crate has a
