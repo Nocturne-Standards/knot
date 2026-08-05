@@ -1,8 +1,8 @@
 ---
 id: 9
 slug: registry-diagnostics-offchain
-status: TODO
-owner: null
+status: CLAIMED
+owner: cursor-agent
 deps:
   - 5
 scope:
