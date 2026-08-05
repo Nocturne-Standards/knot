@@ -100,8 +100,8 @@ enum Cmd {
     },
     /// Serve the local web UI + RPC on 127.0.0.1.
     ///
-    /// Mode: `DEMO_MODE=mock` (default) uses an in-process MockLedger for
-    /// account/proposal APIs; `DEMO_MODE=testnet` keeps the live chain path.
+    /// Requires `DEMO_MODE=mock` (in-process MockLedger for account/proposal APIs)
+    /// or `DEMO_MODE=testnet` (live chain path). Unset or unknown values refuse start.
     Serve {
         #[arg(long, default_value = "127.0.0.1:8877")]
         bind: String,
