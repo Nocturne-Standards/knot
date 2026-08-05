@@ -7,14 +7,18 @@
 //! submit. See `docs/superpowers/specs/2026-07-23-knot-collector-monorepo-demo-design.md`
 //! §2 for the full trust model and API surface.
 //!
-//! This crate intentionally has **no** dependency on `dusk_core` or any BLS
-//! secret-key type — compromise of this service can at worst cause a DoS or
-//! a rejected (digest-mismatched) blob, never a forged signature.
+//! The collector **never holds secret keys, never signs, and never submits
+//! on-chain transactions**. It may verify public BLS signatures and
+//! recompute digests via `knot-encoding` so it cannot be used as an
+//! unauthenticated griefing relay.
 
 pub mod api;
 pub mod dto;
+pub mod gate;
 pub mod store;
+pub mod verify;
 
+use std::str::FromStr;
 use std::sync::Arc;
 
 use store::Store;
@@ -36,15 +40,24 @@ pub const DB_ENV: &str = "KNOT_COLLECTOR_DB";
 pub const MAX_BODY_BYTES: usize = 64 * 1024;
 /// Max distinct partials stored per proposal.
 pub const MAX_PARTIALS: usize = 32;
-/// Max Unicode scalar values for party `note` / intent `human_summary`.
+/// Max Unicode scalar values for party `name` / `note` / intent `human_summary`.
 pub const MAX_NOTE_CHARS: usize = 512;
 /// BLS signature length in bytes (`dusk_core::signatures::bls::Signature` /
-/// `Serializable::SIZE` — confirmed 48; collector never verifies, only caps).
+/// `Serializable::SIZE` — confirmed 48).
 pub const BLS_SIG_BYTES: usize = 48;
+/// Default `GET /v1/proposals` / `GET /v1/party` page size (M11).
+pub const DEFAULT_LIST_LIMIT: u32 = 50;
+/// Hard cap on `?limit` query parameter (M11).
+pub const MAX_LIST_LIMIT: u32 = 200;
+/// Max stored proposal rows before new creates are rejected (M11).
+pub const MAX_PROPOSAL_ROWS: usize = 10_000;
+/// Max party roster rows before new signups are rejected (M11).
+pub const MAX_PARTY_ROWS: usize = 1_000;
+/// Proposal rows older than this many seconds may be swept (M11 TTL).
+pub const PROPOSAL_RETENTION_SECS: i64 = 90 * 24 * 3600;
 
 /// Refuses non-loopback binds unless [`ALLOW_NON_LOOPBACK_ENV`]=`1`.
-/// Loopback means `127.0.0.1:` or `localhost:` prefix (same style as
-/// `knot-tool`'s RPC guard).
+/// Parses `bind` as a [`std::net::SocketAddr`] and requires a loopback IP.
 pub fn assert_bind_allowed(bind: &str) -> Result<(), String> {
     let allow = matches!(std::env::var(ALLOW_NON_LOOPBACK_ENV), Ok(v) if v == "1");
     assert_bind_allowed_with(bind, allow)
@@ -53,7 +66,9 @@ pub fn assert_bind_allowed(bind: &str) -> Result<(), String> {
 /// Testable core of [`assert_bind_allowed`] — `allow_non_loopback` stands in
 /// for `KNOT_COLLECTOR_ALLOW_NON_LOOPBACK=1`.
 pub fn assert_bind_allowed_with(bind: &str, allow_non_loopback: bool) -> Result<(), String> {
-    let loopback = bind.starts_with("127.0.0.1:") || bind.starts_with("localhost:");
+    let loopback = std::net::SocketAddr::from_str(bind)
+        .map(|addr| addr.ip().is_loopback())
+        .unwrap_or(false);
     if loopback || allow_non_loopback {
         return Ok(());
     }
@@ -70,7 +85,7 @@ mod bind_tests {
     #[test]
     fn bind_allows_loopback() {
         assert!(assert_bind_allowed_with("127.0.0.1:8899", false).is_ok());
-        assert!(assert_bind_allowed_with("localhost:8899", false).is_ok());
+        assert!(assert_bind_allowed_with("[::1]:8899", false).is_ok());
     }
 
     #[test]
