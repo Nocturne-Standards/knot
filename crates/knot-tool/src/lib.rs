@@ -6,6 +6,7 @@
 
 pub mod blob;
 pub mod bls;
+pub mod diagnose;
 pub mod hex_util;
 pub mod collector_client;
 pub mod membership;

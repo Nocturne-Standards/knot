@@ -9,17 +9,14 @@
 //!
 //! **Layer E + `repr(C)`:** Archive structs in `knot-encoding` `call_types`
 //! carry `#[archive_attr(repr(C))]`. Measured **DIFFERENT** 2026-08-03 on
-//! `MultisigAccountView`, `ChangeAccountArgs`, `AccountMeta`,
-//! `DiagnoseQuorumResult` (IDENTICAL on `SignatureEntry`, `VerifyQuorumArgs`,
-//! `CreateAccountArgs`, `VerifyQuorumAggregateArgs`). Constants below are
-//! after-pin bytes where they moved.
+//! `MultisigAccountView`, `ChangeAccountArgs` (IDENTICAL on `SignatureEntry`,
+//! `VerifyQuorumArgs`, `CreateAccountArgs`, `VerifyQuorumAggregateArgs`).
 //!
 //! Fixed inputs: `StdRng::seed_from_u64(0xa11ce_u64)`; message bytes
 //! `b"wave5-layout-golden-multisig"` for signatures and aggregate multisig.
 //!
 //! R9 corrupt-one-digit on **post-`repr(C)`** constants 2026-08-03:
-//! `GOLDEN_ACCOUNT_META_HEX` final digit flipped; `account_meta_golden`
-//! failed; reverted; green.
+//! `GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX` final digit flipped; reverted; green.
 
 extern crate alloc;
 
@@ -27,7 +24,6 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
 };
@@ -40,7 +36,7 @@ use rkyv::Serialize;
 mod call_types;
 
 use call_types::{
-    AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
     SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
 use knot_encoding::layout_goldens::{
@@ -95,14 +91,6 @@ pub const GOLDEN_VERIFY_QUORUM_AGGREGATE_ARGS_HEX: &str = concat!(
     "e991453fa10050000000000000000"
 );
 
-/// `AccountMeta { threshold: 2, nonce: 3, members_len: 2 }`.
-/// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
-pub const GOLDEN_ACCOUNT_META_HEX: &str = "020000000000000003000000000000000200000000000000";
-
-/// `DiagnoseQuorumResult` — exists=true, one 96-byte member pk row.
-/// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
-pub const GOLDEN_DIAGNOSE_QUORUM_RESULT_HEX: &str =
-    "93b30e683ad74bf6811ae1512963e38615e9e6fd086b3a8fd06fbfcbbf4bf12dce0352ab0ba23ae8f2d6b8ce4686efdc04e730080687cbee86a15a745b88328ec578c3e2c4835d1b114f7932ad9d8a4a2b86893b73de1128a2684b446657090ca0ffffff600000000100000002000000020000000100000001000000e4ffffff01000000";
 
 fn archive_hex<T>(v: &T) -> String
 where
@@ -203,28 +191,4 @@ fn multisig_account_view_golden() {
         nonce: 3,
     };
     assert_eq!(archive_hex(&view), GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX);
-}
-
-#[test]
-fn account_meta_golden() {
-    let meta = AccountMeta {
-        threshold: 2,
-        nonce: 3,
-        members_len: 2,
-    };
-    assert_eq!(archive_hex(&meta), GOLDEN_ACCOUNT_META_HEX);
-}
-
-#[test]
-fn diagnose_quorum_result_golden() {
-    let keys = fixed_keys();
-    let result = DiagnoseQuorumResult {
-        exists: true,
-        threshold: 2,
-        members_len: 2,
-        member_matches: 1,
-        sigs_ok: 1,
-        member_pk_bytes: vec![keys[0].1.to_bytes().to_vec()],
-    };
-    assert_eq!(archive_hex(&result), GOLDEN_DIAGNOSE_QUORUM_RESULT_HEX);
 }

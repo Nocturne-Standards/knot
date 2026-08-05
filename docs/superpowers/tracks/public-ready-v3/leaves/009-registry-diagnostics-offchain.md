@@ -1,7 +1,7 @@
 ---
 id: 9
 slug: registry-diagnostics-offchain
-status: CLAIMED
+status: IN_PROGRESS
 owner: cursor-agent
 deps:
   - 5

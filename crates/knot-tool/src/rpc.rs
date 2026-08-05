@@ -33,13 +33,15 @@ use crate::proposals_types::call_types::{
     ApproveArgs, ProposalStatus, ProposalView, ProposeArgs,
 };
 use crate::registry_types::call_types::{
-    AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
     SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
+use knot_encoding::call_types::DiagnoseQuorumResult;
 use crate::{chain, keystore};
 use knot_tool::bls;
 use knot_tool::blob;
 use knot_tool::collector_client::{self, CollectorClient};
+use knot_tool::diagnose;
 use knot_tool::membership;
 use knot_tool::mock_ledger::{
     DemoMode, MockLedger, MockProposal, MockProposalStatus, MOCK_CHAIN_ID, MOCK_PROPOSALS_SELF_ID,
@@ -938,12 +940,11 @@ async fn api_account_meta(
             members_len: m.member_count,
         })));
     }
-    let bytes = chain::encode(&id).map_err(RpcError::internal)?;
-    let meta: Option<AccountMeta> = chain::query("account_meta", bytes).await.map_err(RpcError::internal)?;
-    Ok(Json(meta.map(|m| MetaOut {
-        threshold: m.threshold,
-        nonce: m.nonce,
-        members_len: m.members_len,
+    let view = fetch_registry_account(state.as_ref(), id).await.ok();
+    Ok(Json(view.map(|v| MetaOut {
+        threshold: v.threshold,
+        nonce: v.nonce,
+        members_len: v.members.len() as u32,
     })))
 }
 
@@ -960,9 +961,13 @@ async fn api_account_keys(
                 .collect()
         })));
     }
-    let bytes = chain::encode(&id).map_err(RpcError::internal)?;
-    let keys: Option<Vec<Vec<u8>>> = chain::query("member_key_bytes", bytes).await.map_err(RpcError::internal)?;
-    Ok(Json(keys.map(|ks| ks.into_iter().map(hex::encode).collect())))
+    let view = fetch_registry_account(state.as_ref(), id).await.ok();
+    Ok(Json(view.map(|v| {
+        v.members
+            .iter()
+            .map(|pk| hex::encode(pk.to_bytes()))
+            .collect()
+    })))
 }
 
 async fn api_account_next_id(
@@ -1210,12 +1215,14 @@ fn diagnose_to_out(d: &DiagnoseQuorumResult) -> DiagnoseOut {
     }
 }
 
-async fn free_read_quorum(args: &VerifyQuorumArgs) -> ApiResult<(Option<DiagnoseOut>, Option<bool>)> {
+async fn free_read_quorum(
+    state: &AppState,
+    args: &VerifyQuorumArgs,
+) -> ApiResult<(Option<DiagnoseOut>, Option<bool>)> {
+    let view = fetch_registry_account(state, args.account_id).await.ok();
+    let d = diagnose::diagnose_quorum(view.as_ref(), args);
+    let diagnose = Some(diagnose_to_out(&d));
     let bytes = chain::encode(args).map_err(RpcError::internal)?;
-    let diagnose = match chain::query::<DiagnoseQuorumResult>("diagnose_quorum", bytes.clone()).await {
-        Ok(d) => Some(diagnose_to_out(&d)),
-        Err(_) => None,
-    };
     let check = chain::query::<bool>("verify_quorum", bytes).await.ok();
     Ok((diagnose, check))
 }
@@ -1255,7 +1262,7 @@ async fn api_quorum_submit(
         "verify_quorum returns bool with no event. Free-read follow-up may be untrusted on live testnet."
             .into(),
     );
-    if let Ok((d, c)) = free_read_quorum(&args).await {
+    if let Ok((d, c)) = free_read_quorum(&state, &args).await {
         out.diagnose = d;
         out.check = c;
     }
@@ -1275,7 +1282,7 @@ async fn api_quorum_check(
         msg,
         sigs,
     };
-    let (diagnose, check) = free_read_quorum(&args).await?;
+    let (diagnose, check) = free_read_quorum(&state, &args).await?;
     let mut note = None;
     if diagnose.as_ref().map(|d| d.free_read_untrusted).unwrap_or(false) {
         note = Some(

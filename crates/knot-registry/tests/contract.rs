@@ -20,8 +20,8 @@ use rand::SeedableRng;
 #[path = "../src/call_types.rs"]
 mod call_types;
 use call_types::{
-    AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
-    SignatureEntry, VerifyQuorumArgs, VerifyQuorumAggregateArgs,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
+    SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
 
 const REGISTRY_BYTECODE: &[u8] = include_bytes!(
@@ -578,11 +578,11 @@ fn public_key_rkyv_roundtrip_still_matches_for_contains() {
 }
 
 #[test]
-fn diagnostic_reads_and_diagnose_quorum_roundtrip() {
+fn next_account_id_and_account_roundtrip() {
     let rng = &mut StdRng::seed_from_u64(11);
     let mut session = initialize();
-    let (sk1, pk1) = keypair(rng);
-    let (sk2, pk2) = keypair(rng);
+    let (_sk1, pk1) = keypair(rng);
+    let (_sk2, pk2) = keypair(rng);
 
     assert_eq!(
         session
@@ -613,58 +613,14 @@ fn diagnostic_reads_and_diagnose_quorum_roundtrip() {
         1
     );
 
-    let meta = session
-        .call::<u64, Option<AccountMeta>>(REGISTRY_ID, "account_meta", &id, POINT_LIMIT)
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
         .unwrap()
         .data
-        .expect("meta");
-    assert_eq!(meta.threshold, 2);
-    assert_eq!(meta.nonce, 0);
-    assert_eq!(meta.members_len, 2);
-
-    let keys = session
-        .call::<u64, Option<Vec<Vec<u8>>>>(REGISTRY_ID, "member_key_bytes", &id, POINT_LIMIT)
-        .unwrap()
-        .data
-        .expect("keys");
-    assert_eq!(keys.len(), 2);
-    assert_eq!(keys[0], pk1.to_bytes().to_vec());
-    assert_eq!(keys[1], pk2.to_bytes().to_vec());
-
-    let msg = b"diagnose-me".to_vec();
-    let good = session
-        .call::<VerifyQuorumArgs, DiagnoseQuorumResult>(
-            REGISTRY_ID,
-            "diagnose_quorum",
-            &VerifyQuorumArgs {
-                account_id: id,
-                msg: msg.clone(),
-                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
-            },
-            POINT_LIMIT,
-        )
-        .unwrap()
-        .data;
-    assert!(good.exists);
-    assert_eq!(good.member_matches, 2);
-    assert_eq!(good.sigs_ok, 2);
-    assert_eq!(good.member_pk_bytes, keys);
-
-    // Outsider key: no member match, no sigs_ok.
-    let (outsider_sk, outsider_pk) = keypair(rng);
-    let bad = session
-        .call::<VerifyQuorumArgs, DiagnoseQuorumResult>(
-            REGISTRY_ID,
-            "diagnose_quorum",
-            &VerifyQuorumArgs {
-                account_id: id,
-                msg: msg.clone(),
-                sigs: sign_all(&msg, &[(&outsider_sk, &outsider_pk)]),
-            },
-            POINT_LIMIT,
-        )
-        .unwrap()
-        .data;
-    assert_eq!(bad.member_matches, 0);
-    assert_eq!(bad.sigs_ok, 0);
+        .expect("account");
+    assert_eq!(view.threshold, 2);
+    assert_eq!(view.nonce, 0);
+    assert_eq!(view.members.len(), 2);
+    assert_eq!(view.members[0].to_bytes(), pk1.to_bytes());
+    assert_eq!(view.members[1].to_bytes(), pk2.to_bytes());
 }
