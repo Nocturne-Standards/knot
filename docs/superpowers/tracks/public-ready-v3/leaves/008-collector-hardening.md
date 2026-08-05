@@ -11,17 +11,21 @@ scope:
 acceptance:
   - L9–L12 + M11 first
   - C1 digest recompute via knot-encoding
-  - M10+M12 verify with dusk-core
-  - Rewrite no-dusk_core docs to never-holds-keys guarantee
+  - M10+M12 signature verification with dusk-core
+  - Rewrite no-dusk_core docs to never-holds-keys / never-signs / never-submits
+  - R10 cap party name like MAX_NOTE_CHARS
 acceptanceDone:
   - false
   - false
   - false
   - false
+  - false
 ---
-# Phase 5: collector C1/M10–M12 + caps
+# Phase 5: collector C1/M10–M12 + caps (+ R10)
 
-Planner context…
+Authority: `docs/internal/IMPLEMENTATION.md` §4.2, §11 R10.
+
+Do not import Lab cookie session design here — collector remains untrusted relay + proxy auth.
 
 ## Evidence (worker)
 
