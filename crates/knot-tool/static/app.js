@@ -657,8 +657,8 @@ function renderCouncilCard(c, { onSelect, showDetail } = {}) {
   card.innerHTML =
     detailBtn +
     `<span class="council-card-icon">${COUNCIL_ICON_SVG}</span>` +
-    `<span class="council-card-id">Council #${c.id}</span>` +
-    `<span class="council-card-meta">Threshold ${c.threshold}-of-${c.members.length || "?"}</span>`;
+    `<span class="council-card-id">Council #${escapeHtml(String(c.id))}</span>` +
+    `<span class="council-card-meta">Threshold ${escapeHtml(String(c.threshold))}-of-${escapeHtml(String(c.members.length || "?"))}</span>`;
   card.addEventListener("click", (ev) => {
     if (ev.target.closest("[data-detail]")) return;
     if (onSelect) onSelect(c);
@@ -829,7 +829,7 @@ function closeCouncilDetail() {
 }
 
 async function fetchCouncilOutcome(id) {
-  setOutcome("query-outcome", `<span class="outcome-meta">Looking up council #${id}…</span>`, true);
+  setOutcome("query-outcome", `<span class="outcome-meta">Looking up council #${escapeHtml(String(id))}…</span>`, true);
   try {
     const out = await api(`/api/account/${id}`);
     if (!out) {
@@ -857,7 +857,7 @@ async function fetchCouncilOutcome(id) {
     });
     setOutcome(
       "query-outcome",
-      `${outcomeChip(true)}<span class="outcome-title">Council #${id}</span>` +
+      `${outcomeChip(true)}<span class="outcome-title">Council #${escapeHtml(String(id))}</span>` +
         `<span class="outcome-meta"><strong>Threshold:</strong> ${out.threshold}-of-${memberNames.length || "?"}</span>` +
         `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(memberNames.length ? memberNames.join(", ") : "(see keys)")}</span>`,
       true
@@ -924,7 +924,7 @@ async function submitCreateAccount() {
       updateHeaderCouncil({ animate: true });
       setOutcome(
         "create-outcome",
-        `${outcomeChip(true)}<span class="outcome-title">Council #${createdId} formed</span>` +
+        `${outcomeChip(true)}<span class="outcome-title">Council #${escapeHtml(String(createdId))} formed</span>` +
           `<span class="outcome-meta"><strong>Threshold:</strong> ${threshold}-of-${members.length}</span>` +
           `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(members.join(", "))}</span>`,
         true
@@ -1009,7 +1009,7 @@ async function proposalCreate() {
     if (submitOk(submit)) {
       setOutcome(
         "prop-outcome",
-        `${outcomeChip(true)}<span class="outcome-title">Proposal #${id}</span>` +
+        `${outcomeChip(true)}<span class="outcome-title">Proposal #${escapeHtml(String(id))}</span>` +
           `<span class="outcome-meta">${escapeHtml(purpose)} · ${escapeHtml(description)}</span>`,
         true
       );
@@ -1118,7 +1118,7 @@ async function proposalFinalize() {
     if (submitOk(out)) {
       setOutcome(
         "finalize-outcome",
-        `${outcomeChip(true)}<span class="outcome-title">Proposal #${id} finalized</span>`,
+        `${outcomeChip(true)}<span class="outcome-title">Proposal #${escapeHtml(String(id))} finalized</span>`,
         true
       );
     } else {

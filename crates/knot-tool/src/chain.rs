@@ -215,9 +215,11 @@ pub fn tx_status_label(outcome: WriteOutcome, log: &str) -> &'static str {
         WriteOutcome::Ok => {
             if log.contains("included into a block") {
                 "confirmed"
+            } else if log.contains("Transaction propagated") {
+                "propagated"
             } else {
-                // Propagated / preverify success — explorer may already show it.
-                "confirmed"
+                // Preverify success / transaction sent — submitted but not yet in a block.
+                "submitted"
             }
         }
         WriteOutcome::Unknown => "unknown",
@@ -340,12 +342,51 @@ mod tests {
     }
 
     #[test]
-    fn classify_propagated_ok() {
+    fn tx_status_label_propagated_not_confirmed() {
         assert_eq!(
             classify_write("Transaction propagated!\n"),
             WriteOutcome::Ok
         );
-        assert_eq!(tx_status_label(WriteOutcome::Ok, "Transaction propagated!"), "confirmed");
+        assert_eq!(
+            tx_status_label(WriteOutcome::Ok, "Transaction propagated!"),
+            "propagated"
+        );
+    }
+
+    #[test]
+    fn tx_status_label_preverify_is_submitted() {
+        assert_eq!(
+            tx_status_label(WriteOutcome::Ok, "Preverify success!\n"),
+            "submitted"
+        );
+    }
+
+    #[test]
+    fn tx_status_label_sent_is_submitted() {
+        assert_eq!(
+            tx_status_label(WriteOutcome::Ok, "Transaction sent to network\n"),
+            "submitted"
+        );
+    }
+
+    #[test]
+    fn tx_status_label_block_inclusion_is_confirmed() {
+        assert_eq!(
+            tx_status_label(
+                WriteOutcome::Ok,
+                "Transaction included into a block at height 42\n"
+            ),
+            "confirmed"
+        );
+    }
+
+    #[test]
+    fn tx_status_label_panic_is_failed() {
         assert_eq!(tx_status_label(WriteOutcome::Panic, "Panic: nope"), "failed");
+    }
+
+    #[test]
+    fn tx_status_label_unknown_outcome() {
+        assert_eq!(tx_status_label(WriteOutcome::Unknown, ""), "unknown");
     }
 }
