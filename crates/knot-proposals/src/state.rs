@@ -4,10 +4,11 @@ mod knot_proposals {
     use alloc::string::String;
     use alloc::vec::Vec;
 
-    use dusk_core::abi::{self, block_height, ContractId};
+    use dusk_bytes::Serializable;
+    use dusk_core::abi::{self, block_height, chain_id, ContractId};
     use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, Signature as BlsSignature};
 
-    use knot_encoding::proposal_digest;
+    use knot_encoding::proposal_digest_v3;
     use knot_proposals::call_types::{
         ApproveArgs, MultisigAccountView, ProposalStatus, ProposalView, ProposeArgs,
         SignatureEntry, VerifyQuorumArgs,
@@ -15,11 +16,20 @@ mod knot_proposals {
 
     const MAX_FUNCTION_NAME_LEN: usize = 64;
     const MAX_CALL_ARGS_LEN: usize = 4096;
+    const MAX_PROPOSAL_TTL: u64 = 100_000;
+    const MAX_PRUNE_BATCH: u32 = 128;
+
+    struct DigestRecord {
+        proposal_id: u64,
+        deadline: u64,
+        epoch: u64,
+        consumed: bool,
+    }
 
     struct Proposal {
         registry_account_id: u64,
-        chain_id: u64,
         nonce: u64,
+        epoch: u64,
         target: ContractId,
         function_name: String,
         call_args: Vec<u8>,
@@ -32,16 +42,10 @@ mod knot_proposals {
 
     pub struct MultisigProposalsState {
         registry: Option<ContractId>,
-        /// Network binding folded into §4a digests (configurable).
-        chain_id: u64,
-        /// When true, successful finalize marks `Tombstoned`; else `Executed`.
+        epoch: u64,
         tombstone: bool,
-        /// Default proposal deadline offset from propose height; 0 = require explicit deadline.
         proposal_ttl: u64,
-        /// Per-committee monotonic nonce (option A).
-        committee_nonces: BTreeMap<u64, u64>,
-        /// Digest → proposal id for merge / tombstone lookup.
-        by_digest: BTreeMap<[u8; 32], u64>,
+        by_digest: BTreeMap<[u8; 32], DigestRecord>,
         proposals: BTreeMap<u64, Proposal>,
         next_id: u64,
     }
@@ -50,10 +54,9 @@ mod knot_proposals {
         pub const fn new() -> Self {
             Self {
                 registry: None,
-                chain_id: 0,
+                epoch: 0,
                 tombstone: false,
                 proposal_ttl: 1000,
-                committee_nonces: BTreeMap::new(),
                 by_digest: BTreeMap::new(),
                 proposals: BTreeMap::new(),
                 next_id: 0,
@@ -73,79 +76,77 @@ mod knot_proposals {
                 .expect("knot-proposals not initialized: call init_registry first")
         }
 
-        /// Owner-only. Points this contract at a deployed `knot-registry`.
+        /// Owner-only. Points this contract at a deployed `knot-registry` and
+        /// bumps `epoch` so prior proposals are unreachable (O(1)).
         pub fn init_registry(&mut self, registry: ContractId) {
             Self::require_owner();
-            self.wipe_open_proposals();
+            self.epoch = self
+                .epoch
+                .checked_add(1)
+                .expect("epoch overflow");
             self.registry = Some(registry);
             abi::emit("registry_set", ());
         }
 
-        /// Owner-only. Bind §4a digests to a chain id. Wipes open proposals
-        /// (digest domain changes).
-        pub fn init_chain_id(&mut self, chain_id: u64) {
-            Self::require_owner();
-            self.wipe_open_proposals();
-            self.chain_id = chain_id;
-            abi::emit("chain_id_set", chain_id);
-        }
-
-        /// Owner-only knobs.
+        /// Owner-only ceiling on proposal deadlines.
         pub fn set_proposal_ttl(&mut self, blocks: u64) {
             Self::require_owner();
-            self.wipe_open_proposals();
+            if blocks == 0 || blocks > MAX_PROPOSAL_TTL {
+                panic!("proposal_ttl out of range");
+            }
             self.proposal_ttl = blocks;
         }
 
         /// Owner-only. When `true`, successful finalize marks `Tombstoned`
-        /// instead of `Executed`. Does **not** wipe open proposals.
+        /// instead of `Executed`. Does **not** invalidate open proposals.
         pub fn set_tombstone(&mut self, tombstone: bool) {
             Self::require_owner();
             self.tombstone = tombstone;
         }
 
-        pub fn chain_id(&self) -> u64 {
-            self.chain_id
+        pub fn epoch(&self) -> u64 {
+            self.epoch
         }
 
-        pub fn committee_nonce(&self, committee_id: u64) -> u64 {
-            self.committee_nonces.get(&committee_id).copied().unwrap_or(0)
+        pub fn proposal_ttl(&self) -> u64 {
+            self.proposal_ttl
         }
 
-        /// Open a structured proposal. Digest = §4a Keccak; nonce = current
-        /// per-committee counter (not bumped until finalize effects).
+        /// Open a structured proposal. Digest = §2.12 v3 Keccak; `nonce` is a
+        /// caller-supplied uniquifier (not a monotonic counter).
         pub fn propose(&mut self, args: ProposeArgs) -> u64 {
-            let _ = self.require_registry();
-            if self.chain_id == 0 {
-                panic!("call init_chain_id before propose");
-            }
+            let _registry = self.require_registry();
             if args.function_name.len() > MAX_FUNCTION_NAME_LEN {
-                panic!("function_name exceeds max length");
+                panic!("function_name too long");
             }
             if args.call_args.len() > MAX_CALL_ARGS_LEN {
-                panic!("call_args exceeds max length");
+                panic!("call_args too long");
+            }
+            if self.proposal_ttl == 0 {
+                panic!("proposal_ttl not configured");
+            }
+            if args.deadline == 0 {
+                panic!("proposal deadline must be non-zero");
             }
 
-            let nonce = self.committee_nonce(args.registry_account_id);
-            let deadline = if args.deadline == 0 {
-                if self.proposal_ttl == 0 {
-                    0
-                } else {
-                    block_height()
-                        .checked_add(self.proposal_ttl)
-                        .expect("deadline overflow")
-                }
-            } else {
-                args.deadline
-            };
-            if deadline != 0 && deadline <= block_height() {
+            let now = block_height();
+            let max_deadline = now
+                .checked_add(self.proposal_ttl)
+                .expect("ttl overflow");
+            let deadline = args.deadline;
+            if deadline < now {
                 panic!("proposal deadline is in the past");
             }
+            if deadline > max_deadline {
+                panic!("proposal deadline exceeds max TTL");
+            }
 
-            let digest = proposal_digest(
-                self.chain_id,
+            let digest = proposal_digest_v3(
+                u64::from(chain_id()),
+                &abi::self_id().to_bytes(),
+                self.epoch,
                 args.registry_account_id,
-                nonce,
+                args.nonce,
                 &args.target.to_bytes(),
                 args.function_name.as_bytes(),
                 &args.call_args,
@@ -153,26 +154,30 @@ mod knot_proposals {
             )
             .expect("propose caps keep function_name/call_args within u32");
 
-            // Identical open digest merges into existing open proposal.
-            if let Some(&existing_id) = self.by_digest.get(&digest) {
-                if let Some(p) = self.proposals.get(&existing_id) {
-                    if p.status == ProposalStatus::Open {
-                        return existing_id;
-                    }
-                    if p.status == ProposalStatus::Tombstoned {
-                        panic!("proposal digest is tombstoned");
-                    }
+            if let Some(rec) = self.by_digest.get(&digest) {
+                if rec.consumed {
+                    panic!("proposal digest already executed");
+                }
+                if rec.epoch != self.epoch {
+                    panic!("proposal digest belongs to a retired epoch");
+                }
+                match self.proposals.get(&rec.proposal_id).map(|p| p.status) {
+                    Some(ProposalStatus::Open) => return rec.proposal_id,
+                    _ => panic!("proposal digest already used"),
                 }
             }
 
             let id = self.next_id;
-            self.next_id += 1;
+            self.next_id = self
+                .next_id
+                .checked_add(1)
+                .expect("next_id overflow");
             self.proposals.insert(
                 id,
                 Proposal {
                     registry_account_id: args.registry_account_id,
-                    chain_id: self.chain_id,
-                    nonce,
+                    nonce: args.nonce,
+                    epoch: self.epoch,
                     target: args.target,
                     function_name: args.function_name,
                     call_args: args.call_args,
@@ -183,8 +188,19 @@ mod knot_proposals {
                     status: ProposalStatus::Open,
                 },
             );
-            self.by_digest.insert(digest, id);
-            abi::emit("proposal_created", id);
+            self.by_digest.insert(
+                digest,
+                DigestRecord {
+                    proposal_id: id,
+                    deadline,
+                    epoch: self.epoch,
+                    consumed: false,
+                },
+            );
+            abi::emit(
+                "proposal_created",
+                (id, digest, args.registry_account_id, deadline),
+            );
             id
         }
 
@@ -197,6 +213,9 @@ mod knot_proposals {
                 .unwrap_or_else(|| panic!("no such proposal"));
             if proposal.status != ProposalStatus::Open {
                 panic!("proposal is not open");
+            }
+            if proposal.epoch != self.epoch {
+                panic!("proposal belongs to a retired epoch");
             }
             if proposal.deadline != 0 && block_height() > proposal.deadline {
                 panic!("proposal deadline passed");
@@ -219,15 +238,19 @@ mod knot_proposals {
                 panic!("invalid BLS signature over proposal digest");
             }
 
+            let digest = proposal.signed_digest;
             proposal.approvals.push(args.signer);
             proposal.approval_sigs.push(args.signature);
-            abi::emit("proposal_approved", args.proposal_id);
+            abi::emit(
+                "proposal_approved",
+                (args.proposal_id, digest, args.signer.to_bytes()),
+            );
         }
 
         pub fn proposal(&self, id: u64) -> Option<ProposalView> {
             self.proposals.get(&id).map(|p| ProposalView {
                 registry_account_id: p.registry_account_id,
-                chain_id: p.chain_id,
+                epoch: p.epoch,
                 nonce: p.nonce,
                 target: p.target,
                 function_name: p.function_name.clone(),
@@ -248,11 +271,8 @@ mod knot_proposals {
             self.next_id
         }
 
-        /// At threshold: verify quorum, then CEI — mark terminal status, bump
-        /// committee nonce, emit — **then** `call_raw` the target.
-        ///
-        /// A failed `call_raw` still panics (tx reverts), so the proposal stays
-        /// `Open` and the nonce is unchanged for retry.
+        /// At threshold: verify quorum, then CEI — mark terminal status, mark
+        /// digest consumed, emit — **then** `call_raw` the target.
         pub fn finalize(&mut self, proposal_id: u64) {
             let registry = self.require_registry();
 
@@ -263,13 +283,11 @@ mod knot_proposals {
             if proposal.status != ProposalStatus::Open {
                 panic!("proposal is not open");
             }
+            if proposal.epoch != self.epoch {
+                panic!("proposal belongs to a retired epoch");
+            }
             if proposal.deadline != 0 && block_height() > proposal.deadline {
                 panic!("proposal deadline passed");
-            }
-            // Nonce must still match current committee nonce (serialization).
-            let current_nonce = self.committee_nonce(proposal.registry_account_id);
-            if proposal.nonce != current_nonce {
-                panic!("proposal nonce is stale");
             }
 
             let view: Option<MultisigAccountView> =
@@ -305,10 +323,15 @@ mod knot_proposals {
                 panic!("finalize: registry verify_quorum rejected collected approvals");
             }
 
+            let digest = proposal.signed_digest;
             let target = proposal.target;
             let fn_name = proposal.function_name.clone();
             let call_args = proposal.call_args.clone();
             let committee = proposal.registry_account_id;
+
+            if target == abi::self_id() {
+                panic!("finalize: target must not be this contract");
+            }
 
             // Effects first (CEI): consume proposal before external call.
             let proposal = self.proposals.get_mut(&proposal_id).unwrap();
@@ -317,29 +340,57 @@ mod knot_proposals {
             } else {
                 ProposalStatus::Executed
             };
-            self.committee_nonces.insert(committee, current_nonce + 1);
-            abi::emit("proposal_finalized", proposal_id);
+            if let Some(rec) = self.by_digest.get_mut(&digest) {
+                rec.consumed = true;
+            }
+            abi::emit(
+                "proposal_finalized",
+                (proposal_id, digest, committee, target, fn_name.clone()),
+            );
 
             // Interaction last.
             let _ = abi::call_raw(target, &fn_name, &call_args)
                 .expect("finalize: call_raw to target failed");
         }
 
-        fn wipe_open_proposals(&mut self) {
-            let open_ids: Vec<u64> = self
-                .proposals
-                .iter()
-                .filter(|(_, p)| p.status == ProposalStatus::Open)
-                .map(|(id, _)| *id)
-                .collect();
-            for id in open_ids {
-                if let Some(p) = self.proposals.get_mut(&id) {
-                    let digest = p.signed_digest;
-                    p.status = ProposalStatus::Tombstoned;
-                    self.by_digest.remove(&digest);
+        /// Permissionless storage reclamation. Removes prunable proposal payloads
+        /// and expired `by_digest` entries (bounded batch).
+        pub fn prune(&mut self, limit: u32) -> u32 {
+            let batch = limit.min(MAX_PRUNE_BATCH);
+            let now = block_height();
+            let mut pruned = 0u32;
+
+            let mut remove_ids: Vec<u64> = Vec::new();
+            for (&id, proposal) in self.proposals.iter() {
+                if pruned >= batch {
+                    break;
+                }
+                let terminal = proposal.status != ProposalStatus::Open;
+                let retired = proposal.epoch != self.epoch;
+                let expired = proposal.deadline < now;
+                if terminal || retired || expired {
+                    remove_ids.push(id);
+                    pruned += 1;
                 }
             }
-            abi::emit("open_proposals_wiped", ());
+            for id in remove_ids {
+                self.proposals.remove(&id);
+            }
+
+            let mut remove_digests: Vec<[u8; 32]> = Vec::new();
+            for (&digest, rec) in self.by_digest.iter() {
+                if rec.deadline < now {
+                    remove_digests.push(digest);
+                }
+            }
+            for digest in remove_digests {
+                self.by_digest.remove(&digest);
+            }
+
+            if pruned > 0 {
+                abi::emit("pruned", pruned);
+            }
+            pruned
         }
     }
 }

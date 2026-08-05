@@ -6,7 +6,7 @@ mod knot_registry {
     use dusk_bytes::Serializable;
     use dusk_core::abi;
     use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-    use knot_encoding::change_account_message;
+    use knot_encoding::change_account_message_v3;
 
     use knot_registry::call_types::{
         AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult,
@@ -200,12 +200,15 @@ mod knot_registry {
                 .iter()
                 .map(|pk| pk.to_bytes())
                 .collect();
-            let msg = change_account_message(
+            let msg = change_account_message_v3(
+                u64::from(abi::chain_id()),
+                &abi::self_id().to_bytes(),
                 args.account_id,
                 account.nonce,
                 &member_pks,
                 args.new_threshold,
-            );
+            )
+            .expect("change_account member set within encoding caps");
             let (matched, verified) =
                 quorum_counts(&account.members, &msg, &args.sigs);
             if verified < account.threshold {

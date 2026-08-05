@@ -28,9 +28,9 @@ authorization on top of that answer.
   it if replay matters for their use case.
 - `change_account(ChangeAccountArgs)` — replaces an account's member set /
   threshold, gated by a quorum of the account's *current* members signing
-  over `knot_encoding::change_account_message` (domain + account_id +
-  on-chain nonce + new member pks + new threshold → Keccak-256). Nonce is
-  not an args field — it is folded from state into the digest. This path
+  over `knot_encoding::change_account_message_v3` (§2.12 v3 domain binds
+  `chain_id`, registry `self_id`, account id, on-chain nonce, member count,
+  new member pks, new threshold → Keccak-256). Nonce is not an args field — it is folded from state into the digest. This path
   *does* have built-in replay protection, since the registry controls that
   message's format itself. On failure, the panic string includes
   `members`/`threshold`/`member_matches`/`sigs_ok` counters.
@@ -61,11 +61,9 @@ authorization on top of that answer.
 
 ## Status
 
-**v0.1.5** on testnet (2026-08-03 — Spec 23b Phase B `repr(C)` pin; measured
-**DIFFERENT**). Contract id `3e3c5be563e8b085d4e66b048b4794457382cf3f578699a55e5c4a9fe9c94045`
-(see operator deploy notes). Prior live
-pin: **v0.1.4** (2026-07-28 audit #6 `checked_add`). Status:
-**PINNED-DIFFERENT-REDEPLOYED**.
+**v3** on next deploy — §2.12 `change_account` digest binds `chain_id` and
+registry instance. Deploy **registry before proposals**; burn all v2
+`change_account` signatures. Prior testnet pins (v0.1.x) obsolete after cutover.
 
 `make wasm` + `make wasm-dd` + `cargo test --release`. Same dusk-forge-template
 pattern (wasm32-unknown-unknown, Rust 1.94.0, `#[dusk_forge::contract]`).

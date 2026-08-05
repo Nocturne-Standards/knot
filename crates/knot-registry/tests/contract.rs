@@ -13,7 +13,7 @@ use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
 };
 use dusk_vm::{ContractData, Session, VM};
-use knot_encoding::change_account_message;
+use knot_encoding::change_account_message_v3;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 
@@ -62,7 +62,15 @@ fn change_message(
     new_threshold: u32,
 ) -> Vec<u8> {
     let member_pks: Vec<[u8; 96]> = new_members.iter().map(|pk| pk.to_bytes()).collect();
-    change_account_message(account_id, nonce, &member_pks, new_threshold)
+    change_account_message_v3(
+        u64::from(CHAIN_ID),
+        &REGISTRY_ID.to_bytes(),
+        account_id,
+        nonce,
+        &member_pks,
+        new_threshold,
+    )
+    .expect("test committee within encoding caps")
 }
 
 fn sign_all(msg: &[u8], sks: &[(&BlsSecretKey, &BlsPublicKey)]) -> Vec<SignatureEntry> {
