@@ -1,14 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/multisig-encoding",
-    "crates/multisig-registry",
-    "crates/multisig-proposals",
-    "crates/multisig-tool",
-    "crates/multisig-collector",
+    "crates/knot-encoding",
+    "crates/knot-registry",
+    "crates/knot-proposals",
+    "crates/knot-tool",
+    "crates/knot-collector",
 ]
 
-# Pins: multisig-tool depends on aichbindas/nocturne-deployments (git).
+# Pins: knot-tool depends on aichbindas/nocturne-deployments (git).
 # Local: optional [patch] or NOCTURNE_DEPLOYMENTS env for pin JSON.
 # CI: GH_PRIVATE_REPO_TOKEN (see .github/workflows/ci.yml).
 

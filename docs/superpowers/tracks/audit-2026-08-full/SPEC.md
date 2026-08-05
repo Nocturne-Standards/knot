@@ -12,7 +12,7 @@ Full security+logic audit of knot (BLS M-of-N multisig) post-carve. Elevate sign
 ## Scope
 
 Crates: encoding, registry, proposals, tool, collector.
-Attack surface D: every host that gates digests, aggregates, or submits — primary TCB multisig-tool.
+Attack surface D: every host that gates digests, aggregates, or submits — primary TCB knot-tool.
 July 28 audit = cross-check only; re-prove every finding.
 
 ## Non-goals
@@ -21,7 +21,7 @@ Fix PRs this wave; full Atlas audit (validate-before-submit pointers only).
 
 ## Dual posture (explore)
 
-- **Coord:** multisig-tool validates last-mile; tool must be airtight.
+- **Coord:** knot-tool validates last-mile; tool must be airtight.
 - **Prove:** on-chain verify_quorum / verify_quorum_aggregate (Moonlight-bound BLS).
 Goal: document whether both can be offered; implement later.
 

@@ -7,9 +7,9 @@ deps:
   - 1
   - 4
 scope:
-  - crates/multisig-tool/
-  - crates/multisig-collector/
-  - crates/multisig-encoding/
+  - crates/knot-tool/
+  - crates/knot-collector/
+  - crates/knot-encoding/
 acceptance:
   - Digest re-gate after collector pull verified in code
   - Live membership/threshold before sign — not UI-only
@@ -21,7 +21,7 @@ acceptanceDone:
   - true
   - true
 ---
-# Signing tool TCB (multisig-tool)
+# Signing tool TCB (knot-tool)
 
 Planner context…
 

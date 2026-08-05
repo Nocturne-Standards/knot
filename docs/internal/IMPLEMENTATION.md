@@ -1,30 +1,31 @@
 # Knot — implementation truth
 
-**Written against `7e58d4c`** (merge of PR #3, `feat/launch-form-knot`).
-Every claim below was re-verified against that tree on 2026-08-05.
+**Written against `b1d883d`** (residual audit HEAD; settle pass began at `46a64b4`).
+Settled-gap + §10 phasing + §11 residual findings 2026-08-05.
 
 **This file is authoritative.** Where it disagrees with `AUDIT-2026-08-05.md`,
 this file wins — the audit was written against `2fb3c94` and is frozen evidence,
 not instructions. See `README.md` in this directory for the precedence rule.
 
 Status key: **LOCKED** — decided, specified, ready to implement ·
-**OPEN** — discussed but not yet specified; do not implement.
+**OPEN** — discussed but not yet specified; do not implement ·
+**DEFERRED** — decided to postpone; listed so it cannot vanish.
 
-As of 2026-08-05 every item in §1–§5 is LOCKED. §8 records the decision log and the
-one remaining open item.
+As of 2026-08-05 every item in §1–§5 is LOCKED. §8 is the decision log.
+§10 is execution phasing (no leaves until that section is accepted).
 
 ---
 
 ## 0. How to use this document
 
 §1–§3 are implementable as written, as are **§4.2 (collector) and §4.3 (registry)**,
-which are marked **LOCKED**. §8 lists what is still undecided. §9 is product scope and
-framing — documentation and roadmap, not audit findings.
+which are marked **LOCKED**. §8 is the decision log. §9 is product scope. **§10 is
+execution phasing** — accept it before cutting leaves.
 
 **Read the per-item status marker, not the section number.** Anything marked **LOCKED**
 is specified and ready. Anything marked **OPEN** is agreed in direction but unspecified
-and *will* change — do not implement from it. §4.1 is currently the only cluster
-carrying OPEN items.
+and *will* change — do not implement from it. **DEFERRED** means decided to postpone
+and must stay on the checklist.
 
 Verified facts an implementer can rely on (checked at `7e58d4c`):
 
@@ -34,11 +35,11 @@ Verified facts an implementer can rely on (checked at `7e58d4c`):
 | `abi::chain_id() -> u8` exists, panics if metadata unset | `src/abi.rs:187-194` |
 | `abi::keccak256(Vec<u8>) -> [u8;32]` is a host query | `src/abi.rs:153` |
 | `abi::caller()`, `abi::callstack()` exist | `src/abi.rs:62` |
-| Domain tags are already `nocturne.knot.*.v2` | `crates/multisig-encoding/src/lib.rs:69,72` |
+| Domain tags are already `nocturne.knot.*.v2` | `crates/knot-encoding/src/lib.rs:69,72` |
 | `council_resolve` is fully removed from encoding | `grep -c council_resolve` = 0 |
-| `finalize` has **no** caller/membership check | `crates/multisig-proposals/src/state.rs`, whole fn |
+| `finalize` has **no** caller/membership check | `crates/knot-proposals/src/state.rs`, whole fn |
 | Collector SQL is fully parameterized | `store.rs` — all queries are literals with bound params |
-| Lab escapes HTML at every user-data sink | `static/app.js:170` `escapeHtml`, applied at all interpolations |
+| Lab escapes HTML at every user-data sink | **Overstated** — string sinks yes; numeric `innerHTML` holes — §11 R9 |
 | Tool API token compares in constant time | `rpc.rs:158-166`, `ct_eq` |
 | `rusk-wallet` is invoked with argument arrays, no shell | `chain.rs:290-299` |
 
@@ -48,13 +49,13 @@ Verified facts an implementer can rely on (checked at `7e58d4c`):
 
 ### B1 — credential in README and git history · LOCKED
 
-`crates/multisig-tool/README.md:38`
+`crates/knot-tool/README.md:38`
 
 ```
-export MULTISIG_COLLECTOR_PASSWORD='navHam-cemnib-4pytja'
+export KNOT_COLLECTOR_PASSWORD='navHam-cemnib-4pytja'
 ```
 
-Paired with `MULTISIG_COLLECTOR_USER=demo` for `collector.nocturne-standards.org`.
+Paired with `KNOT_COLLECTOR_USER=demo` for `collector.nocturne-standards.org`.
 In history since 2026-07-24.
 
 1. Leonidas rotates the credential on the collector host. **Assume it is public.**
@@ -63,8 +64,8 @@ In history since 2026-07-24.
 
 ### B2 — testnet wallet password · LOCKED
 
-`crates/multisig-tool/README.md:30` — `RUSK_WALLET_PWD=sme-platform-testnet-dev`.
-Also `:33` and `:358` — `MULTISIG_TOOL_PWD='local-dev-only'`.
+`crates/knot-tool/README.md:30` — `RUSK_WALLET_PWD=sme-platform-testnet-dev`.
+Also `:33` and `:358` — `KNOT_PWD='local-dev-only'`.
 
 Accepted risk until launch. Replace all three with `...`.
 
@@ -82,7 +83,7 @@ internal. Full disposition in §5.1.
 
 ### B5 — private git dependency blocks public builds · LOCKED
 
-`crates/multisig-tool/Cargo.toml:45`
+`crates/knot-tool/Cargo.toml:45`
 
 ```toml
 nocturne-deployments = { git = "https://github.com/aichbindas/nocturne-deployments", rev = "d40ab40…" }
@@ -90,7 +91,7 @@ nocturne-deployments = { git = "https://github.com/aichbindas/nocturne-deploymen
 
 The repo's own CI notes it needs *"a PAT with contents:read on private
 aichbindas/nocturne-deployments."* Nobody outside the org can `cargo build`
-`multisig-tool` — the fetch fails before compilation.
+`knot-tool` — the fetch fails before compilation.
 
 **Decision: make `nocturne-deployments` public, AND make the dependency optional
 (off by default).**
@@ -114,7 +115,7 @@ decouples "can strangers build Knot" from "does the pin repo still exist".
 
 ---
 
-## 2. Contracts — `multisig-proposals` v3 and the digest redesign
+## 2. Contracts — `knot-proposals` v3 and the digest redesign
 
 Resolves H1, H2, M1, M2, M3, L1, L2, L13. Contracts are immutable: this is a
 **redeploy**, and these changes land together or not at all.
@@ -155,7 +156,7 @@ registry make signatures fungible between them.
 
 ### 2.3 H2 — change_account digest, concretely
 
-Verified at `7e58d4c`, `crates/multisig-encoding/src/lib.rs:81-99`:
+Verified at `7e58d4c`, `crates/knot-encoding/src/lib.rs:81-99`:
 
 ```
 DOMAIN_CHANGE_ACCOUNT_V2 || account_id || nonce || pk₀..pkₙ || threshold
@@ -220,10 +221,36 @@ decision invalidates all pending ones.
 
 **Fix: replay protection comes from digest single-use, not a global counter.**
 
-- `by_digest` becomes permanent and authoritative — any digest ever used is rejected.
+- `by_digest` becomes permanent and authoritative — any digest ever used is rejected
+  while its deadline still allows re-propose; `consumed` blocks forever until prune
+  after expiry (then deadline-in-past rejects anyway).
 - The finalize-time nonce equality check is **removed**.
-- `nonce` becomes **caller-supplied** in `ProposeArgs`, existing only so a committee
-  can deliberately repeat an identical intent later.
+- `committee_nonces` and the `committee_nonce` ABI go away with v3.
+- The field in `ProposeArgs` / the blob intent is a **caller-supplied uniquifier**
+  (still named `nonce` on the wire for layout continuity). It is **not** the
+  registry account nonce used by `change_account`.
+
+**Two nonces, two jobs · LOCKED (2026-08-05)**
+
+| | Registry account nonce | Proposal uniquifier (`ProposeArgs.nonce`) |
+|---|---|---|
+| Where | `knot-registry` / `knot-registry` account | Proposal digest + blob intent |
+| Job | Anti-replay for `change_account` | Distinguish parallel / re-opened identical intents |
+| Who sets | Contract bumps on successful change | Coordinator / blob author |
+
+**Uniquifier rules**
+
+- Identical full digest (including uniquifier) while Open → **merge** (return existing
+  id). Not a funds attack: merge requires every hashed field to match, so the
+  authorization is the same decision. At worst a submit race / id attribution.
+- Same uniquifier + different args/deadline/… → different digest → independent.
+- After `consumed`, same digest panics; re-do the same call → **new uniquifier**.
+- Chain tracks **digests**, not “used uniquifier values.” No on-chain used-nonce set.
+- Tool: default **CSPRNG `u64`** at blob-create / proposal-create; `--nonce N`
+  override for tests / deliberate values. No off-chain used-nonce DB required for
+  safety (optional UX history only).
+- Public docs: prefer **uniquifier** or “proposal nonce (caller-chosen)” so it does
+  not collide with registry account nonce in operator heads.
 
 ### 2.7 The `propose` gap — must land in the same commit
 
@@ -239,19 +266,34 @@ an executed proposal becomes re-proposable and its harvested signatures replay.
 
 The `consumed` flag (§2.9) closes it. §2.6 and §2.7 are one change, not two.
 
-### 2.8 M1 — deadline · LOCKED
+### 2.8 M1 — deadline and `proposal_ttl` · LOCKED
 
-`proposal_ttl` is only a fallback for `args.deadline == 0`; an explicit deadline has
-no ceiling. `u64::MAX` yields a permanent proposal, and `propose` is permissionless.
+Today `proposal_ttl` is only a fallback for `args.deadline == 0`; an explicit deadline
+has no ceiling. `u64::MAX` yields a permanent proposal, and `propose` is permissionless.
 
 The deadline is the **only** natural expiry in the system. Uncapped means a permanent
 state entry, a permanent signature-collection window, and an unbounded H1 replay window.
 
-Decisions: `proposal_ttl` becomes a **ceiling**, not a default. Reject on
-`deadline < block_height()` (**L2**, `<` not `<=`, consistent with `approve`/`finalize`
-which use `block_height() > deadline`; `deadline == height` is the last valid block).
-**`deadline == 0` is forbidden entirely** — `ProposeArgs` currently calls it
-"discouraged"; make it impossible.
+**Deadline rules**
+
+- `proposal_ttl` is a **ceiling**, not a default deadline.
+- **`deadline == 0` is forbidden** — panic at propose. No “use ttl as default” branch.
+  Callers always pass an explicit deadline in `(block_height(), block_height() + ttl]`.
+- Reject `deadline < block_height()` (**L2**, `<` not `<=`, consistent with
+  `approve`/`finalize` which use `block_height() > deadline`; `deadline == height`
+  is the last valid block).
+- Reject `deadline > block_height() + proposal_ttl`.
+
+**`proposal_ttl` invariant**
+
+- Always `proposal_ttl > 0`. Deploy default remains **1000**.
+- `set_proposal_ttl(0)` panics. Propose also panics if `proposal_ttl == 0`
+  (belt-and-suspenders; should be unreachable).
+- `set_proposal_ttl` does **not** wipe open proposals (deadlines are baked into digests).
+- **`MAX_PROPOSAL_TTL`**: hard cap on what the owner may set (constant, reasonable
+  default at implement — suggested **100_000** blocks; must be `≥` deploy default).
+  `set_proposal_ttl(n)` panics if `n == 0 || n > MAX_PROPOSAL_TTL`. Stops an owner
+  setting `u64::MAX` and re-opening an unbounded H1 window.
 
 ### 2.9 M2 — epoch counter and pruning
 
@@ -282,7 +324,7 @@ Storage reclamation needs a separate permissionless paginated `prune(limit)`.
 | Caller | Disposition |
 |---|---|
 | `init_chain_id` | Gone — derived (§2.5) |
-| `set_proposal_ttl` | **Never needed a wipe.** Each deadline is baked into its own digest; changing the default cannot affect an existing proposal. Delete the call. |
+| `set_proposal_ttl` | **Never needed a wipe.** Each deadline is baked into its own digest; changing the ceiling cannot affect an existing proposal. Delete the wipe call. |
 | `init_registry` | Genuinely needs invalidation → `self.epoch += 1` |
 
 `wipe_open_proposals()` is **deleted outright**, and the brick risk with it.
@@ -339,10 +381,11 @@ pub fn propose(&mut self, args: ProposeArgs) -> u64 {
     if args.function_name.len() > MAX_FUNCTION_NAME_LEN { panic!("function_name too long"); }
     if args.call_args.len() > MAX_CALL_ARGS_LEN { panic!("call_args too long"); }
     if self.proposal_ttl == 0 { panic!("proposal_ttl not configured"); }
+    if args.deadline == 0 { panic!("proposal deadline must be non-zero"); }       // §2.8
 
     let now = block_height();
     let max_deadline = now.checked_add(self.proposal_ttl).expect("ttl overflow");
-    let deadline = if args.deadline == 0 { max_deadline } else { args.deadline };
+    let deadline = args.deadline;
     if deadline < now          { panic!("proposal deadline is in the past"); }   // L2
     if deadline > max_deadline { panic!("proposal deadline exceeds max TTL"); }  // M1
 
@@ -408,6 +451,13 @@ retired, or whose deadline has passed; removes `by_digest` records **only** wher
 **Invariant: a `consumed` record whose deadline has not passed must be retained.**
 Dropping it early permits replay.
 
+`set_proposal_ttl(blocks: u64)` — owner-only; no wipe:
+
+```rust
+if blocks == 0 || blocks > MAX_PROPOSAL_TTL { panic!("proposal_ttl out of range"); }
+self.proposal_ttl = blocks;
+```
+
 ### 2.12 Digests
 
 ```
@@ -435,7 +485,7 @@ DOMAIN_CHANGE_ACCOUNT_V3 = b"nocturne.knot.multisig-registry.change_account.v3"
 Both bump to **v3**. v2 is already deployed; changing fields without a bump would
 make v2 signatures mis-verify silently instead of failing loudly.
 
-### 2.13 Events — the archive
+### 2.13 Events — the archive · LOCKED
 
 ```rust
 abi::emit("proposal_created",   (id, digest, committee_id, deadline));
@@ -447,14 +497,31 @@ abi::emit("pruned",             count);
 Today only an id is emitted, so an indexer that missed `propose` cannot reconstruct a
 pruned record. With the above, events alone are a complete archive.
 
+**Consumer (option 3) · LOCKED**
+
+- Knot **emits** only. Decode arms live in the existing
+  `sme_platform/rusk-experiments/event-decoder` crate (SSOT for chain-gateway /
+  Nocturne indexing). Do **not** grow a parallel decoder inside knot.
+- **No historical dual-decode** for pre-v3 Knot / `multisig-*` shapes. Repo is still
+  private; nobody depends on old emits. Clean break. Dual-decode / fallback arms are
+  for **after** a public shape has shipped and must keep decoding — not for disposable
+  testnet scrap.
+- **DEFERRED:** extract `event-decoder` → standalone `nocturne-event-decoder` so
+  consumers need not path-depend on `sme_platform`. Named so it cannot vanish; not on
+  the critical path for v3.
+
 ### 2.14 Migration order
 
 1. **Confirm `abi::chain_id()` under `VM::ephemeral()`.** Blocks everything else.
-2. `multisig-encoding`: add v3 preimages; keep v2 one release for tooling.
-3. Contracts: state and methods above. Re-run layout goldens — `ProposeArgs` gains a field.
-4. `multisig-tool`: supply `nonce`, drop `chain_id` from blob intents.
+2. Encoding: add v3 preimages; keep v2 one release for tooling only if still useful
+   internally — public launch burns v2 anyway.
+3. Contracts: state and methods above. Re-run layout goldens — `ProposeArgs` gains
+   uniquifier field.
+4. Tool: supply uniquifier (CSPRNG / `--nonce`); drop derived `chain_id` from blob
+   intents where host-derived.
 5. Deploy registry v3, then proposals v3 pointing at it.
 6. **Treat every v2 signature as burned.** Re-create councils; do not migrate state.
+   No compatibility theater for prior private deployments.
 
 ### 2.15 Tests
 
@@ -466,12 +533,15 @@ pruned record. With the above, events alone are a complete archive.
 | Re-propose an executed digest | panic `already executed` (§2.7) |
 | `deadline == block_height()` | accepted at propose, approve, finalize (L2) |
 | `deadline = now + ttl + 1` | panic `exceeds max TTL` (M1) |
-| `args.deadline == 0` | defaults to `now + ttl`, never 0 |
+| `args.deadline == 0` | panic `must be non-zero` |
+| `set_proposal_ttl(0)` | panic |
+| `set_proposal_ttl(MAX+1)` | panic |
 | Epoch bump | old proposals unapprovable and unfinalizable |
 | `prune` with unexpired consumed digest | record retained |
 | `prune` past deadline, then re-propose | rejected, deadline in past |
 | `finalize` targeting self | panic |
 | 10k proposals then `init_registry` | succeeds, O(1) |
+| Identical Open propose twice | merge, same id |
 
 ---
 
@@ -493,7 +563,7 @@ plainly that this is not production key custody.
 
 `fs::write` creates at `0o666 & !umask` (typically `0o644`), then chmods to `0o600` —
 secret keys are world-readable in between. `create_dir_all` similarly makes
-`~/.multisig-tool/` at `0o755`.
+`~/.knot-tool/` at `0o755`.
 
 ```rust
 fs::DirBuilder::new().recursive(true).mode(0o700).create(parent)?;
@@ -648,7 +718,7 @@ Confirmed at `7e58d4c` in `keystore.rs:79` and `blob.rs:103,111,124,176,190`.
 ### 3.5 L6 — `default_path()`
 
 `std::env::var("HOME").expect("HOME must be set")` panics. Return `Result`, honour a
-`MULTISIG_TOOL_STORE` override, and use the `directories` crate so it works on Windows
+`KNOT_STORE` override, and use the `directories` crate so it works on Windows
 and follows XDG on Linux. This **changes the default path** — keep the old location as
 a read fallback for one release and log when it is used.
 
@@ -730,12 +800,12 @@ All collector sources are byte-identical between `2fb3c94` and `7e58d4c`, so the
 round-one findings stand unmodified.
 
 **Threat model correction.** The collector enforces **no authentication of its own** —
-`MULTISIG_COLLECTOR_USER`/`PASSWORD` are credentials the *client* sends, and the Rust
+`KNOT_COLLECTOR_USER`/`PASSWORD` are credentials the *client* sends, and the Rust
 code never verifies them. Enforcement is entirely the operator's nginx htpasswd.
 
 Basic Auth is a client-presents-credential scheme, so **every co-signer must hold the
-credential** — `crates/multisig-tool/README.md` instructs exactly this ("give them the
-three `MULTISIG_COLLECTOR_*` values"). Today that is a **single shared `demo` user**,
+credential** — `crates/knot-tool/README.md` instructs exactly this ("give them the
+three `KNOT_COLLECTOR_*` values"). Today that is a **single shared `demo` user**,
 which yields no attribution (logs name `demo`, not a person), no revocation short of
 rotating for everyone, and a blast radius of the whole council.
 
@@ -748,7 +818,7 @@ authentication can only ever tell you *who* acted, never prevent it. The protoco
 fixes are the control.
 
 **Deployment invariant:** because the collector enforces nothing itself, its security
-rests entirely on the proxy being in front. `MULTISIG_COLLECTOR_ALLOW_NON_LOOPBACK`
+rests entirely on the proxy being in front. `KNOT_COLLECTOR_ALLOW_NON_LOOPBACK`
 is what keeps that true. If anyone sets the escape hatch and binds `0.0.0.0`, the API
 is open to the internet with **no authentication at all**. State this in the README.
 
@@ -834,17 +904,27 @@ re-signs. An attacker can overwrite partials as fast as they are added.
 overwrites become harmless — replacing a valid signature with another valid signature
 is a no-op in effect.
 
-**On the "no `dusk_core`" principle.** It exists so a compromised collector cannot
-*forge*, which requires secret keys. **Verification is a public operation.** Applying
-the rule to verification is an over-application, and it is what creates M10. The
-guarantee that matters — *never holds keys, never signs, never submits* — is fully
-preserved. Cost is one pairing per POST (~1–2 ms), the same work the chain does.
+**On the "no `dusk_core`" principle — restated · LOCKED (2026-08-05).**
+
+Older docs used “no `dusk_core`” as shorthand for “collector cannot forge.” That
+conflates dependency with capability. **Forging needs secret keys.** Verification is
+a public operation. M10/M12 **do** take a `dusk-core` (or equivalent) verify path.
+
+**Rewrite every README / module doc that says the collector has no `dusk_core`.**
+Replacement guarantee:
+
+> The collector never holds secret keys, never signs, and never submits on-chain
+> transactions. It may verify public BLS signatures and recompute digests so it
+> cannot be used as an unauthenticated griefing relay.
+
+Applying the old rule to verification is what created M10. Cost of verify: one
+pairing per POST (~1–2 ms), same work the chain does.
 
 Rejected: **first-write-wins** is actively worse — an attacker pre-squats each
 `signer_pk` slot with garbage before the real member signs, permanently blocking them.
 
-Note this needs `dusk-core`, a heavier dependency than C1's `knot-encoding`. Keep the
-two decisions distinct even though both land in the collector.
+C1 stays on `knot-encoding` only (no `dusk-core`). M10/M12 may land together once
+`dusk-core` is accepted. Keep the two decisions distinct in sequencing.
 
 M9 ships regardless — the tool must never trust the collector.
 
@@ -1005,7 +1085,7 @@ Keep all of these locally; gitignore and `git rm --cached`.
 `.github/workflows/` **stays** — needed.
 
 Keep public: `docs/security-model.md`, `docs/versioning.md`,
-`crates/multisig-proposals/test-target/`, `crates/multisig-tool/static/mock-ledger.js`.
+`crates/knot-proposals/test-target/`, `crates/knot-tool/static/mock-ledger.js`.
 
 **Add `docs/design-notes.md` (public)** — rationale for choices a reader would
 otherwise take for oversights, and which integrators will otherwise ask about. Five
@@ -1078,8 +1158,8 @@ valuable and belongs in the public doc.
 ### 5.4 Launch · LOCKED
 
 **Squash the entire history into a single commit.** No history at all at launch. This
-disposes of B1/B2 in history. Push the real history to a private mirror first if
-wanted (`git push private --mirror`).
+disposes of B1/B2 in history. Push the real history to a private backup remote
+first if wanted (`git push private --all` / full ref backup).
 
 Enable GitHub secret scanning **and push protection** before the first public push.
 
@@ -1097,13 +1177,14 @@ Rationale and the four-tier model: `PUBLIC-REPO-STANDARD.md`.
 Every project keeps one durable list of sensitive values and env vars.
 `.env.example` (tracked, placeholder values) exists at the repo root; `.env` (real
 values) is gitignored. Enumerated from source at `7e58d4c`: `RUSK_WALLET_PWD`,
-`MULTISIG_TOOL_PWD`, `MULTISIG_TOOL_ALLOW_ENV_PWD`, `MULTISIG_COLLECTOR_URL`,
-`MULTISIG_COLLECTOR_USER`, `MULTISIG_COLLECTOR_PASSWORD`, `MULTISIG_COLLECTOR_BIND`,
-`MULTISIG_COLLECTOR_DB`, `MULTISIG_COLLECTOR_ALLOW_NON_LOOPBACK`, `DEMO_MODE`.
+`KNOT_PWD`, `KNOT_ALLOW_ENV_PWD`, `KNOT_COLLECTOR_URL`,
+`KNOT_COLLECTOR_USER`, `KNOT_COLLECTOR_PASSWORD`, `KNOT_COLLECTOR_BIND`,
+`KNOT_COLLECTOR_DB`, `KNOT_COLLECTOR_ALLOW_NON_LOOPBACK`, `DEMO_MODE`.
 
 ### 5.7 Crate renaming · LOCKED — do it
 
-Product is Knot; crates, binary, env vars and `~/.multisig-tool/` all say `multisig`.
+Product is Knot; crate dirs still said `multisig-*` while binary/env already said
+`knot` / `KNOT_*`. Finish the mechanical surface rename before v3 semantics.
 
 **Sequencing: a pure mechanical rename commit with zero behaviour change, landed
 BEFORE the v3 contract work.** Rename, verify tests pass, commit. v3 then lands on
@@ -1115,19 +1196,18 @@ Scope — wider than crate names:
 | Surface | From | To |
 |---|---|---|
 | Crates + directories | `multisig-{encoding,registry,proposals,tool,collector}` | `knot-*` |
-| Module paths | `multisig_encoding::` | `knot_encoding::` |
-| Binary | `multisig-tool` | `knot-tool` |
-| Env vars | `MULTISIG_TOOL_*`, `MULTISIG_COLLECTOR_*` | `KNOT_*`, `KNOT_COLLECTOR_*` |
-| Keystore dir | `~/.multisig-tool/` | `~/.knot/` |
-| HTTP header | `X-Multisig-Tool-Token` | `X-Knot-Token` |
-| WASM artifacts | `multisig_registry.wasm` etc. | `knot_registry.wasm` etc. — update both `Makefile`s and the `include_bytes!` paths in contract tests |
+| Module paths | `multisig_encoding::` etc. | `knot_encoding::` etc. |
+| Binary | `multisig-tool` (interim `knot-tool`) | `knot-tool` |
+| Env vars | `MULTISIG_*` / `MULTISIG_COLLECTOR_*` (interim `KNOT_*`) | `KNOT_*`, `KNOT_COLLECTOR_*` |
+| Keystore dir | `~/.multisig-tool/` (interim `~/.knot-tool/`) | `~/.knot/` |
+| HTTP header | `X-Multisig-Tool-Token` (interim `X-Knot-Token`) | `X-Knot-Token` |
+| WASM artifacts | `multisig_*.wasm` | `knot_*.wasm` — Makefiles + `include_bytes!` in contract tests |
 | `#[path]` includes | `registry_types.rs`, `proposals_types.rs` | follow the crate move |
 | Docs | root `README.md` crate table, all crate READMEs, `docs/versioning.md` | |
 
-**Not renamed:** signing domain tags are already `nocturne.knot.*` — signing is
-unaffected. `deployments/testnet.json` keys (`multisig-registry`,
-`multisig-proposals`, `chain.rs:32-35`) are external deployment data; rename only in
-coordination with the pin repo, or leave them.
+**Not renamed:** signing domain tags stay `nocturne.knot.multisig.*` — crypto domains.
+Pin JSON keys (`"multisig-registry"`, `"multisig-proposals"` in `chain.rs` json_key)
+are external deployment data; rename only with a paired pin-repo update.
 
 Migration details:
 
@@ -1167,11 +1247,11 @@ Live at `7e58d4c` — the README crate table disagrees with `Cargo.toml`:
 
 | Crate | Cargo.toml | README | |
 |---|---|---|---|
-| `multisig-encoding` | 0.1.2 | 0.1.2 | ok |
-| `multisig-registry` | **0.1.6** | **0.1.5** | drift |
-| `multisig-proposals` | **0.3.3** | **0.3.2** | drift |
-| `multisig-tool` | 0.2.0 | 0.2.0 | ok |
-| `multisig-collector` | 0.2.0 | 0.2.0 | ok |
+| `knot-encoding` | 0.1.2 | 0.1.2 | ok |
+| `knot-registry` | **0.1.6** | **0.1.5** | drift |
+| `knot-proposals` | **0.3.3** | **0.3.2** | drift |
+| `knot-tool` | 0.2.0 | 0.2.0 | ok |
+| `knot-collector` | 0.2.0 | 0.2.0 | ok |
 
 Answers the "how do we avoid version drift" question: **do not hand-maintain the
 table.** Either generate it from `cargo metadata` at build time, or add a CI check
@@ -1211,28 +1291,26 @@ substitute for a real scanner.
 
 ## 8. Decision log and remaining open items
 
-All items raised in the 2026-08-05 round are now decided:
-
 | Item | Resolution |
 |---|---|
 | B5 private git dep | Publish the repo **and** make the dep optional (§1 B5) |
 | L3 diagnostics | Off-chain; delete three methods, keep `next_account_id` (§4.3) |
-| Crate renaming | Do it, as a mechanical commit before v3 (§5.7) |
+| Crate renaming | Do it, as a mechanical commit before v3 (§5.7); pin JSON keys stay `multisig-*` until paired pin-repo update |
 | CODE_OF_CONDUCT | Not for now (§5.2) |
 | Rogue-key | Verified safe; documentation only (§4.3) |
+| `deadline == 0` | Forbidden (§2.8) |
+| `proposal_ttl` / `MAX_PROPOSAL_TTL` | Always `> 0`; set rejects 0 and `> MAX`; ceiling only (§2.8) |
+| Proposal uniquifier | Caller-supplied; CSPRNG + `--nonce`; merge identical Open OK; track digests not nonces (§2.6) |
+| Events + decoder | Rich emits; arms in existing `event-decoder`; no pre-v3 fallbacks; extract `nocturne-event-decoder` DEFERRED (§2.13) |
+| Collector `dusk-core` | Accepted for M10/M12 verify; rewrite “no dusk_core” docs (§4.2) |
+| Residual code audit | Done §11 at `b1d883d` — R1/R2 HIGH (Lab token HTML; multi-key sign sans confirm); see §11 |
+| Human ops (B1 rotate, publish pins, `knot-internal`, org scanning, squash) | Explicit checklist; **deferred** until public launch unless needed for continued private work (§10) |
 
-Still open:
+Still open / deprioritised:
 
-1. **blst** — whether it would outperform `bls12_381-bls` for wasm. Not investigated,
-   and likely a non-question for Knot: the contracts do no BLS in wasm at all —
-   verification is a host query (`abi::verify_bls`, `abi::verify_bls_multisig`), so the
-   wasm side never runs a pairing. Any gain would be host-side (Dusk's choice, not
-   Knot's) or in `knot-tool`, where signing happens on a laptop and speed is
-   irrelevant. Deprioritised.
-**Everything else from the 2026-08-05 round is decided**, including M8 (§4.1 — fetch
-the real threshold from the registry). §2, §3, §4.1, §4.2, §4.3 and §5 are all LOCKED
-and implementable. `blst` above is the only genuinely open item, and it is
-deprioritised rather than blocking.
+1. **blst** — deprioritised (§4.3); contracts do no BLS in wasm.
+2. **§9.3 signer UI scope** — agreed direction, packaging undecided.
+3. **§9.4 `call_args` decoding** — required, design unspecified; separate product track.
 
 ---
 
@@ -1266,10 +1344,10 @@ defensible rather than odd. See §4.2.
 
 | Location | Current | Change |
 |---|---|---|
-| `crates/multisig-tool/README.md:36` | `MULTISIG_COLLECTOR_URL=https://collector.nocturne-standards.org` | placeholder; no Nocturne-hosted default |
-| `crates/multisig-tool/README.md:52` | "shared relay" | council-operated relay |
-| `crates/multisig-tool/README.md:54` | "Share the collector with co-signers: give them the three values" | the coordinator deploys it for their council |
-| `crates/multisig-collector/README.md:92` | "VPS deploy (operator TODO): bring your own ops (TLS, auth, SQLite backup)" | a real deployment story — see below |
+| `crates/knot-tool/README.md:36` | `KNOT_COLLECTOR_URL=https://collector.nocturne-standards.org` | placeholder; no Nocturne-hosted default |
+| `crates/knot-tool/README.md:52` | "shared relay" | council-operated relay |
+| `crates/knot-tool/README.md:54` | "Share the collector with co-signers: give them the three values" | the coordinator deploys it for their council |
+| `crates/knot-collector/README.md:92` | "VPS deploy (operator TODO): bring your own ops (TLS, auth, SQLite backup)" | a real deployment story — see below |
 
 If councils are expected to self-host, *"bring your own ops"* is not a deployment
 story. Target: `docker compose up` with automatic TLS (Caddy/Traefik sidecar), not a
@@ -1352,3 +1430,97 @@ Two things belong in the public trust model:
    does not make the intent comprehensible. State the boundary plainly.
 
 ---
+
+## 10. Execution phasing · LOCKED (process)
+
+Dependency order for the public-ready track. Calendar dates optional later; leaves
+cut only after this section is accepted. Product §9 (signer UI / `call_args`) is a
+**separate** track.
+
+| Phase | What | Depends on | Notes |
+|---|---|---|---|
+| **0** | Spec sync | — | Done (`9c4ff8b` / `b1d883d`) |
+| **1** | Residual audit | 0 | Done — findings §11; dispositions locked |
+| **1b** | Lab/RPC hardening (§11 R1–R4,R6–R9,R12) | 1 | Leaf **#14**; parallel OK with #3; before sharing Lab |
+| **2** | Mechanical rename `multisig-*` → `knot-*` | 1 | Zero behaviour change; pin JSON keys stay `multisig-*` until paired pin update |
+| **3a** | Confirm `abi::chain_id()` under `VM::ephemeral()` | 2 | **Hard gate** for contract work; shim if unset |
+| **3b** | Encoding digests v3 | 3a | |
+| **3c** | Registry + proposals contracts v3 | 3b | Rich events; redeploy; burn v2 |
+| **4a** | Tool: uniquifier, blobs, M8/M9, L7/L8/L14 **+ R5, R11** | 3b (3c for live pins) | Leaf **#6** |
+| **4b** | Keystore v2 | 2 | Parallel with 4a |
+| **5** | Collector: L9–L12, M11, C1, M10/M12 **+ R10** | 3b for C1; dusk-core for M10/M12 | Leaf **#8**; rewrite “no dusk_core” docs |
+| **6** | Registry diagnostics off-chain | 3c | Delete on-chain methods; tool reimplement |
+| **7** | `event-decoder` Knot arms | 3c | In `sme_platform` crate; knot only emits |
+| **8** | Public hygiene + B5 optional deployments dep | 2+ | Prose gate, templates, design-notes |
+| **9** | Launch ops checklist | Ready to go public | Rotate/scrub creds, publish pins repo, `knot-internal`, squash, org secret scanning — **deferred** from coding phases |
+| **∞** | Extract `nocturne-event-decoder` | After 7, when needed | Named DEFERRED |
+| **∞** | Product §9 | Independent | Signer UI / `call_args` decode |
+
+**Human ops (phase 9) — explicit, not sprint blockers for private continued work**
+
+- [ ] B1 rotate collector htpasswd (no funds at risk today; before any public or shared use)
+- [ ] B2 scrub README placeholders
+- [ ] Publish `nocturne-deployments` and/or ship B5 optional feature
+- [ ] Create sibling `knot-internal`
+- [ ] Org secret scanning + push protection
+- [ ] History squash + private backup remote if wanted
+- [ ] Unset `ALLOW_PRIVATE_TIER` in CI
+
+**Out of scope for this track:** bending for pre-v3 private deployment compatibility;
+`blst`; CODE_OF_CONDUCT.
+
+---
+
+## 11. Residual host-surface audit · LOCKED (findings)
+
+**Written against `b1d883d`.** Full read of previously unaudited surfaces
+(2026-08-05). Amendments belong here — not a second frozen audit-as-authority.
+
+**Scope actually read:** `knot-tool` `rpc.rs`, `main.rs`, `chain.rs`,
+`collector_client.rs`, `membership.rs`, `bls.rs`, `mock_ledger.rs`, `static/`;
+`knot-collector` `store.rs`, `dto.rs`, `api.rs` (re-verify). Note: tool has
+**no** `store.rs`/`dto.rs` — those live only in the collector (README list was
+imprecise).
+
+Already LOCKED elsewhere (C1, M4–M12, L9–L12, keystore, …) — not re-listed unless
+status changed.
+
+### 11.1 New findings · dispositions LOCKED (2026-08-05)
+
+| ID | Sev | Problem (short) | Disposition |
+|---|---|---|---|
+| **R1** | HIGH | Token in unauthenticated `GET /` HTML | **OTP → HttpOnly session cookie** (`SameSite=Strict`, localhost). HTML never holds secret. Loopback bind required (R12). |
+| **R2** | HIGH | Quorum / change-account multi-key sign, no confirm | Same preview+confirm UX as proposal approve; prefer one signer per `serve` call; CLI twins. |
+| **R3** | MED | "confirmed" on mere propagate | Relabel `submitted`/`propagated` until block inclusion. |
+| **R4** | MED | Raw wallet log / `e.to_string()` to browser | **Error-code schema** at RPC boundary; fixed messages; raw log stderr-only (same pattern as collector L10). |
+| **R5** | MED | Basic Auth to any collector URL | Allowlist loopback or `https://` only. |
+| **R6** | MED | `DEMO_MODE` defaults mock | Require explicit `DEMO_MODE`; refuse ambiguous; loud banner. |
+| **R7** | MED | `__TOKEN__` → silent frontend mock | Fail closed if session/bootstrap missing. |
+| **R8** | MED | `--nonce` bypasses account free-read | **Refuse by default**; dev-only latch for diagnostics. |
+| **R9** | LOW | `escapeHtml` not every sink | Escape all interpolations; fix claim. |
+| **R10** | LOW | Party `name` uncapped | Cap like `MAX_NOTE_CHARS`. |
+| **R11** | LOW | Client skips proposal-id hex check | Validate on client. |
+| **R12** | LOW | Bind string-prefix | `SocketAddr` + `is_loopback()`. |
+
+**Lab vs collector:** R1 cookie session is Lab-only (`serve`). Collector stays untrusted relay + proxy auth + C1/M10/M12; do not import Lab cookie design there. API header was never the villain — embedding the secret in HTML was.
+
+### 11.2 Verified OK (spot-checks)
+
+- `/api/*` auth compare with `ct_eq`; fonts allowlisted; no shell for browser open or
+  `rusk-wallet` (argv arrays); `RUSK_WALLET_PWD` env not argv.
+- Proposal approve + blob sign: confirm + digest recompute gate.
+- Membership fail-closed before quorum/change/approve sign.
+- Collector SQL fully parameterized; create clears caller partials.
+- Locked collector issues C1/M10–M12/L9–L12 **still open** — leaf `#8`.
+
+### 11.3 Track wiring · LOCKED
+
+| Leaf | Findings / work |
+|---|---|
+| **#14 `lab-rpc-hardening`** (new) | R1, R2, R3, R4, R6, R7, R8, R9, R12 |
+| **#6 `tool-uniquifier-blobs`** | Planned M8/M9/L7/L8/L14/uniquifier **+ R5, R11** |
+| **#8 `collector-hardening`** | Planned C1/M10–M12/L9–L12/M11 **+ R10** |
+| **#7 keystore** | Unchanged by §11 |
+| **#3–#5 contracts** | Unchanged by §11 |
+
+Phase order: after #1 (done), **#14 may run parallel with #3 rename** (prefer after rename if both in flight to avoid path churn). Does not block encoding/contracts v3 if Lab stays private until #14 lands.

@@ -7,7 +7,7 @@ deps: []
 scope:
   - README.md
   - docs/
-  - crates/multisig-tool/static/
+  - crates/knot-tool/static/
 acceptance:
   - Root README matches launch-form public claim; Prove-first; AGPL callout
   - docs/versioning.md exists; A12–A15 addressed
@@ -27,7 +27,7 @@ Plan Tasks 7–9.
 - Added `docs/versioning.md` (testnet-only, PINNED-DIFFERENT-REDEPLOYED, per-crate semver vs git tag).
 - Rewrote root `README.md`: Prove-first, AGPL collector callout, crate versions from `Cargo.toml`, `aichbindas/knot` links, Status archaeology → `docs/internal/deploy-history.md`.
 - Fixed A14 dead `../../../` doc links in crate READMEs/CHANGELOGs (correct `../../docs/versioning.md` or removed dead targets).
-- Fixed A15: `chain.rs` + `multisig-tool/README.md` — self-contained `RUSK_WALLET_PWD` text, no `references/testnet-wallet.md`.
+- Fixed A15: `chain.rs` + `knot-tool/README.md` — self-contained `RUSK_WALLET_PWD` text, no `references/testnet-wallet.md`.
 
 **Task 8 (knot repo):**
 - Lab `static/index.html`: "Form the treasury" → "Form a multisig account"; "Treasury / DAO payout" → "Committee payout".
