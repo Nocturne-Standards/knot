@@ -1,7 +1,7 @@
 ---
 id: 11
 slug: public-hygiene-b5
-status: CLAIMED
+status: IN_PROGRESS
 owner: cursor-agent
 deps:
   - 3
