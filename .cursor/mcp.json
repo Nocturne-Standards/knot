@@ -13,16 +13,17 @@
     "nocturne-mcp-gates": {
       "command": "node",
       "args": [
-        "/Users/leonidas/dev/aichbindas/nocturne-mcp-gates/mcp/server.mjs"
+        "${workspaceFolder}/../nocturne-mcp-gates/mcp/server.mjs"
       ],
       "env": {
-        "GATES_ROOT": "${workspaceFolder}"
+        "GATES_ROOT": "${workspaceFolder}",
+        "NOCTURNE_AGENT_KIT": "${workspaceFolder}/../nocturne-agent-kit"
       }
     },
     "nocturne-mcp-tracks": {
       "command": "node",
       "args": [
-        "/Users/leonidas/dev/aichbindas/nocturne-mcp-tracks/mcp/server.mjs"
+        "${workspaceFolder}/../nocturne-mcp-tracks/mcp/server.mjs"
       ],
       "env": {
         "TRACKS_ROOT": "${workspaceFolder}"
