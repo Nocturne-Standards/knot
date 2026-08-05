@@ -134,10 +134,11 @@ submission goes two ways:
 - **Package version `0.2.0`** — see [CHANGELOG.md](CHANGELOG.md). Policy: [docs/versioning.md](../../docs/versioning.md). `knot-tool --version` prints the same string.
 - **Nocturne Lab UI (2026-07-28)** — static HTML uses synced `static/lab/*`
   tokens/layout. Product override: `--you: #2b6cb0` in `static/style.css`.
-- **Website demo Lab (2026-07-26)** — `DEMO_MODE=mock` (**default**) uses an
-  in-process `MockLedger` for account/proposal APIs (approve still signs the
-  digest with real local BLS; chain submit is skipped in mock only).
-  `DEMO_MODE=testnet` keeps the live chain path. Lab UI on **`:8877`**: cover /
+- **Website demo Lab (2026-07-26)** — `serve` **requires** explicit
+  `DEMO_MODE=mock` (in-process `MockLedger` for account/proposal APIs;
+  approve still signs the digest with real local BLS; chain submit is skipped
+  in mock only) or `DEMO_MODE=testnet` (live chain path). Unset or unknown
+  values refuse start. Lab UI on **`:8877`**: cover /
   demo studio / use cases slides; default path is a **five-beat** proposals
   walkthrough (Cast → Form council → Look up → Propose & first approve →
   Threshold & finalize); advanced panels (Setup, Aggregate, Rotate, Unsafe
@@ -190,7 +191,7 @@ submission goes two ways:
 - **M1 intent display (2026-07-23)** — structured `proposal create`
   (target / function / args / deadline), approve recomputes §4a digest and
   prints **canonical fields first** (refuses on digest mismatch). Web UI
-  mirrors the same gate.
+  applies the same gate.
 - Against `knot-registry` / `knot-proposals` on Dusk testnet — confirm
   contract IDs with your operator before live writes.
 
@@ -359,8 +360,9 @@ URL — it is injected into the served HTML only. Or via this repo's preview con
 (`KNOT_ALLOW_ENV_PWD=1` + `KNOT_PWD=...`), fine for local dev only.
 
 The UI matches the Agent Pay demo visual language (Literata/Sora, cream/sky)
-as **three slides**: cover → demo studio → use cases. Default mode is
-`DEMO_MODE=mock`; set `DEMO_MODE=testnet` for live chain writes. In the
+as **three slides**: cover → demo studio → use cases. Set
+`DEMO_MODE=mock` (default for local demos) or `DEMO_MODE=testnet` for live
+chain writes before `serve`. In the
 studio, **Start walkthrough** runs the **five-beat** proposals path
 (Cast → Form council → Look up → Propose & first approve → Threshold &
 finalize) — creates alice/bob/carol, prefills fields, and advances on
