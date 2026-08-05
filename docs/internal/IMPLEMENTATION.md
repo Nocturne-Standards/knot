@@ -1,6 +1,6 @@
 # Knot — implementation truth
 
-**Written against `276b19e`** (residual audit HEAD; settle pass began at `46a64b4`).
+**Written against `603754e`** (residual audit HEAD; settle pass began at `46a64b4`).
 Settled-gap + §10 phasing + §11 residual findings 2026-08-05. §2.5 chain_id
 ephemeral probe confirmed 2026-08-05 (leaf #2).
 
