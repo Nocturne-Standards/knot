@@ -4,14 +4,14 @@
 //! - **Reads**: direct RUES HTTP with raw rkyv bodies
 //!   (`Content-Type: application/octet-stream`).
 //!
-//! Supports `knot-registry` and `knot-proposals` ids from the shared
-//! pin home (`nocturne-deployments` / `aichbindas/nocturne-deployments/testnet.json`).
+//! Supports `knot-registry` and `knot-proposals` ids from a local
+//! `deployments/testnet.json` pin file (see `NOCTURNE_DEPLOYMENTS`).
 //! `--network testnet` is hard-coded.
 
 use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use bytecheck::CheckBytes;
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::{Archive, Deserialize, Infallible, Serialize};
@@ -35,21 +35,35 @@ impl Contract {
     }
 }
 
-/// Load shared pin file (`NOCTURNE_DEPLOYMENTS` or sibling `aichbindas/nocturne-deployments`).
+#[cfg(feature = "deployments-crate")]
 fn deployments() -> Result<nocturne_deployments::DeploymentsFile> {
     let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     nocturne_deployments::load_from(&start).with_context(|| {
         format!(
             "could not load deployments/testnet.json from {} \
-             (set NOCTURNE_DEPLOYMENTS or seed aichbindas/nocturne-deployments)",
+             (set NOCTURNE_DEPLOYMENTS or place deployments/testnet.json)",
+            start.display()
+        )
+    })
+}
+
+#[cfg(not(feature = "deployments-crate"))]
+fn deployments() -> Result<crate::deployments::DeploymentsFile> {
+    let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    crate::deployments::load_from(&start).with_context(|| {
+        format!(
+            "could not load deployments/testnet.json from {} \
+             (set NOCTURNE_DEPLOYMENTS or place deployments/testnet.json)",
             start.display()
         )
     })
 }
 
 /// Chain id for v3 digests on testnet (`init_chain_id=2` in deploy-history).
+#[allow(dead_code)]
 pub const DIGEST_CHAIN_ID: u64 = 2;
 
+#[allow(dead_code)]
 pub fn digest_chain_id() -> u64 {
     std::env::var("KNOT_CHAIN_ID")
         .ok()
@@ -70,15 +84,12 @@ pub fn contract_self_id_bytes(which: Contract) -> Result<[u8; 32]> {
 pub fn contract_id_hex(which: Contract) -> Result<String> {
     let file = deployments()?;
     let key = which.json_key();
-    file.contract_id(key)
-        .map(str::to_string)
-        .with_context(|| {
-            format!(
-                "no {key}.current.contract_id in {} — deploy it first \
-                 (DEPLOYMENTS_FILE=... sme_platform/scripts/deploy-contract.sh {key})",
-                file.path().display()
-            )
-        })
+    file.contract_id(key).map(str::to_string).with_context(|| {
+        format!(
+            "no {key}.current.contract_id in {} — deploy the contract and update the pin file",
+            file.path().display()
+        )
+    })
 }
 
 pub fn encode<A>(args: &A) -> Result<Vec<u8>>
@@ -265,10 +276,7 @@ pub fn extract_tx_hash(log: &str) -> Option<String> {
     for line in log.lines() {
         if let Some(idx) = line.find("?id=") {
             let rest = &line[idx + 4..];
-            let hash: String = rest
-                .chars()
-                .take_while(|c| c.is_ascii_hexdigit())
-                .collect();
+            let hash: String = rest.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
             if looks_like_tx_hash(&hash) {
                 return Some(hash);
             }
@@ -402,7 +410,10 @@ mod tests {
 
     #[test]
     fn tx_status_label_panic_is_failed() {
-        assert_eq!(tx_status_label(WriteOutcome::Panic, "Panic: nope"), "failed");
+        assert_eq!(
+            tx_status_label(WriteOutcome::Panic, "Panic: nope"),
+            "failed"
+        );
     }
 
     #[test]

@@ -259,10 +259,10 @@ impl MockLedger {
             .accounts
             .get(&proposal.registry_account_id)
             .ok_or_else(|| "unknown registry account for proposal".to_string())?;
-        if !account.members.iter().any(|m| *m == member_pk) {
+        if !account.members.contains(&member_pk) {
             return Err("signer is not a member of the proposal's registry account".into());
         }
-        if proposal.approvals.iter().any(|a| *a == member_pk) {
+        if proposal.approvals.contains(&member_pk) {
             return Err("signer has already approved this proposal".into());
         }
 
@@ -393,14 +393,7 @@ mod tests {
             .create_account(members_2of3(), 2)
             .expect("create account");
         let proposal_id = ledger
-            .create_proposal(
-                account_id,
-                [0; 32],
-                "noop".into(),
-                vec![],
-                0,
-                0,
-            )
+            .create_proposal(account_id, [0; 32], "noop".into(), vec![], 0, 0)
             .expect("create proposal");
 
         let err = ledger
@@ -419,14 +412,7 @@ mod tests {
             .create_account(members_2of3(), 2)
             .expect("create account");
         let proposal_id = ledger
-            .create_proposal(
-                account_id,
-                [7; 32],
-                "set_value".into(),
-                vec![42],
-                100,
-                0,
-            )
+            .create_proposal(account_id, [7; 32], "set_value".into(), vec![42], 100, 0)
             .expect("create proposal");
 
         ledger
@@ -452,14 +438,7 @@ mod tests {
             .create_account(members_2of3(), 2)
             .expect("create account");
         let proposal_id = ledger
-            .create_proposal(
-                account_id,
-                [0; 32],
-                "noop".into(),
-                vec![],
-                0,
-                0,
-            )
+            .create_proposal(account_id, [0; 32], "noop".into(), vec![], 0, 0)
             .expect("create proposal");
 
         ledger
@@ -497,10 +476,7 @@ mod tests {
             std::env::set_var(key, "bogus");
         }
         let err = DemoMode::from_env().expect_err("unknown DEMO_MODE must refuse");
-        assert!(
-            err.contains("invalid"),
-            "unexpected error: {err}"
-        );
+        assert!(err.contains("invalid"), "unexpected error: {err}");
 
         unsafe {
             std::env::set_var(key, "mock");
@@ -552,7 +528,9 @@ mod tests {
             "mock banner should not say TESTNET ONLY"
         );
         assert!(
-            DemoMode::Testnet.serve_banner_label().contains("TESTNET ONLY"),
+            DemoMode::Testnet
+                .serve_banner_label()
+                .contains("TESTNET ONLY"),
             "testnet banner must warn about live writes"
         );
 
@@ -589,9 +567,7 @@ mod tests {
         let members = vec![pk1.to_bytes(), pk2.to_bytes(), pk3.to_bytes()];
 
         let mut ledger = MockLedger::new();
-        let account_id = ledger
-            .create_account(members, 2)
-            .expect("create 2-of-3");
+        let account_id = ledger.create_account(members, 2).expect("create 2-of-3");
         let proposal_id = ledger
             .create_proposal(
                 account_id,

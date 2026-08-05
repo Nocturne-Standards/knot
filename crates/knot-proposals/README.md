@@ -2,13 +2,13 @@
 
 On-chain **propose → approve → finalize+execute** (`abi::call_raw`) using
 [`knot-registry`](../knot-registry/) for membership/threshold.
-Signed bytes are the §2.12 v3 digest from [`knot-encoding`](../knot-encoding/).
+Signed bytes are the v3 digest from [`knot-encoding`](../knot-encoding/).
 
 ## Status
 
 - **v3** — epoch counter, caller-supplied proposal uniquifier (`ProposeArgs.nonce`),
   `abi::chain_id()` + `abi::self_id()` in digests, `consumed` digest records,
-  permissionless `prune`, rich events (§2.13). **Burns v2** — redeploy fresh;
+  permissionless `prune`, rich events. **Burns v2** — redeploy fresh;
   no state migration.
 - Prior **v0.3.x** testnet pins are obsolete after v3 cutover.
 

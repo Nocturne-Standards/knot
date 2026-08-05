@@ -1,26 +1,25 @@
 //! Thin wrappers over `dusk_core::signatures::bls` for signing and
 //! aggregating — same primitives `knot-registry`'s own tests
-//! (`knot-registry/tests/contract.rs`) and `rusk-experiments/
-//! multisig-approval` already exercise against the real host query.
+//! (`knot-registry/tests/contract.rs`) exercise against the real host query.
 //!
 //! **Testnet uses the post-hardfork secure scheme** (`sign` /
 //! `sign_multisig`). `VM::ephemeral()` unit tests are stuck on
 //! pre-Aegis/`HardFork::PreFork` and must keep using `sign_insecure` /
-//! `sign_multisig_insecure` — see
-//! `references/dusk-native/dusk-vm-issue-1-ephemeral-hardfork-policy-unreachable.md`
-//! and `rfq-settlement/README.md` ("Real testnet enforces `sign()`, not
-//! `sign_insecure()`"). Do not "match the tests" here: this tool talks to
-//! the real node.
+//! `sign_multisig_insecure` — dusk-vm defaults host-query policy to PreFork
+//! with no public override, so ephemeral VM tests cannot reach post-hardfork
+//! signing policy without upstream dusk-vm support. Live Dusk testnet enforces
+//! `sign()`, not `sign_insecure()` (confirmed for this registry:
+//! `member_matches=1, sigs_ok=0` under insecure; secure `change_account`
+//! succeeds). Do not "match the tests" here: this tool talks to the real node.
 
 use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{
-    aggregate as aggregate_multisig_pk,
-    verify_multisig as dusk_verify_multisig,
     BlsVersion, MultisigPublicKey, MultisigSignature, PublicKey as BlsPublicKey,
-    SecretKey as BlsSecretKey, Signature as BlsSignature,
+    SecretKey as BlsSecretKey, Signature as BlsSignature, aggregate as aggregate_multisig_pk,
+    verify_multisig as dusk_verify_multisig,
 };
 use knot_encoding::call_types::ProposalView;
-use knot_encoding::{party_signup_preimage, ProposalIntentV3, recompute_and_verify_v3};
+use knot_encoding::{ProposalIntentV3, party_signup_preimage, recompute_and_verify_v3};
 
 pub const DIGEST_CHAIN_ID: u64 = 2;
 
@@ -53,9 +52,7 @@ pub fn sign_multisig(sk: &BlsSecretKey, pk: &BlsPublicKey, msg: &[u8]) -> Multis
 /// Combines individual `sign_multisig` outputs into one aggregate — order
 /// doesn't matter, `MultisigSignature::aggregate` just sums points.
 pub fn aggregate(sigs: &[MultisigSignature]) -> Result<MultisigSignature, &'static str> {
-    let (first, rest) = sigs
-        .split_first()
-        .ok_or("no signatures to aggregate")?;
+    let (first, rest) = sigs.split_first().ok_or("no signatures to aggregate")?;
     Ok(first.aggregate(rest))
 }
 
@@ -101,7 +98,7 @@ pub fn change_account_message(
     .expect("committee within encoding caps")
 }
 
-/// Build §2.12 v3 intent from an on-chain [`ProposalView`].
+/// Build v3 intent from an on-chain [`ProposalView`].
 pub fn proposal_intent_v3_from_view(
     view: &ProposalView,
     chain_id: u64,
@@ -121,6 +118,7 @@ pub fn proposal_intent_v3_from_view(
 }
 
 /// Recompute and verify a proposal digest against on-chain `signed_digest`.
+#[allow(clippy::result_unit_err)]
 pub fn verify_proposal_view_digest(
     view: &ProposalView,
     chain_id: u64,

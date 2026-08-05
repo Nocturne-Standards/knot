@@ -3,7 +3,9 @@
 
 use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, Signature as BlsSignature};
-use knot_encoding::call_types::{DiagnoseQuorumResult, MultisigAccountView, SignatureEntry, VerifyQuorumArgs};
+use knot_encoding::call_types::{
+    DiagnoseQuorumResult, MultisigAccountView, SignatureEntry, VerifyQuorumArgs,
+};
 
 pub fn diagnose_quorum(
     account: Option<&MultisigAccountView>,
@@ -37,11 +39,7 @@ pub fn diagnose_quorum(
     }
 }
 
-fn quorum_counts(
-    members: &[BlsPublicKey],
-    msg: &[u8],
-    sigs: &[SignatureEntry],
-) -> (u32, u32) {
+fn quorum_counts(members: &[BlsPublicKey], msg: &[u8], sigs: &[SignatureEntry]) -> (u32, u32) {
     if sigs.len() > members.len() {
         return (0, 0);
     }
@@ -72,8 +70,8 @@ fn verify_bls(pk: &BlsPublicKey, msg: &[u8], sig: &BlsSignature) -> bool {
 mod tests {
     use super::*;
     use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     fn keypair(rng: &mut StdRng) -> (BlsSecretKey, BlsPublicKey) {
         let sk = BlsSecretKey::random(rng);

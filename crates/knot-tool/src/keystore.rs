@@ -14,14 +14,14 @@ use std::path::{Path, PathBuf};
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use argon2::{Algorithm, Argon2, Params, Version};
 use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
 use knot_tool::hex_util::strip_single_0x;
 use pbkdf2::pbkdf2_hmac;
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use zeroize::{Zeroize, Zeroizing};
@@ -140,8 +140,7 @@ fn ensure_parent_dir(parent: &Path) -> Result<()> {
     if parent.as_os_str().is_empty() {
         return Ok(());
     }
-    fs::create_dir_all(parent)
-        .with_context(|| format!("creating {}", parent.display()))?;
+    fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
     Ok(())
 }
 
@@ -158,8 +157,7 @@ fn bak_path(path: &Path) -> PathBuf {
 fn cleanup_stale_tmp(path: &Path) -> Result<()> {
     let tmp = tmp_path(path);
     if tmp.exists() {
-        fs::remove_file(&tmp)
-            .with_context(|| format!("removing stale tmp {}", tmp.display()))?;
+        fs::remove_file(&tmp).with_context(|| format!("removing stale tmp {}", tmp.display()))?;
     }
     Ok(())
 }
@@ -224,13 +222,8 @@ fn copy_backup(path: &Path) -> Result<()> {
     if bak.exists() {
         fs::remove_file(&bak)?;
     }
-    fs::copy(path, &bak).with_context(|| {
-        format!(
-            "copying backup {} -> {}",
-            path.display(),
-            bak.display()
-        )
-    })?;
+    fs::copy(path, &bak)
+        .with_context(|| format!("copying backup {} -> {}", path.display(), bak.display()))?;
     Ok(())
 }
 
@@ -271,12 +264,7 @@ impl KdfHeader {
         h.extend_from_slice(&self.p1.to_le_bytes());
         h.extend_from_slice(&self.p2.to_le_bytes());
         h.push(self.p3);
-        h.push(
-            self.salt
-                .len()
-                .try_into()
-                .expect("salt length fits in u8"),
-        );
+        h.push(self.salt.len().try_into().expect("salt length fits in u8"));
         h.extend_from_slice(&self.salt);
         h
     }
@@ -318,12 +306,7 @@ fn derive_key(header: &KdfHeader, password: &str) -> Result<Zeroizing<[u8; 32]>>
     let mut key = Zeroizing::new([0u8; 32]);
     match header.kdf_id {
         KDF_PBKDF2 => {
-            pbkdf2_hmac::<Sha256>(
-                password.as_bytes(),
-                &header.salt,
-                header.p1,
-                key.as_mut(),
-            );
+            pbkdf2_hmac::<Sha256>(password.as_bytes(), &header.salt, header.p1, key.as_mut());
         }
         KDF_ARGON2ID => {
             let params = Params::new(header.p1, header.p2, u32::from(header.p3), Some(32))
@@ -460,7 +443,8 @@ fn decrypt_v1(raw: &[u8], password: &str) -> Result<Vec<Identity>> {
         .map(|s| {
             if let Some(sk_hex) = s.sk_hex {
                 let stripped = strip_single_0x(&sk_hex).context("identity sk_hex malformed")?;
-                let mut sk_bytes_vec = hex::decode(stripped).context("identity sk_hex is malformed")?;
+                let mut sk_bytes_vec =
+                    hex::decode(stripped).context("identity sk_hex is malformed")?;
                 let sk_bytes: [u8; 32] = sk_bytes_vec
                     .as_slice()
                     .try_into()
@@ -552,9 +536,7 @@ pub fn parse_pk(s: &str) -> Result<BlsPublicKey> {
         Ok(pk) => return Ok(pk),
         Err(e) => e,
     };
-    bail!(
-        "not a valid BLS public key.\n  as hex:    {hex_err}\n  as base58: {b58_err}"
-    )
+    bail!("not a valid BLS public key.\n  as hex:    {hex_err}\n  as base58: {b58_err}")
 }
 
 /// Loads and decrypts the store at `path`. Returns an empty list if the file
@@ -662,10 +644,7 @@ mod tests {
         save(&path, "pw", &[generate("a")]).expect("save");
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         let err = load(&path, "pw").err().expect("should fail").to_string();
-        assert!(
-            err.contains("group/world accessible"),
-            "unexpected: {err}"
-        );
+        assert!(err.contains("group/world accessible"), "unexpected: {err}");
         assert!(err.contains("chmod 600"), "unexpected: {err}");
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -772,7 +751,10 @@ mod tests {
         let mut raw = fs::read(&path).unwrap();
         raw[10] ^= 0xff;
         fs::write(&path, &raw).unwrap();
-        let err = load(&path, password).err().expect("should fail").to_string();
+        let err = load(&path, password)
+            .err()
+            .expect("should fail")
+            .to_string();
         assert!(
             err.contains("decryption failed"),
             "expected AEAD failure, got: {err}"

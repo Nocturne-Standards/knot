@@ -5,7 +5,7 @@ mod knot_proposals {
     use alloc::vec::Vec;
 
     use dusk_bytes::Serializable;
-    use dusk_core::abi::{self, block_height, chain_id, ContractId};
+    use dusk_core::abi::{self, ContractId, block_height, chain_id};
     use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, Signature as BlsSignature};
 
     use knot_encoding::proposal_digest_v3;
@@ -80,10 +80,7 @@ mod knot_proposals {
         /// bumps `epoch` so prior proposals are unreachable (O(1)).
         pub fn init_registry(&mut self, registry: ContractId) {
             Self::require_owner();
-            self.epoch = self
-                .epoch
-                .checked_add(1)
-                .expect("epoch overflow");
+            self.epoch = self.epoch.checked_add(1).expect("epoch overflow");
             self.registry = Some(registry);
             abi::emit("registry_set", ());
         }
@@ -130,9 +127,7 @@ mod knot_proposals {
             }
 
             let now = block_height();
-            let max_deadline = now
-                .checked_add(self.proposal_ttl)
-                .expect("ttl overflow");
+            let max_deadline = now.checked_add(self.proposal_ttl).expect("ttl overflow");
             let deadline = args.deadline;
             if deadline < now {
                 panic!("proposal deadline is in the past");
@@ -168,10 +163,7 @@ mod knot_proposals {
             }
 
             let id = self.next_id;
-            self.next_id = self
-                .next_id
-                .checked_add(1)
-                .expect("next_id overflow");
+            self.next_id = self.next_id.checked_add(1).expect("next_id overflow");
             self.proposals.insert(
                 id,
                 Proposal {

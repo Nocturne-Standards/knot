@@ -12,18 +12,17 @@ use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecr
 use dusk_vm::{ContractData, Session, VM};
 use knot_encoding::PartialSig;
 use knot_tool::blob::{
-    aggregate_partials, create_blob, read_file, write_file, BlobFile, ThresholdGuard,
+    BlobFile, ThresholdGuard, aggregate_partials, create_blob, read_file, write_file,
 };
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 #[path = "../../knot-registry/src/call_types.rs"]
 mod call_types;
 use call_types::{CreateAccountArgs, VerifyQuorumAggregateArgs};
 
-const REGISTRY_BYTECODE: &[u8] = include_bytes!(
-    "../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm"
-);
+const REGISTRY_BYTECODE: &[u8] =
+    include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm");
 const REGISTRY_ID: ContractId = ContractId::from_bytes([0xa1; 32]);
 const CHAIN_ID: u8 = 0xCA;
 const POINT_LIMIT: u64 = 0x10000000;
@@ -51,7 +50,7 @@ fn deploy() -> Session {
 
 #[test]
 fn file_byo_two_of_three_aggregate_verifies_locally() {
-    let rng = &mut StdRng::seed_from_u64(2026_07_23);
+    let rng = &mut StdRng::seed_from_u64(20260723);
     let (sk1, pk1) = keypair(rng);
     let (sk2, pk2) = keypair(rng);
     let (_sk3, pk3) = keypair(rng);
@@ -101,8 +100,11 @@ fn file_byo_two_of_three_aggregate_verifies_locally() {
     let reloaded = read_file(&path).unwrap().to_proposal_blob().unwrap();
     assert_eq!(reloaded.partials.len(), 2);
 
-    let (signer_keys, aggregate_sig, digest) =
-        aggregate_partials(&reloaded, ThresholdGuard::unverified_blob(reloaded.threshold)).unwrap();
+    let (signer_keys, aggregate_sig, digest) = aggregate_partials(
+        &reloaded,
+        ThresholdGuard::unverified_blob(reloaded.threshold),
+    )
+    .unwrap();
     let args = VerifyQuorumAggregateArgs {
         account_id,
         msg: digest.to_vec(),
@@ -118,7 +120,10 @@ fn file_byo_two_of_three_aggregate_verifies_locally() {
         )
         .expect("verify_quorum_aggregate")
         .data;
-    assert!(passed, "2-of-3 file round-trip aggregate must verify locally");
+    assert!(
+        passed,
+        "2-of-3 file round-trip aggregate must verify locally"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

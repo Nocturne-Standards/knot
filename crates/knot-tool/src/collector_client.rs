@@ -13,7 +13,7 @@
 //! here. Only the party-roster shapes (which `knot-tool` has no local
 //! equivalent of) get their own small structs below.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -135,18 +135,29 @@ impl CollectorClient {
             .send()
             .await
             .context("POST /v1/proposals")?;
-        Self::into_ok(resp).await?.json().await.context("parse push response")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse push response")
     }
 
     /// `GET /v1/proposals/:id` — full blob, including all partials so far.
     pub async fn pull(&self, id: &str) -> Result<BlobFile> {
         let id = validate_proposal_id(id)?;
         let resp = self
-            .auth(self.http.get(format!("{}/v1/proposals/{id}", self.base_url)))
+            .auth(
+                self.http
+                    .get(format!("{}/v1/proposals/{id}", self.base_url)),
+            )
             .send()
             .await
             .context("GET /v1/proposals/:id")?;
-        Self::into_ok(resp).await?.json().await.context("parse proposal body")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse proposal body")
     }
 
     /// `GET /v1/proposals` — summary list (no partial bodies).
@@ -156,7 +167,11 @@ impl CollectorClient {
             .send()
             .await
             .context("GET /v1/proposals")?;
-        Self::into_ok(resp).await?.json().await.context("parse proposal list")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse proposal list")
     }
 
     /// `POST /v1/proposals/:id/partials` — appends or **replaces** the partial
@@ -165,12 +180,19 @@ impl CollectorClient {
     pub async fn append_partial(&self, id: &str, partial: &PartialFile) -> Result<BlobFile> {
         let id = validate_proposal_id(id)?;
         let resp = self
-            .auth(self.http.post(format!("{}/v1/proposals/{id}/partials", self.base_url)))
+            .auth(
+                self.http
+                    .post(format!("{}/v1/proposals/{id}/partials", self.base_url)),
+            )
             .json(partial)
             .send()
             .await
             .context("POST /v1/proposals/:id/partials")?;
-        Self::into_ok(resp).await?.json().await.context("parse appended proposal")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse appended proposal")
     }
 
     /// `GET /v1/party` — full roster.
@@ -180,7 +202,11 @@ impl CollectorClient {
             .send()
             .await
             .context("GET /v1/party")?;
-        Self::into_ok(resp).await?.json().await.context("parse party list")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse party list")
     }
 
     /// `POST /v1/party` — signup, or upsert-by-`pk` if already present.
@@ -195,11 +221,20 @@ impl CollectorClient {
     ) -> Result<PartyMember> {
         let resp = self
             .auth(self.http.post(format!("{}/v1/party", self.base_url)))
-            .json(&PartySignupRequest { name, pk, sig, note })
+            .json(&PartySignupRequest {
+                name,
+                pk,
+                sig,
+                note,
+            })
             .send()
             .await
             .context("POST /v1/party")?;
-        Self::into_ok(resp).await?.json().await.context("parse party signup response")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse party signup response")
     }
 }
 
@@ -209,7 +244,7 @@ pub fn validate_collector_url(raw: &str) -> Result<()> {
     match parsed.scheme() {
         "https" => Ok(()),
         "http" => match parsed.host() {
-            Some(url::Host::Domain(domain)) if domain == "localhost" => Ok(()),
+            Some(url::Host::Domain("localhost")) => Ok(()),
             Some(url::Host::Ipv4(ip)) if ip.is_loopback() => Ok(()),
             Some(url::Host::Ipv6(ip)) if ip.is_loopback() => Ok(()),
             _ => bail!(

@@ -11,17 +11,17 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
 };
 use knot_encoding::{
-    gate_blob_for_signing, DecodedIntent, PartialSig, ProposalBlob, ProposalIntent,
+    DecodedIntent, PartialSig, ProposalBlob, ProposalIntent, gate_blob_for_signing,
 };
 pub use knot_encoding::{EncodingError, GateError};
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::bls;
@@ -38,7 +38,6 @@ pub fn random_proposal_nonce() -> u64 {
 pub fn resolve_proposal_nonce(cli_nonce: Option<u64>) -> u64 {
     cli_nonce.unwrap_or_else(random_proposal_nonce)
 }
-
 
 fn gate_error_to_anyhow(err: GateError) -> anyhow::Error {
     match err {
@@ -96,9 +95,7 @@ fn full_fsync(f: &fs::File) -> std::io::Result<()> {
 
 /// Atomic blob write (L8) — tmp + rename + directory fsync per IMPLEMENTATION §3.2.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let dir = path
-        .parent()
-        .context("blob path has no parent directory")?;
+    let dir = path.parent().context("blob path has no parent directory")?;
     fs::create_dir_all(dir)?;
     let tmp = path.with_extension("tmp");
 
@@ -118,7 +115,8 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     full_fsync(&f)?;
     drop(f);
 
-    fs::rename(&tmp, path).with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()))?;
+    fs::rename(&tmp, path)
+        .with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()))?;
 
     let dfd = fs::File::open(dir).with_context(|| format!("opening {}", dir.display()))?;
     dfd.sync_all()?;
@@ -225,8 +223,7 @@ fn encode_hex(bytes: &[u8]) -> String {
 
 /// Content-addressed collector id = lowercase hex of the 32-byte digest (no `0x`).
 pub fn digest_id(digest_hex: &str) -> Result<String> {
-    Ok(strip_single_0x(digest_hex)?
-        .to_ascii_lowercase())
+    Ok(strip_single_0x(digest_hex)?.to_ascii_lowercase())
 }
 
 /// Gate locally before pushing any blob to the collector.
@@ -317,6 +314,7 @@ pub fn write_file(path: &Path, file: &BlobFile) -> Result<()> {
     write_atomic(path, format!("{text}\n").as_bytes())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn create_blob(
     chain_id: u64,
     committee_id: u64,
@@ -365,7 +363,10 @@ pub fn print_canonical_intent(blob: &ProposalBlob) -> Result<[u8; 32]> {
     println!("  digest: 0x{}", hex::encode(digest));
     println!("=== out-of-band fingerprint (compare with co-signers) ===");
     println!("  hex: {}", knot_encoding::digest_hex(&digest));
-    println!("  mnemonic (24 BIP39 words): {}", knot_encoding::digest_mnemonic(&digest));
+    println!(
+        "  mnemonic (24 BIP39 words): {}",
+        knot_encoding::digest_mnemonic(&digest)
+    );
     println!(
         "  safety-number: {}",
         knot_encoding::digest_safety_number(&digest)
@@ -477,8 +478,8 @@ pub fn aggregate_partials(
 mod tests {
     use super::*;
     use dusk_core::signatures::bls::SecretKey as BlsSecretKey;
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     fn keypair(rng: &mut StdRng) -> (BlsSecretKey, BlsPublicKey) {
         let sk = BlsSecretKey::random(rng);
@@ -552,18 +553,8 @@ mod tests {
         let (sk2, pk2) = keypair(rng);
         let (_sk3, _pk3) = keypair(rng);
 
-        let mut blob = create_blob(
-            1,
-            0,
-            0,
-            [0x11; 32],
-            "noop".into(),
-            Vec::new(),
-            0,
-            2,
-            None,
-        )
-        .unwrap();
+        let mut blob =
+            create_blob(1, 0, 0, [0x11; 32], "noop".into(), Vec::new(), 0, 2, None).unwrap();
         add_partial(&mut blob, &sk1, &pk1).unwrap();
         add_partial(&mut blob, &sk2, &pk2).unwrap();
         assert_eq!(blob.partials.len(), 2);
@@ -657,7 +648,8 @@ mod tests {
         let rng = &mut StdRng::seed_from_u64(99);
         let (sk1, pk1) = keypair(rng);
         let (sk2, pk2) = keypair(rng);
-        let mut blob = create_blob(1, 0, 0, [0x22; 32], "noop".into(), Vec::new(), 0, 2, None).unwrap();
+        let mut blob =
+            create_blob(1, 0, 0, [0x22; 32], "noop".into(), Vec::new(), 0, 2, None).unwrap();
         add_partial(&mut blob, &sk1, &pk1).unwrap();
         add_partial(&mut blob, &sk2, &pk2).unwrap();
         blob.partials[0].sig[0] ^= 0xff;
@@ -672,7 +664,8 @@ mod tests {
     fn verified_threshold_uses_refusing_label() {
         let rng = &mut StdRng::seed_from_u64(11);
         let (sk1, pk1) = keypair(rng);
-        let mut blob = create_blob(1, 0, 0, [0x33; 32], "noop".into(), Vec::new(), 0, 2, None).unwrap();
+        let mut blob =
+            create_blob(1, 0, 0, [0x33; 32], "noop".into(), Vec::new(), 0, 2, None).unwrap();
         add_partial(&mut blob, &sk1, &pk1).unwrap();
         let err = aggregate_partials(&blob, ThresholdGuard::verified(2)).unwrap_err();
         assert!(err.to_string().contains("REFUSING"), "unexpected: {err}");

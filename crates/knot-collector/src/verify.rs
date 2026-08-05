@@ -8,13 +8,12 @@
 
 use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{
-    aggregate as aggregate_multisig_pk,
-    verify_multisig as dusk_verify_multisig,
     BlsVersion, MultisigPublicKey, MultisigSignature, PublicKey as BlsPublicKey,
-    Signature as BlsSignature,
+    Signature as BlsSignature, aggregate as aggregate_multisig_pk,
+    verify_multisig as dusk_verify_multisig,
 };
 
-pub use knot_encoding::{party_signup_preimage, DOMAIN_PARTY_V1};
+pub use knot_encoding::{DOMAIN_PARTY_V1, party_signup_preimage};
 
 /// Verifies a BLS multisig partial over `msg` (typically the 32-byte proposal digest).
 fn sig_bytes_to_array(sig: &[u8]) -> Option<[u8; 48]> {

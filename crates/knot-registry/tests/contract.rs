@@ -14,19 +14,18 @@ use dusk_core::signatures::bls::{
 };
 use dusk_vm::{ContractData, Session, VM};
 use knot_encoding::change_account_message_v3;
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 #[path = "../src/call_types.rs"]
 mod call_types;
 use call_types::{
-    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
-    SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
+    VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
 
-const REGISTRY_BYTECODE: &[u8] = include_bytes!(
-    "../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm"
-);
+const REGISTRY_BYTECODE: &[u8] =
+    include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm");
 
 const REGISTRY_ID: ContractId = ContractId::from_bytes([0xa1; 32]);
 const CHAIN_ID: u8 = 0xCA;
@@ -103,7 +102,10 @@ fn create_account_rejects_out_of_range_threshold() {
     };
     let result =
         session.call::<CreateAccountArgs, u64>(REGISTRY_ID, "create_account", &args, POINT_LIMIT);
-    assert!(result.is_err(), "threshold above member count should be rejected");
+    assert!(
+        result.is_err(),
+        "threshold above member count should be rejected"
+    );
 }
 
 #[test]
@@ -190,7 +192,10 @@ fn verify_quorum_true_only_with_enough_distinct_valid_signers() {
         .call::<VerifyQuorumArgs, bool>(REGISTRY_ID, "verify_quorum", &args, POINT_LIMIT)
         .expect("verify_quorum call should succeed")
         .data;
-    assert!(passed, "two distinct member signers should meet threshold 2");
+    assert!(
+        passed,
+        "two distinct member signers should meet threshold 2"
+    );
 
     // Same signer counted twice: still only counts once, below threshold.
     let mut sigs = sign_all(&msg, &[(&sk1, &pk1)]);
@@ -216,7 +221,10 @@ fn verify_quorum_true_only_with_enough_distinct_valid_signers() {
         .call::<VerifyQuorumArgs, bool>(REGISTRY_ID, "verify_quorum", &args, POINT_LIMIT)
         .expect("verify_quorum call should succeed")
         .data;
-    assert!(!passed, "a non-member signature must not count toward quorum");
+    assert!(
+        !passed,
+        "a non-member signature must not count toward quorum"
+    );
 }
 
 #[test]
@@ -269,7 +277,10 @@ fn change_account_requires_quorum_and_bumps_nonce_preventing_replay() {
         &bad_args,
         POINT_LIMIT,
     );
-    assert!(result.is_err(), "change_account should reject an under-quorum request");
+    assert!(
+        result.is_err(),
+        "change_account should reject an under-quorum request"
+    );
 
     // Valid quorum: succeeds, bumps nonce.
     let good_args = ChangeAccountArgs {
@@ -305,7 +316,10 @@ fn change_account_requires_quorum_and_bumps_nonce_preventing_replay() {
         &replay_args,
         POINT_LIMIT,
     );
-    assert!(result.is_err(), "a replayed stale-nonce quorum signature must be rejected");
+    assert!(
+        result.is_err(),
+        "a replayed stale-nonce quorum signature must be rejected"
+    );
 }
 
 /// Aggregates a multisignature over `msg` from exactly `signers`, the way a
@@ -315,10 +329,7 @@ fn change_account_requires_quorum_and_bumps_nonce_preventing_replay() {
 /// default secure `sign_multisig`) is what `VM::ephemeral()`'s
 /// `verify_bls_multisig` host query actually checks against (documented in
 /// `references/dusk-native/dusk-vm-issue-1-ephemeral-hardfork-policy-unreachable.md`).
-fn aggregate_signature(
-    signers: &[(BlsSecretKey, BlsPublicKey)],
-    msg: &[u8],
-) -> MultisigSignature {
+fn aggregate_signature(signers: &[(BlsSecretKey, BlsPublicKey)], msg: &[u8]) -> MultisigSignature {
     let sigs: Vec<MultisigSignature> = signers
         .iter()
         .map(|(sk, pk)| sk.sign_multisig_insecure(pk, msg))
@@ -458,7 +469,10 @@ fn verify_quorum_aggregate_false_for_non_member_signer() {
         )
         .expect("verify_quorum_aggregate call should succeed")
         .data;
-    assert!(!passed, "an outsider signer must be rejected even at the right count");
+    assert!(
+        !passed,
+        "an outsider signer must be rejected even at the right count"
+    );
 }
 
 #[test]
@@ -500,7 +514,10 @@ fn verify_quorum_aggregate_false_for_wrong_message() {
         )
         .expect("verify_quorum_aggregate call should succeed")
         .data;
-    assert!(!passed, "an aggregate signed over a different message must not verify");
+    assert!(
+        !passed,
+        "an aggregate signed over a different message must not verify"
+    );
 }
 
 #[test]

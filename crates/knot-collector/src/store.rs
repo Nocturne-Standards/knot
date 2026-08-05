@@ -17,10 +17,10 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::dto::{PartialDto, PartyMemberDto, ProposalDto, ProposalSummary};
-use crate::{MAX_PARTY_ROWS, MAX_PARTIALS, MAX_PROPOSAL_ROWS, PROPOSAL_RETENTION_SECS};
+use crate::{MAX_PARTIALS, MAX_PARTY_ROWS, MAX_PROPOSAL_ROWS, PROPOSAL_RETENTION_SECS};
 
 /// Wraps a single `rusqlite::Connection` behind a mutex — `Connection` is
 /// `Send` but not `Sync`, and axum handlers need a `Sync` shared state.
@@ -129,7 +129,12 @@ impl Store {
     /// id, see `dto::digest_to_id`). `digest` is the normalized
     /// `"0x"+lowercase-hex` digest string, stored redundantly for cheap
     /// `SELECT digest` listing without a full JSON parse.
-    pub fn create_proposal(&self, id: &str, digest: &str, dto: &ProposalDto) -> Result<CreateOutcome> {
+    pub fn create_proposal(
+        &self,
+        id: &str,
+        digest: &str,
+        dto: &ProposalDto,
+    ) -> Result<CreateOutcome> {
         self.sweep_expired()?;
         let conn = self.conn.lock().expect("db mutex poisoned");
         let count: i64 = conn
@@ -244,12 +249,17 @@ impl Store {
         let mut dto: ProposalDto =
             serde_json::from_str(&body_json).context("parse stored proposal body")?;
 
-        let new_pk_norm = partial.signer_pk.trim_start_matches("0x").to_ascii_lowercase();
+        let new_pk_norm = partial
+            .signer_pk
+            .trim_start_matches("0x")
+            .to_ascii_lowercase();
         let digest_before = dto.signed_digest.clone();
 
-        if let Some(existing) = dto.partials.iter_mut().find(|p| {
-            p.signer_pk.trim_start_matches("0x").to_ascii_lowercase() == new_pk_norm
-        }) {
+        if let Some(existing) = dto
+            .partials
+            .iter_mut()
+            .find(|p| p.signer_pk.trim_start_matches("0x").to_ascii_lowercase() == new_pk_norm)
+        {
             existing.sig = partial.sig;
             // Keep stored signer_pk as already-normalized from the first insert.
         } else {
@@ -264,7 +274,8 @@ impl Store {
             "append_partial must never touch signed_digest"
         );
 
-        let new_body_json = serde_json::to_string(&dto).context("serialize updated proposal body")?;
+        let new_body_json =
+            serde_json::to_string(&dto).context("serialize updated proposal body")?;
         conn.execute(
             "UPDATE proposals SET body_json = ?1 WHERE id = ?2",
             params![new_body_json, id],
@@ -345,11 +356,13 @@ impl Store {
     fn sweep_expired(&self) -> Result<()> {
         let cutoff = now_unix() - PROPOSAL_RETENTION_SECS;
         let conn = self.conn.lock().expect("db mutex poisoned");
-        conn.execute("DELETE FROM proposals WHERE created_at < ?1", params![cutoff])
-            .context("sweep expired proposals")?;
+        conn.execute(
+            "DELETE FROM proposals WHERE created_at < ?1",
+            params![cutoff],
+        )
+        .context("sweep expired proposals")?;
         Ok(())
     }
-
 }
 
 fn now_unix() -> i64 {
@@ -472,13 +485,7 @@ mod tests {
             let pk = format!("0x{}", hex::encode(vec![i as u8; 96]));
             let sig = format!("0x{}", hex::encode(vec![0x22u8; 48]));
             match store
-                .append_partial(
-                    &id,
-                    PartialDto {
-                        signer_pk: pk,
-                        sig,
-                    },
-                )
+                .append_partial(&id, PartialDto { signer_pk: pk, sig })
                 .unwrap()
             {
                 AppendOutcome::Appended(_) => {}
@@ -570,13 +577,7 @@ mod tests {
         let pk = "0x".to_string() + &"11".repeat(96);
         let sig = "0x".to_string() + &"22".repeat(48);
         match store
-            .append_partial(
-                &id,
-                PartialDto {
-                    signer_pk: pk,
-                    sig,
-                },
-            )
+            .append_partial(&id, PartialDto { signer_pk: pk, sig })
             .unwrap()
         {
             AppendOutcome::Appended(dto) => {

@@ -11,11 +11,11 @@ use dusk_core::abi::{ContractId, Metadata};
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
 use dusk_vm::{ContractData, Session, VM};
 use knot_encoding::proposal_digest_v3;
-use rand::rngs::StdRng;
 use rand::SeedableRng;
-use rkyv::ser::serializers::AllocSerializer;
-use rkyv::ser::Serializer;
+use rand::rngs::StdRng;
 use rkyv::Serialize;
+use rkyv::ser::Serializer;
+use rkyv::ser::serializers::AllocSerializer;
 
 #[path = "../src/call_types.rs"]
 mod call_types;
@@ -25,12 +25,10 @@ use call_types::{ApproveArgs, ProposalStatus, ProposalView, ProposeArgs};
 mod registry_call_types;
 use registry_call_types::CreateAccountArgs;
 
-const PROPOSALS_BYTECODE: &[u8] = include_bytes!(
-    "../../../target/contract/wasm32-unknown-unknown/release/knot_proposals.wasm"
-);
-const REGISTRY_BYTECODE: &[u8] = include_bytes!(
-    "../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm"
-);
+const PROPOSALS_BYTECODE: &[u8] =
+    include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_proposals.wasm");
+const REGISTRY_BYTECODE: &[u8] =
+    include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm");
 const TARGET_BYTECODE: &[u8] = include_bytes!(
     "../test-target/target/contract/wasm32-unknown-unknown/release/proposals_test_target.wasm"
 );
@@ -122,11 +120,7 @@ fn init_proposals(session: &mut Session, owner_pk: &BlsPublicKey) {
     set_sender(session, None);
 }
 
-fn create_account(
-    session: &mut Session,
-    members: Vec<BlsPublicKey>,
-    threshold: u32,
-) -> u64 {
+fn create_account(session: &mut Session, members: Vec<BlsPublicKey>, threshold: u32) -> u64 {
     session
         .call::<CreateAccountArgs, u64>(
             REGISTRY_ID,
@@ -144,7 +138,14 @@ fn propose_set_value(
     value: u64,
     nonce: u64,
 ) -> (u64, [u8; 32]) {
-    propose_fn(session, account_id, "set_value", value, nonce, deadline_at_height(0))
+    propose_fn(
+        session,
+        account_id,
+        "set_value",
+        value,
+        nonce,
+        deadline_at_height(0),
+    )
 }
 
 fn propose_fn(
@@ -716,8 +717,14 @@ fn finalize_reentrancy_runs_target_once() {
     init_proposals(&mut session, &owner_pk);
     let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
 
-    let (proposal_id, digest) =
-        propose_fn(&mut session, account_id, "set_value_reenter_finalize", 77, 1, deadline_at_height(0));
+    let (proposal_id, digest) = propose_fn(
+        &mut session,
+        account_id,
+        "set_value_reenter_finalize",
+        77,
+        1,
+        deadline_at_height(0),
+    );
 
     session
         .call::<(ContractId, u64), ()>(
@@ -753,8 +760,14 @@ fn finalize_failed_call_raw_leaves_proposal_open() {
     init_proposals(&mut session, &owner_pk);
     let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
 
-    let (proposal_id, digest) =
-        propose_fn(&mut session, account_id, "fail_set", 1, 1, deadline_at_height(0));
+    let (proposal_id, digest) = propose_fn(
+        &mut session,
+        account_id,
+        "fail_set",
+        1,
+        1,
+        deadline_at_height(0),
+    );
     approve(&mut session, proposal_id, &sk1, &pk1, &digest);
     approve(&mut session, proposal_id, &sk2, &pk2, &digest);
 
