@@ -47,17 +47,15 @@ authorization on top of that answer.
   cost (N pairing checks) into O(1) (one), natively, no precompile
   workaround needed — BLS aggregation is native on Dusk.
 
-### Diagnostic helpers (ops / investigation)
+### Ops helper
 
-- `account_meta(u64) -> Option<AccountMeta>` — threshold, nonce, members_len
-  (no BLS keys on the wire).
-- `member_key_bytes(u64) -> Option<Vec<Vec<u8>>>` — raw 96-byte compressed
-  member PKs (each inner vec length 96).
 - `next_account_id() -> u64` — next id `create_account` will allocate.
-- `diagnose_quorum(VerifyQuorumArgs) -> DiagnoseQuorumResult` — membership /
-  verify counters plus member key dump. Free-read over RUES may HTTP 500
-  when `abi::verify_bls` runs (same as `verify_quorum` free-read); useful
-  under `VM::ephemeral()` and when the node path works.
+
+`account_meta`, `member_key_bytes`, and `diagnose_quorum` were removed from
+the on-chain ABI (IMPLEMENTATION §4.3 L3). Use
+[`knot-tool`](../knot-tool/README.md) instead — it derives the same ops
+data from `account()` plus local BLS verify (no gas, no RUES verify
+free-read pitfalls).
 
 ## Status
 
