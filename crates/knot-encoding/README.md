@@ -35,6 +35,9 @@ cannot drift.
   out-of-band fingerprints (M3).
 - Domain tags: `nocturne.knot.multisig.proposal.v2` (proposal preimage),
   `nocturne.knot.multisig-registry.change_account.v2` (registry quorum).
+  **v3** (§2.12): `proposal_digest_v3` / `ProposalIntentV3` bind `self_id` +
+  `epoch`; `change_account_digest_v3` binds `chain_id`, registry `self_id`, and
+  explicit `member_count`.
 - `--features call-types` — `call_types::{SignatureEntry, VerifyQuorumArgs,
   MultisigAccountView}`.
 
