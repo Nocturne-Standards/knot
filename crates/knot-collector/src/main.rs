@@ -36,6 +36,12 @@ async fn main() -> Result<()> {
     info!(%bind, "knot-collector listening");
 
     axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("failed to listen for ctrl-c");
+            info!("shutting down gracefully");
+        })
         .await
         .context("axum serve failed")?;
 
