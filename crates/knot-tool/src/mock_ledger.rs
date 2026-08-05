@@ -17,15 +17,25 @@ pub enum DemoMode {
 }
 
 impl DemoMode {
-    pub fn from_env() -> Self {
-        match std::env::var("DEMO_MODE")
-            .unwrap_or_else(|_| "mock".into())
-            .to_ascii_lowercase()
-            .as_str()
-        {
-            "testnet" => DemoMode::Testnet,
-            _ => DemoMode::Mock,
+    /// Require explicit `DEMO_MODE=mock` or `DEMO_MODE=testnet` (R6).
+    pub fn from_env() -> Result<Self, String> {
+        let raw = std::env::var("DEMO_MODE").map_err(|_| {
+            "DEMO_MODE is required — set DEMO_MODE=mock (in-process ledger) or \
+             DEMO_MODE=testnet (live chain) before serve"
+                .to_string()
+        })?;
+        match raw.to_ascii_lowercase().as_str() {
+            "mock" => Ok(DemoMode::Mock),
+            "testnet" => Ok(DemoMode::Testnet),
+            other => Err(format!(
+                "DEMO_MODE={other:?} is invalid — set DEMO_MODE=mock or DEMO_MODE=testnet"
+            )),
         }
+    }
+
+    /// Refuse CLI `change-account --nonce` unless the dev latch is set (R8).
+    pub fn change_account_nonce_override_allowed() -> bool {
+        std::env::var("KNOT_ALLOW_CHANGE_ACCOUNT_NONCE").as_deref() == Ok("1")
     }
 
     pub fn as_str(&self) -> &'static str {
@@ -457,6 +467,70 @@ mod tests {
     }
 
     #[test]
+    fn demo_mode_from_env_requires_explicit_value() {
+        let key = "DEMO_MODE";
+        let prev = std::env::var(key).ok();
+
+        unsafe {
+            std::env::remove_var(key);
+        }
+        let err = DemoMode::from_env().expect_err("unset DEMO_MODE must refuse");
+        assert!(
+            err.contains("DEMO_MODE is required"),
+            "unexpected error: {err}"
+        );
+
+        unsafe {
+            std::env::set_var(key, "bogus");
+        }
+        let err = DemoMode::from_env().expect_err("unknown DEMO_MODE must refuse");
+        assert!(
+            err.contains("invalid"),
+            "unexpected error: {err}"
+        );
+
+        unsafe {
+            std::env::set_var(key, "mock");
+        }
+        assert_eq!(DemoMode::from_env().expect("mock"), DemoMode::Mock);
+
+        unsafe {
+            std::env::set_var(key, "TESTNET");
+        }
+        assert_eq!(DemoMode::from_env().expect("testnet"), DemoMode::Testnet);
+
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+
+    #[test]
+    fn change_account_nonce_latch_refuses_by_default() {
+        let key = "KNOT_ALLOW_CHANGE_ACCOUNT_NONCE";
+        let prev = std::env::var(key).ok();
+        unsafe {
+            std::env::remove_var(key);
+        }
+        assert!(
+            !DemoMode::change_account_nonce_override_allowed(),
+            "nonce override must be refused without latch"
+        );
+        unsafe {
+            std::env::set_var(key, "1");
+        }
+        assert!(DemoMode::change_account_nonce_override_allowed());
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var(key, v),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+
+    #[test]
     fn demo_mode_as_str_for_setup_status() {
         assert_eq!(DemoMode::Mock.as_str(), "mock");
         assert_eq!(DemoMode::Testnet.as_str(), "testnet");
@@ -477,7 +551,7 @@ mod tests {
         assert_eq!(testnet_json["demo_mode"], "testnet");
     }
 
-    /// Mirrors the mock RPC approve/finalize path: real BLS sign of digest,
+    /// Exercises the mock RPC approve/finalize path: real BLS sign of digest,
     /// membership via `MockLedger::approve`, finalize → synthetic tx hash shape.
     #[test]
     fn signed_approve_finalize_path_for_rpc() {

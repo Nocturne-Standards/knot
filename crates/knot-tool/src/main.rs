@@ -768,6 +768,12 @@ async fn main() -> Result<()> {
 
                 let nonce = match nonce {
                     Some(n) => {
+                        if !mock_ledger::DemoMode::change_account_nonce_override_allowed() {
+                            bail!(
+                                "change-account --nonce is refused by default (bypasses account \
+                                 free-read); set KNOT_ALLOW_CHANGE_ACCOUNT_NONCE=1 for diagnostics only"
+                            );
+                        }
                         eprintln!("warning: using --nonce {n} bypass (account free-read skipped)");
                         n
                     }
@@ -1142,7 +1148,7 @@ async fn main() -> Result<()> {
         },
 
         Cmd::Serve { bind } => {
-            let mode = mock_ledger::DemoMode::from_env();
+            let mode = mock_ledger::DemoMode::from_env().map_err(anyhow::Error::msg)?;
             eprintln!(
                 "starting serve (DEMO_MODE={}) — mock skips rusk-wallet for account/proposal APIs",
                 mode.as_str()

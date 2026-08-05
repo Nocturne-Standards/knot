@@ -66,20 +66,34 @@ pub async fn serve(bind: &str, store_path: PathBuf) -> Result<()> {
     serve_with_options(bind, store_path, ServeOptions::default()).await
 }
 
+/// Parse `bind` and refuse unless the address is loopback (R12).
+pub fn validate_loopback_bind(bind: &str) -> Result<std::net::SocketAddr> {
+    let addr: std::net::SocketAddr = bind
+        .parse()
+        .map_err(|e| anyhow::anyhow!("invalid bind address '{bind}': {e}"))?;
+    if !addr.ip().is_loopback() {
+        bail!(
+            "refusing to bind to '{bind}' — knot-tool only serves on loopback \
+             (127.0.0.1 or ::1; see README.md)"
+        );
+    }
+    Ok(addr)
+}
+
 pub async fn serve_with_options(
     bind: &str,
     store_path: PathBuf,
     opts: ServeOptions,
 ) -> Result<()> {
-    if !(bind.starts_with("127.0.0.1:") || bind.starts_with("localhost:")) {
-        bail!("refusing to bind to '{bind}' — knot-tool only ever serves on 127.0.0.1 (see README.md)");
-    }
+    let addr = validate_loopback_bind(bind)?;
 
     let password = crate::prompt_password()?;
     let identities = keystore::load(&store_path, &password)?;
 
-    let demo_mode = DemoMode::from_env();
-    eprintln!("DEMO_MODE={}", demo_mode.as_str());
+    let demo_mode = DemoMode::from_env().map_err(anyhow::Error::msg)?;
+    eprintln!("════════════════════════════════════════════════════════");
+    eprintln!("  DEMO_MODE={} — TESTNET ONLY", demo_mode.as_str());
+    eprintln!("════════════════════════════════════════════════════════");
 
     let mut token_bytes = [0u8; 32];
     OsRng.fill_bytes(&mut token_bytes);
@@ -94,7 +108,6 @@ pub async fn serve_with_options(
 
     let app = build_router(state);
 
-    let addr: std::net::SocketAddr = bind.parse()?;
     // Do not put the bearer token in the printed/opened URL (M8) — it is
     // injected into the local HTML as `window.KNOT_TOOL_TOKEN`; API
     // clients must send header `X-Knot-Token`.
@@ -357,7 +370,7 @@ struct SetupStatusOut {
     #[serde(skip_serializing_if = "Option::is_none")]
     collector_url: Option<String>,
     collector_user_configured: bool,
-    /// `"mock"` | `"testnet"` — mirrors `DEMO_MODE` (default mock).
+    /// `"mock"` | `"testnet"` — matches active `DEMO_MODE` (must be set explicitly).
     demo_mode: &'static str,
 }
 
@@ -1591,6 +1604,32 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/lab/fonts/{file}", get(serve_lab_font))
         .merge(api)
         .with_state(state)
+}
+
+#[cfg(test)]
+mod bind_validation {
+    use super::validate_loopback_bind;
+
+    #[test]
+    fn accepts_ipv4_and_ipv6_loopback() {
+        assert!(validate_loopback_bind("127.0.0.1:8877").is_ok());
+        assert!(validate_loopback_bind("[::1]:8877").is_ok());
+    }
+
+    #[test]
+    fn refuses_non_loopback_and_invalid() {
+        let err = validate_loopback_bind("0.0.0.0:8877").unwrap_err();
+        assert!(
+            err.to_string().contains("refusing to bind"),
+            "unexpected: {err}"
+        );
+        let err = validate_loopback_bind("192.168.1.1:8877").unwrap_err();
+        assert!(
+            err.to_string().contains("refusing to bind"),
+            "unexpected: {err}"
+        );
+        assert!(validate_loopback_bind("not-an-address").is_err());
+    }
 }
 
 #[cfg(test)]
