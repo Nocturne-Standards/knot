@@ -24,8 +24,8 @@ consumes `multisig-proposals` / `multisig-registry` as a client.
 | Crate | License | Version | Role |
 |---|---|---|---|
 | `multisig-encoding` | Apache-2.0 | 0.1.2 | Canonical §4a digest + blob helpers + M3 fingerprint |
-| `multisig-registry` | Apache-2.0 | 0.1.5 | On-chain BLS M-of-N quorum registry |
-| `multisig-proposals` | Apache-2.0 | 0.3.2 | On-chain propose → approve → finalize `call_raw` |
+| `multisig-registry` | Apache-2.0 | 0.1.6 | On-chain BLS M-of-N quorum registry |
+| `multisig-proposals` | Apache-2.0 | 0.3.3 | On-chain propose → approve → finalize `call_raw` |
 | `multisig-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
 | `multisig-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
 
