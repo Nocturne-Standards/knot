@@ -5,7 +5,7 @@
 ## Commits
 
 - `8315a2e` — feat(knot-tool): RPC error-code schema at API boundary (R4)
-- `5d63cbe` — fix(knot-tool): proposal create bad hex returns 400 (review Important)
+- `0452bb4` — fix(knot-tool): proposal create bad hex returns 400 (review Important)
 
 ## Changes
 
