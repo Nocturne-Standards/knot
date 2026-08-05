@@ -72,5 +72,10 @@ mod proposals_test_target {
         pub fn hit_count(&self) -> u64 {
             self.hit_count
         }
+
+        /// Host-metadata probe for phase-3a `abi::chain_id` gate.
+        pub fn chain_id(&self) -> u8 {
+            abi::chain_id()
+        }
     }
 }

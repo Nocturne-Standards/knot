@@ -1,7 +1,8 @@
 # Knot — implementation truth
 
-**Written against `b1d883d`** (residual audit HEAD; settle pass began at `46a64b4`).
-Settled-gap + §10 phasing + §11 residual findings 2026-08-05.
+**Written against `276b19e`** (residual audit HEAD; settle pass began at `46a64b4`).
+Settled-gap + §10 phasing + §11 residual findings 2026-08-05. §2.5 chain_id
+ephemeral probe confirmed 2026-08-05 (leaf #2).
 
 **This file is authoritative.** Where it disagrees with `AUDIT-2026-08-05.md`,
 this file wins — the audit was written against `2fb3c94` and is frozen evidence,
@@ -191,9 +192,14 @@ Two consequences:
 - **`init_chain_id` disappears**, removing one of three owner-only entry points to
   `wipe_open_proposals()`.
 - **`abi::chain_id()` panics if the host has no `CHAIN_ID` metadata.**
-  `VM::ephemeral()` may not set it — same class as the known PreFork/ephemeral gap
-  documented in `bls.rs`. **Verify this first; it blocks the entire change.** If
-  unset, a test-only shim is required before anything else proceeds.
+  **Verified 2026-08-05 (leaf #2):** under the repo's test harness
+  (`VM::ephemeral()` then `genesis_session(chain_id)`), `abi::chain_id()` returns
+  the genesis chain id — `dusk-vm` 1.6.0 `genesis_session` inserts
+  `Metadata::CHAIN_ID` (`vm/src/lib.rs:261-272`). Panics only when metadata is
+  absent (e.g. bare `VM::ephemeral()` without `genesis_session`). **No test shim
+  required.** Probe: `knot-proposals/tests/contract.rs::
+  abi_chain_id_available_under_ephemeral_vm` (test-target `chain_id()` →
+  `abi::chain_id()`).
 
 ### 2.6 M3 — the nonce does two jobs, and one of them is wrong
 
@@ -512,7 +518,8 @@ pruned record. With the above, events alone are a complete archive.
 
 ### 2.14 Migration order
 
-1. **Confirm `abi::chain_id()` under `VM::ephemeral()`.** Blocks everything else.
+1. **Confirm `abi::chain_id()` under `VM::ephemeral()`.** Done (leaf #2,
+   2026-08-05) — works via `genesis_session(chain_id)`; no shim.
 2. Encoding: add v3 preimages; keep v2 one release for tooling only if still useful
    internally — public launch burns v2 anyway.
 3. Contracts: state and methods above. Re-run layout goldens — `ProposeArgs` gains

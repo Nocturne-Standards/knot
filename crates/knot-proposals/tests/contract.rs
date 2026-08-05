@@ -182,6 +182,27 @@ fn approve(
         .expect("approve should succeed");
 }
 
+/// Phase-3a gate: `abi::chain_id()` under the repo's `VM::ephemeral()` harness.
+///
+/// `VM::ephemeral()` alone does not set `Metadata::CHAIN_ID`; our tests always
+/// call `genesis_session(chain_id)` which does (`dusk-vm` 1.6.0 `vm/src/lib.rs`).
+#[test]
+fn abi_chain_id_available_under_ephemeral_vm() {
+    let rng = &mut StdRng::seed_from_u64(0xCAFE);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+
+    let chain_id: u8 = session
+        .call::<(), u8>(TARGET_ID, "chain_id", &(), POINT_LIMIT)
+        .expect("abi::chain_id probe call should succeed")
+        .data;
+
+    assert_eq!(
+        chain_id, CHAIN_ID,
+        "abi::chain_id must match genesis_session chain id"
+    );
+}
+
 #[test]
 fn init_registry_rejects_non_owner() {
     let rng = &mut StdRng::seed_from_u64(1);
