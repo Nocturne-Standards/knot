@@ -3,7 +3,7 @@
 
 //! Digest recomputation (C1) via `knot-encoding` — no `dusk-core` on this path.
 
-use knot_encoding::{recompute_and_verify, GateError, ProposalIntent};
+use knot_encoding::{GateError, ProposalIntent, recompute_and_verify};
 
 use crate::dto::{BlobKind, IntentDto, ProposalDto};
 

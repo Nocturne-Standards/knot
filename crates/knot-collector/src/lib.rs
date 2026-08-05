@@ -4,8 +4,9 @@
 //! Library surface for `knot-collector` — an untrusted off-chain
 //! signature/proposal relay (Safe Transaction Service analogue). Holds only
 //! serialized blobs: no keystore, no BLS signing, no wallet, no chain
-//! submit. See `docs/superpowers/specs/2026-07-23-knot-collector-monorepo-demo-design.md`
-//! §2 for the full trust model and API surface.
+//! submit. See `docs/security-model.md` and `docs/design-notes.md` for the
+//! trust model: the collector never holds secret keys; signers must call
+//! `gate_blob_for_signing` locally before signing.
 //!
 //! The collector **never holds secret keys, never signs, and never submits
 //! on-chain transactions**. It may verify public BLS signatures and

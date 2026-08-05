@@ -11,6 +11,8 @@
 extern crate alloc;
 
 mod chain;
+#[cfg(not(feature = "deployments-crate"))]
+mod deployments;
 mod keystore;
 mod proposals_types;
 mod registry_types;
@@ -18,19 +20,17 @@ mod rpc;
 
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use dusk_bytes::Serializable;
 use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
 use knot_tool::{blob, bls, collector_client, diagnose, membership, mock_ledger};
 
-use proposals_types::call_types::{
-    ApproveArgs, ProposalStatus, ProposalView, ProposeArgs,
-};
+use proposals_types::call_types::{ApproveArgs, ProposalStatus, ProposalView, ProposeArgs};
 use registry_types::call_types::{
-    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
-    SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
+    VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
 
 #[derive(Parser)]
@@ -111,10 +111,14 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum IdentityCmd {
-    New { name: String },
+    New {
+        name: String,
+    },
     List,
     /// Print a local identity's public key (base58 + hex) for sharing.
-    Export { name: String },
+    Export {
+        name: String,
+    },
     /// Import a foreign public key as a pk-only identity (cannot sign).
     ImportPk {
         name: String,
@@ -132,11 +136,17 @@ enum AccountCmd {
         #[arg(long)]
         threshold: u32,
     },
-    Query { account_id: u64 },
+    Query {
+        account_id: u64,
+    },
     /// Free-read scalars only (threshold/nonce/members_len) — no BLS keys.
-    Meta { account_id: u64 },
+    Meta {
+        account_id: u64,
+    },
     /// Free-read raw 96-byte member public keys.
-    Keys { account_id: u64 },
+    Keys {
+        account_id: u64,
+    },
     /// Free-read next account id the contract will allocate.
     NextId,
     /// Scan registry accounts `0..min(next_id, limit)` and print summaries.
@@ -315,9 +325,7 @@ enum BlobCmd {
         summary: Option<String>,
     },
     /// Recompute digest + print canonical intent (refuses on mismatch).
-    Show {
-        file: PathBuf,
-    },
+    Show { file: PathBuf },
     /// Gate + add one local `sign_multisig` partial; write updated file.
     ///
     /// Local mode: `--file`/`--out` (unchanged).
@@ -344,9 +352,7 @@ enum BlobCmd {
         confirm: bool,
     },
     /// Aggregate partials (threshold must be met); print keys + aggregate hex.
-    Aggregate {
-        file: PathBuf,
-    },
+    Aggregate { file: PathBuf },
     /// Aggregate + submit `verify_quorum_aggregate` as one testnet tx.
     SubmitAgg {
         #[arg(long)]
@@ -355,9 +361,7 @@ enum BlobCmd {
         account: u64,
     },
     /// Print out-of-band full-digest fingerprint (hex + 24-word mnemonic).
-    Fingerprint {
-        file: PathBuf,
-    },
+    Fingerprint { file: PathBuf },
     /// POST a local blob file to the collector; prints the content-addressed id.
     Push {
         #[arg(long)]
@@ -478,11 +482,13 @@ fn load_store(path: &std::path::Path) -> Result<(Vec<keystore::Identity>, String
     Ok((identities, password))
 }
 
-fn find_identity<'a>(identities: &'a [keystore::Identity], name: &str) -> Result<&'a keystore::Identity> {
-    identities
-        .iter()
-        .find(|i| i.name == name)
-        .ok_or_else(|| anyhow::anyhow!("no identity named '{name}' — run `identity new {name}` first"))
+fn find_identity<'a>(
+    identities: &'a [keystore::Identity],
+    name: &str,
+) -> Result<&'a keystore::Identity> {
+    identities.iter().find(|i| i.name == name).ok_or_else(|| {
+        anyhow::anyhow!("no identity named '{name}' — run `identity new {name}` first")
+    })
 }
 
 fn msg_bytes(msg: &str, hex_flag: bool) -> Result<Vec<u8>> {
@@ -531,9 +537,7 @@ async fn print_quorum_free_read(
         d.exists, d.threshold, d.members_len, d.member_matches, d.sigs_ok
     );
     if d.member_matches > 0 && d.sigs_ok == 0 {
-        println!(
-            "note: signatures did not verify locally — check message bytes and signer keys."
-        );
+        println!("note: signatures did not verify locally — check message bytes and signer keys.");
     }
     for (i, k) in d.member_pk_bytes.iter().enumerate() {
         let hex_k = hex::encode(k);
@@ -603,7 +607,14 @@ async fn main() -> Result<()> {
                 let id = find_identity(&identities, &name)?;
                 use dusk_bytes::Serializable;
                 println!("name: {}", id.name);
-                println!("kind: {}", if id.is_pk_only() { "pk-only" } else { "signing" });
+                println!(
+                    "kind: {}",
+                    if id.is_pk_only() {
+                        "pk-only"
+                    } else {
+                        "signing"
+                    }
+                );
                 println!("pk_base58: {}", rpc::bs58_pk(&id.pk));
                 println!("pk_hex: {}", hex::encode(id.pk.to_bytes()));
             }
@@ -627,7 +638,10 @@ async fn main() -> Result<()> {
                     .iter()
                     .map(|name| find_identity(&identities, name).map(|i| i.pk))
                     .collect::<Result<_>>()?;
-                let args = CreateAccountArgs { members: member_pks, threshold };
+                let args = CreateAccountArgs {
+                    members: member_pks,
+                    threshold,
+                };
                 let bytes = chain::encode(&args)?;
                 let result = chain::submit_call("create_account", &bytes)?;
                 print_write_result("create_account", result);
@@ -637,7 +651,10 @@ async fn main() -> Result<()> {
                 let view: Option<MultisigAccountView> = chain::query("account", bytes).await?;
                 match view {
                     Some(v) => {
-                        println!("account {account_id}: threshold={}, nonce={}", v.threshold, v.nonce);
+                        println!(
+                            "account {account_id}: threshold={}, nonce={}",
+                            v.threshold, v.nonce
+                        );
                         for pk in &v.members {
                             println!("  member: {}", rpc::bs58_pk(pk));
                         }
@@ -650,7 +667,9 @@ async fn main() -> Result<()> {
                 match view {
                     Some(v) => println!(
                         "account_meta {account_id}: threshold={}, nonce={}, members_len={}",
-                        v.threshold, v.nonce, v.members.len()
+                        v.threshold,
+                        v.nonce,
+                        v.members.len()
                     ),
                     None => println!("account_meta {account_id}: not found"),
                 }
@@ -695,7 +714,13 @@ async fn main() -> Result<()> {
         },
 
         Cmd::Quorum { cmd } => match cmd {
-            QuorumCmd::Submit { account, msg, hex, signers, confirm } => {
+            QuorumCmd::Submit {
+                account,
+                msg,
+                hex,
+                signers,
+                confirm,
+            } => {
                 let (identities, _) = load_store(&store_path)?;
                 ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
@@ -722,7 +747,12 @@ async fn main() -> Result<()> {
                 );
                 print_quorum_free_read("post-submit", account, &args, &local_pks).await?;
             }
-            QuorumCmd::Check { account, msg, hex, signers } => {
+            QuorumCmd::Check {
+                account,
+                msg,
+                hex,
+                signers,
+            } => {
                 let (identities, _) = load_store(&store_path)?;
                 ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
@@ -735,7 +765,12 @@ async fn main() -> Result<()> {
                 };
                 print_quorum_free_read("verify_quorum", account, &args, &local_pks).await?;
             }
-            QuorumCmd::Diagnose { account, msg, hex, signers } => {
+            QuorumCmd::Diagnose {
+                account,
+                msg,
+                hex,
+                signers,
+            } => {
                 let (identities, _) = load_store(&store_path)?;
                 ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
@@ -751,7 +786,13 @@ async fn main() -> Result<()> {
         },
 
         Cmd::QuorumAgg { cmd } => match cmd {
-            QuorumAggCmd::Submit { account, msg, hex, signers, confirm } => {
+            QuorumAggCmd::Submit {
+                account,
+                msg,
+                hex,
+                signers,
+                confirm,
+            } => {
                 let (identities, _) = load_store(&store_path)?;
                 ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
@@ -762,7 +803,8 @@ async fn main() -> Result<()> {
                     );
                 }
                 require_cli_confirm(confirm)?;
-                let (signer_keys, aggregate_sig) = build_aggregate(&identities, &signers, &msg_bytes)?;
+                let (signer_keys, aggregate_sig) =
+                    build_aggregate(&identities, &signers, &msg_bytes)?;
                 let args = VerifyQuorumAggregateArgs {
                     account_id: account,
                     msg: msg_bytes,
@@ -773,11 +815,17 @@ async fn main() -> Result<()> {
                 let result = chain::submit_call("verify_quorum_aggregate", &bytes)?;
                 print_write_result("verify_quorum_aggregate", result);
             }
-            QuorumAggCmd::Check { account, msg, hex, signers } => {
+            QuorumAggCmd::Check {
+                account,
+                msg,
+                hex,
+                signers,
+            } => {
                 let (identities, _) = load_store(&store_path)?;
                 ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
-                let (signer_keys, aggregate_sig) = build_aggregate(&identities, &signers, &msg_bytes)?;
+                let (signer_keys, aggregate_sig) =
+                    build_aggregate(&identities, &signers, &msg_bytes)?;
                 let args = VerifyQuorumAggregateArgs {
                     account_id: account,
                     msg: msg_bytes,
@@ -825,8 +873,7 @@ async fn main() -> Result<()> {
                     }
                 };
 
-                let registry_self_id =
-                    chain::contract_self_id_bytes(chain::Contract::Registry)?;
+                let registry_self_id = chain::contract_self_id_bytes(chain::Contract::Registry)?;
 
                 let msg = bls::change_account_message(
                     &registry_self_id,
@@ -926,8 +973,7 @@ async fn main() -> Result<()> {
                 if view.status != ProposalStatus::Open {
                     bail!("proposal {id} is not Open");
                 }
-                let proposals_self_id =
-                    chain::contract_self_id_bytes(chain::Contract::Proposals)?;
+                let proposals_self_id = chain::contract_self_id_bytes(chain::Contract::Proposals)?;
                 let intent = bls::proposal_intent_v3_from_view(
                     &view,
                     bls::digest_chain_id(),
@@ -935,10 +981,10 @@ async fn main() -> Result<()> {
                 );
                 let digest = knot_encoding::recompute_and_verify_v3(&intent, &view.signed_digest)
                     .map_err(|_| {
-                        anyhow::anyhow!(
-                            "REFUSING TO SIGN: on-chain digest does not match recomputed intent"
-                        )
-                    })?;
+                    anyhow::anyhow!(
+                        "REFUSING TO SIGN: on-chain digest does not match recomputed intent"
+                    )
+                })?;
                 if let Some(expected) = expect_digest {
                     let want = hex::decode(expected.trim_start_matches("0x"))?;
                     if want.as_slice() != digest.as_slice() {
@@ -966,8 +1012,12 @@ async fn main() -> Result<()> {
                     knot_encoding::digest_safety_number(&digest)
                 );
                 require_cli_confirm(confirm)?;
-                ensure_cli_signers_are_members(view.registry_account_id, &identities, &[signer.clone()])
-                    .await?;
+                ensure_cli_signers_are_members(
+                    view.registry_account_id,
+                    &identities,
+                    std::slice::from_ref(&signer),
+                )
+                .await?;
                 let signature = bls::sign(sk, &digest);
                 let args = ApproveArgs {
                     proposal_id: id,
@@ -1084,8 +1134,8 @@ async fn main() -> Result<()> {
                 let identity = find_identity(&identities, &signer)?;
                 let sk = identity.require_sk()?;
 
-                let use_collector = collector.is_some()
-                    || std::env::var(collector_client::URL_ENV).is_ok();
+                let use_collector =
+                    collector.is_some() || std::env::var(collector_client::URL_ENV).is_ok();
                 if use_collector {
                     let id = id.ok_or_else(|| {
                         anyhow::anyhow!("--id is required in collector mode (with --collector)")
@@ -1120,7 +1170,9 @@ async fn main() -> Result<()> {
                     }
                 } else {
                     let file = file.ok_or_else(|| {
-                        anyhow::anyhow!("--file is required in local mode (or use --collector/--id)")
+                        anyhow::anyhow!(
+                            "--file is required in local mode (or use --collector/--id)"
+                        )
                     })?;
                     let out = out.ok_or_else(|| {
                         anyhow::anyhow!("--out is required in local mode (with --file)")
@@ -1180,7 +1232,10 @@ async fn main() -> Result<()> {
                 blob::gate_blob_file_for_push(&file_blob)?;
                 let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
                 let resp = client.push(&file_blob).await?;
-                println!("pushed: id={} signed_digest={}", resp.id, resp.signed_digest);
+                println!(
+                    "pushed: id={} signed_digest={}",
+                    resp.id, resp.signed_digest
+                );
             }
             BlobCmd::Pull { id, out, collector } => {
                 let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
@@ -1201,7 +1256,12 @@ async fn main() -> Result<()> {
                     println!("  {} pk={} note={note}", m.name, m.pk);
                 }
             }
-            PartyCmd::Signup { name, pk, note, collector } => {
+            PartyCmd::Signup {
+                name,
+                pk,
+                note,
+                collector,
+            } => {
                 let (identities, _) = load_store(&store_path)?;
                 let identity = find_identity(&identities, &name)?;
                 let sk = identity.require_sk()?;
@@ -1284,7 +1344,10 @@ fn build_aggregate(
     identities: &[keystore::Identity],
     signers: &[String],
     msg: &[u8],
-) -> Result<(Vec<BlsPublicKey>, dusk_core::signatures::bls::MultisigSignature)> {
+) -> Result<(
+    Vec<BlsPublicKey>,
+    dusk_core::signatures::bls::MultisigSignature,
+)> {
     let ids: Vec<&keystore::Identity> = signers
         .iter()
         .map(|name| find_identity(identities, name))

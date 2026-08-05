@@ -17,8 +17,8 @@ use axum::{Json, Router};
 use serde_json::json;
 
 use crate::dto::{
-    digest_to_id, normalize_hex, normalize_pk, IntentDto, PartialDto, PartySignupDto, ProposalDto,
-    DIGEST_BYTES, PK_BYTES,
+    DIGEST_BYTES, IntentDto, PK_BYTES, PartialDto, PartySignupDto, ProposalDto, digest_to_id,
+    normalize_hex, normalize_pk,
 };
 use crate::gate::gate_proposal_digest;
 use crate::store::{AppendOutcome, CreateOutcome};
@@ -83,8 +83,7 @@ fn list_params(query: ListQuery) -> Result<(u32, u32), String> {
 
 fn decode_sig_bytes(sig: &str) -> Result<Vec<u8>, String> {
     let sig_stripped = sig.strip_prefix("0x").unwrap_or(sig);
-    let sig_bytes = hex::decode(sig_stripped)
-        .map_err(|e| format!("sig: invalid hex: {e}"))?;
+    let sig_bytes = hex::decode(sig_stripped).map_err(|e| format!("sig: invalid hex: {e}"))?;
     if sig_bytes.len() != BLS_SIG_BYTES {
         return Err(format!(
             "sig: expected {BLS_SIG_BYTES} bytes (BLS signature), got {}",
@@ -247,7 +246,10 @@ async fn append_partial(
         }
         Ok(AppendOutcome::TooManyPartials) => error_response(
             StatusCode::BAD_REQUEST,
-            format!("proposal already has the maximum of {} partials", crate::MAX_PARTIALS),
+            format!(
+                "proposal already has the maximum of {} partials",
+                crate::MAX_PARTIALS
+            ),
         ),
         Err(e) => internal_error(e),
     }
@@ -264,10 +266,7 @@ async fn list_party(State(state): State<AppState>, Query(query): Query<ListQuery
     }
 }
 
-async fn signup_party(
-    State(state): State<AppState>,
-    Json(dto): Json<PartySignupDto>,
-) -> Response {
+async fn signup_party(State(state): State<AppState>, Json(dto): Json<PartySignupDto>) -> Response {
     let pk = match normalize_pk(&dto.pk) {
         Ok(pk) => pk,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("pk: {e}")),
@@ -320,12 +319,10 @@ mod tests {
     use axum::body::Body;
     use axum::http::Request;
     use dusk_bytes::Serializable;
-    use dusk_core::signatures::bls::{
-        PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
-    };
+    use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
     use knot_encoding::{ProposalIntent, proposal_digest};
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
     use tower::ServiceExt;
 
     fn keypair(rng: &mut StdRng) -> (BlsSecretKey, BlsPublicKey) {
@@ -379,7 +376,10 @@ mod tests {
     }
 
     fn digest_bytes_from_dto(dto: &ProposalDto) -> [u8; 32] {
-        let stripped = dto.signed_digest.strip_prefix("0x").unwrap_or(&dto.signed_digest);
+        let stripped = dto
+            .signed_digest
+            .strip_prefix("0x")
+            .unwrap_or(&dto.signed_digest);
         let raw = hex::decode(stripped).expect("digest hex");
         raw.as_slice().try_into().expect("32 bytes")
     }
@@ -421,6 +421,7 @@ mod tests {
         assert_eq!(json["version"], env!("CARGO_PKG_VERSION"));
     }
 
+    #[allow(dead_code)]
     fn sample_dto_legacy(_digest: &str) -> ProposalDto {
         sample_dto()
     }
@@ -553,7 +554,10 @@ mod tests {
             ))
             .await
             .unwrap();
-        let id = body_json(create_resp).await["id"].as_str().unwrap().to_string();
+        let id = body_json(create_resp).await["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let pk = format!("0x{}", "11".repeat(96));
         let bad_sig = format!("0x{}", "22".repeat(47)); // 47 bytes, not 48
@@ -584,7 +588,10 @@ mod tests {
             ))
             .await
             .unwrap();
-        let id = body_json(create_resp).await["id"].as_str().unwrap().to_string();
+        let id = body_json(create_resp).await["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         let pk = format!("0x{}", "11".repeat(96));
         let junk_sig = format!("0x{}", "22".repeat(48));
@@ -617,7 +624,10 @@ mod tests {
             ))
             .await
             .unwrap();
-        let id = body_json(create_resp).await["id"].as_str().unwrap().to_string();
+        let id = body_json(create_resp).await["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
 
         for i in 0..crate::MAX_PARTIALS {
             let (sk, pk) = keypair(&mut rng);
@@ -975,7 +985,11 @@ mod tests {
             .unwrap();
         let list = body_json(list_resp).await;
         let arr = list.as_array().unwrap();
-        assert_eq!(arr.len(), 1, "upsert must not create a duplicate roster row");
+        assert_eq!(
+            arr.len(),
+            1,
+            "upsert must not create a duplicate roster row"
+        );
         assert_eq!(arr[0]["name"], "Bob Renamed");
     }
 

@@ -14,42 +14,39 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use axum::extract::{Path as AxPath, Query, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use dusk_bytes::Serializable;
 use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-use rand::rngs::OsRng;
 use rand::RngCore;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 use tokio::sync::Mutex;
 
-use crate::proposals_types::call_types::{
-    ApproveArgs, ProposalStatus, ProposalView, ProposeArgs,
-};
+use crate::proposals_types::call_types::{ApproveArgs, ProposalStatus, ProposalView, ProposeArgs};
 use crate::registry_types::call_types::{
-    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
-    SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
+    VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
-use knot_encoding::call_types::DiagnoseQuorumResult;
 use crate::{chain, keystore};
-use knot_tool::bls;
+use knot_encoding::call_types::DiagnoseQuorumResult;
 use knot_tool::blob;
+use knot_tool::bls;
 use knot_tool::collector_client::{self, CollectorClient};
 use knot_tool::diagnose;
 use knot_tool::membership;
 use knot_tool::mock_ledger::{
-    DemoMode, MockLedger, MockProposal, MockProposalStatus, MOCK_CHAIN_ID, MOCK_PROPOSALS_SELF_ID,
-    MOCK_REGISTRY_SELF_ID,
+    DemoMode, MOCK_CHAIN_ID, MOCK_PROPOSALS_SELF_ID, MOCK_REGISTRY_SELF_ID, MockLedger,
+    MockProposal, MockProposalStatus,
 };
 
 /// Chain id baked into mock proposals (matches live testnet `init_chain_id`).
-
 const SESSION_COOKIE: &str = "knot_session";
 
 /// R4: fixed API error catalog — variable / wallet / `Display` details go to stderr only.
@@ -245,7 +242,6 @@ pub struct ServeOptions {
     pub open_browser: bool,
 }
 
-
 pub async fn serve(bind: &str, store_path: PathBuf) -> Result<()> {
     serve_with_options(bind, store_path, ServeOptions::default()).await
 }
@@ -264,11 +260,7 @@ pub fn validate_loopback_bind(bind: &str) -> Result<std::net::SocketAddr> {
     Ok(addr)
 }
 
-pub async fn serve_with_options(
-    bind: &str,
-    store_path: PathBuf,
-    opts: ServeOptions,
-) -> Result<()> {
+pub async fn serve_with_options(bind: &str, store_path: PathBuf, opts: ServeOptions) -> Result<()> {
     let addr = validate_loopback_bind(bind)?;
 
     let password = crate::prompt_password()?;
@@ -302,11 +294,11 @@ pub async fn serve_with_options(
     let app = build_router(state);
 
     let mut url = format!("http://{addr}/?code={otp}");
-    if let Some(extra) = &opts.query_extra {
-        if !extra.is_empty() {
-            url.push('&');
-            url.push_str(extra.trim_start_matches('&').trim_start_matches('?'));
-        }
+    if let Some(extra) = &opts.query_extra
+        && !extra.is_empty()
+    {
+        url.push('&');
+        url.push_str(extra.trim_start_matches('&').trim_start_matches('?'));
     }
     if let Some(tab) = &opts.open_tab {
         url.push('#');
@@ -407,10 +399,7 @@ struct IndexQuery {
     code: Option<String>,
 }
 
-async fn index(
-    State(state): State<Arc<AppState>>,
-    Query(q): Query<IndexQuery>,
-) -> Response {
+async fn index(State(state): State<Arc<AppState>>, Query(q): Query<IndexQuery>) -> Response {
     if let Some(code) = q.code {
         let mut otp_guard = state.otp.lock().await;
         let valid = otp_guard
@@ -418,7 +407,11 @@ async fn index(
             .map(|otp| constant_time_eq(&code, otp))
             .unwrap_or(false);
         if !valid {
-            return (StatusCode::UNAUTHORIZED, "invalid or expired bootstrap code").into_response();
+            return (
+                StatusCode::UNAUTHORIZED,
+                "invalid or expired bootstrap code",
+            )
+                .into_response();
         }
         *otp_guard = None;
         let cookie = match session_cookie_value(&state.session_token) {
@@ -462,27 +455,45 @@ async fn mock_ledger_js() -> impl IntoResponse {
 }
 
 async fn style_css() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/style.css"))
+    (
+        [(header::CONTENT_TYPE, "text/css")],
+        include_str!("../static/style.css"),
+    )
 }
 
 async fn fonts_css() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/fonts.css"))
+    (
+        [(header::CONTENT_TYPE, "text/css")],
+        include_str!("../static/fonts.css"),
+    )
 }
 
 async fn lab_fonts_css() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/lab/fonts.css"))
+    (
+        [(header::CONTENT_TYPE, "text/css")],
+        include_str!("../static/lab/fonts.css"),
+    )
 }
 
 async fn lab_tokens_css() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/lab/tokens.css"))
+    (
+        [(header::CONTENT_TYPE, "text/css")],
+        include_str!("../static/lab/tokens.css"),
+    )
 }
 
 async fn lab_layout_css() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/lab/layout.css"))
+    (
+        [(header::CONTENT_TYPE, "text/css")],
+        include_str!("../static/lab/layout.css"),
+    )
 }
 
 async fn lab_components_css() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "text/css")], include_str!("../static/lab/components.css"))
+    (
+        [(header::CONTENT_TYPE, "text/css")],
+        include_str!("../static/lab/components.css"),
+    )
 }
 
 async fn serve_font(AxPath(file): AxPath<String>) -> Result<Response, StatusCode> {
@@ -753,7 +764,9 @@ async fn api_party_list(
     mock_drawer_unavailable(&state)?;
     let client = CollectorClient::resolve(None).map_err(RpcError::collector_config)?;
     let members = client.list_party().await.map_err(RpcError::internal)?;
-    Ok(Json(members.into_iter().map(PartyMemberOut::from).collect()))
+    Ok(Json(
+        members.into_iter().map(PartyMemberOut::from).collect(),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -902,18 +915,22 @@ async fn api_account_query(
 ) -> ApiResult<Json<Option<AccountView>>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
-        return Ok(Json(mock.account(id).map(|v| AccountView {
-            threshold: v.threshold,
-            nonce: v.nonce,
-            members: v
-                .members
-                .iter()
-                .map(|pk| bs58::encode(pk).into_string())
-                .collect(),
+        return Ok(Json(mock.account(id).map(|v| {
+            AccountView {
+                threshold: v.threshold,
+                nonce: v.nonce,
+                members: v
+                    .members
+                    .iter()
+                    .map(|pk| bs58::encode(pk).into_string())
+                    .collect(),
+            }
         })));
     }
     let bytes = chain::encode(&id).map_err(RpcError::internal)?;
-    let view: Option<MultisigAccountView> = chain::query("account", bytes).await.map_err(RpcError::internal)?;
+    let view: Option<MultisigAccountView> = chain::query("account", bytes)
+        .await
+        .map_err(RpcError::internal)?;
     Ok(Json(view.map(|v| AccountView {
         threshold: v.threshold,
         nonce: v.nonce,
@@ -954,12 +971,10 @@ async fn api_account_keys(
 ) -> ApiResult<Json<Option<Vec<String>>>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
-        return Ok(Json(mock.account(id).map(|a| {
-            a.members
-                .into_iter()
-                .map(|pk| hex::encode(pk))
-                .collect()
-        })));
+        return Ok(Json(
+            mock.account(id)
+                .map(|a| a.members.into_iter().map(hex::encode).collect()),
+        ));
     }
     let view = fetch_registry_account(state.as_ref(), id).await.ok();
     Ok(Json(view.map(|v| {
@@ -970,15 +985,15 @@ async fn api_account_keys(
     })))
 }
 
-async fn api_account_next_id(
-    State(state): State<Arc<AppState>>,
-) -> ApiResult<Json<u64>> {
+async fn api_account_next_id(State(state): State<Arc<AppState>>) -> ApiResult<Json<u64>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         return Ok(Json(mock.next_account_id()));
     }
     let bytes = chain::encode(&()).map_err(RpcError::internal)?;
-    let next: u64 = chain::query("next_account_id", bytes).await.map_err(RpcError::internal)?;
+    let next: u64 = chain::query("next_account_id", bytes)
+        .await
+        .map_err(RpcError::internal)?;
     Ok(Json(next))
 }
 
@@ -1020,8 +1035,9 @@ async fn api_registry_accounts(
     let mut rows = Vec::new();
     for id in 0..end {
         let bytes = chain::encode(&id).map_err(RpcError::internal)?;
-        let view: Option<MultisigAccountView> =
-            chain::query("account", bytes).await.map_err(RpcError::internal)?;
+        let view: Option<MultisigAccountView> = chain::query("account", bytes)
+            .await
+            .map_err(RpcError::internal)?;
         let Some(v) = view else {
             continue;
         };
@@ -1141,7 +1157,9 @@ async fn fetch_registry_account(
         return Ok(account.to_account_view());
     }
     let bytes = chain::encode(&account_id).map_err(RpcError::internal)?;
-    let view: Option<MultisigAccountView> = chain::query("account", bytes).await.map_err(RpcError::internal)?;
+    let view: Option<MultisigAccountView> = chain::query("account", bytes)
+        .await
+        .map_err(RpcError::internal)?;
     view.ok_or_else(|| RpcError::account_not_found(account_id))
 }
 
@@ -1168,8 +1186,7 @@ async fn ensure_signers_are_members(
 ) -> ApiResult<()> {
     let view = fetch_registry_account(state, account_id).await?;
     let pks = resolve_signer_pks_locked(state, signer_names).await?;
-    membership::ensure_pks_are_members(account_id, &pks, &view)
-        .map_err(RpcError::not_a_member)
+    membership::ensure_pks_are_members(account_id, &pks, &view).map_err(RpcError::not_a_member)
 }
 
 fn ensure_pks_are_members_view(
@@ -1177,8 +1194,7 @@ fn ensure_pks_are_members_view(
     signer_pks: &[BlsPublicKey],
     view: &MultisigAccountView,
 ) -> ApiResult<()> {
-    membership::ensure_pks_are_members(account_id, signer_pks, view)
-        .map_err(RpcError::not_a_member)
+    membership::ensure_pks_are_members(account_id, signer_pks, view).map_err(RpcError::not_a_member)
 }
 
 async fn build_sigs_locked(
@@ -1193,9 +1209,7 @@ async fn build_sigs_locked(
             .iter()
             .find(|i| &i.name == name)
             .ok_or_else(|| RpcError::identity_not_found(name))?;
-        let sk = id
-            .require_sk()
-            .map_err(RpcError::invalid_input)?;
+        let sk = id.require_sk().map_err(RpcError::invalid_input)?;
         sigs.push(SignatureEntry {
             signer: id.pk,
             signature: bls::sign(sk, msg),
@@ -1284,7 +1298,11 @@ async fn api_quorum_check(
     };
     let (diagnose, check) = free_read_quorum(&state, &args).await?;
     let mut note = None;
-    if diagnose.as_ref().map(|d| d.free_read_untrusted).unwrap_or(false) {
+    if diagnose
+        .as_ref()
+        .map(|d| d.free_read_untrusted)
+        .unwrap_or(false)
+    {
         note = Some(
             "Free-read verify looks untrusted (members matched, sigs_ok=0). Prefer change_account counters."
                 .into(),
@@ -1337,9 +1355,7 @@ async fn api_quorum_agg_submit(
             .iter()
             .find(|i| &i.name == name)
             .ok_or_else(|| RpcError::identity_not_found(name))?;
-        let sk = id
-            .require_sk()
-            .map_err(RpcError::invalid_input)?;
+        let sk = id.require_sk().map_err(RpcError::invalid_input)?;
         signer_keys.push(id.pk);
         per_signer_sigs.push(bls::sign_multisig(sk, &id.pk, &msg));
     }
@@ -1359,9 +1375,13 @@ async fn api_quorum_agg_submit(
             .map_err(RpcError::internal)?
             .map_err(RpcError::internal)?;
     let mut out = submit_from_log(result.stdout);
-    out.note = Some("Aggregate path: bool return not in wallet log; free-read check may be untrusted.".into());
+    out.note = Some(
+        "Aggregate path: bool return not in wallet log; free-read check may be untrusted.".into(),
+    );
     let check_bytes = chain::encode(&args).map_err(RpcError::internal)?;
-    out.check = chain::query::<bool>("verify_quorum_aggregate", check_bytes).await.ok();
+    out.check = chain::query::<bool>("verify_quorum_aggregate", check_bytes)
+        .await
+        .ok();
     Ok(Json(out))
 }
 
@@ -1380,9 +1400,7 @@ async fn api_quorum_agg_check(
             .iter()
             .find(|i| &i.name == name)
             .ok_or_else(|| RpcError::identity_not_found(name))?;
-        let sk = id
-            .require_sk()
-            .map_err(RpcError::invalid_input)?;
+        let sk = id.require_sk().map_err(RpcError::invalid_input)?;
         signer_keys.push(id.pk);
         per_signer_sigs.push(bls::sign_multisig(sk, &id.pk, &msg));
     }
@@ -1395,7 +1413,9 @@ async fn api_quorum_agg_check(
         aggregate_sig,
     };
     let bytes = chain::encode(&args).map_err(RpcError::internal)?;
-    let check = chain::query::<bool>("verify_quorum_aggregate", bytes).await.ok();
+    let check = chain::query::<bool>("verify_quorum_aggregate", bytes)
+        .await
+        .ok();
     Ok(Json(SubmitOut {
         log: format!("check={check:?}"),
         outcome: "ok".into(),
@@ -1434,10 +1454,12 @@ async fn api_change_account_preview(
             .ok_or_else(|| RpcError::account_not_found(req.account))?;
         account.to_account_view()
     } else {
-        let current: Option<MultisigAccountView> =
-            chain::query("account", chain::encode(&req.account).map_err(RpcError::internal)?)
-                .await
-                .map_err(RpcError::internal)?;
+        let current: Option<MultisigAccountView> = chain::query(
+            "account",
+            chain::encode(&req.account).map_err(RpcError::internal)?,
+        )
+        .await
+        .map_err(RpcError::internal)?;
         current.ok_or_else(|| RpcError::account_not_found(req.account))?
     };
 
@@ -1459,7 +1481,8 @@ async fn api_change_account_preview(
         &resolve_signer_pks_locked(&state, &req.signers).await?,
         &current,
     )?;
-    let (digest_hex, digest_mnemonic, digest_safety_number) = bls::message_fingerprint_display(&msg);
+    let (digest_hex, digest_mnemonic, digest_safety_number) =
+        bls::message_fingerprint_display(&msg);
     let note = multi_signer_serve_note(&req.signers);
     Ok(Json(ChangeAccountPreviewOut {
         account_id: req.account,
@@ -1487,12 +1510,13 @@ async fn api_change_account_submit(
         new_members.push(find_pk(&state, name).await?);
     }
 
-    let current: Option<MultisigAccountView> =
-        chain::query("account", chain::encode(&req.account).map_err(RpcError::internal)?)
-            .await
-            .map_err(RpcError::internal)?;
-    let current =
-        current.ok_or_else(|| RpcError::account_not_found(req.account))?;
+    let current: Option<MultisigAccountView> = chain::query(
+        "account",
+        chain::encode(&req.account).map_err(RpcError::internal)?,
+    )
+    .await
+    .map_err(RpcError::internal)?;
+    let current = current.ok_or_else(|| RpcError::account_not_found(req.account))?;
 
     let registry_self_id =
         chain::contract_self_id_bytes(chain::Contract::Registry).map_err(RpcError::internal)?;
@@ -1504,7 +1528,11 @@ async fn api_change_account_submit(
         &new_members,
         req.new_threshold,
     );
-    ensure_pks_are_members_view(req.account, &resolve_signer_pks_locked(&state, &req.signers).await?, &current)?;
+    ensure_pks_are_members_view(
+        req.account,
+        &resolve_signer_pks_locked(&state, &req.signers).await?,
+        &current,
+    )?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
 
     let args = ChangeAccountArgs {
@@ -1595,11 +1623,12 @@ async fn api_proposal_create(
         deadline: req.deadline,
     };
     let bytes = chain::encode(&args).map_err(RpcError::internal)?;
-    let result =
-        tokio::task::spawn_blocking(move || chain::submit_call_to(chain::Contract::Proposals, "propose", &bytes))
-            .await
-            .map_err(RpcError::internal)?
-            .map_err(RpcError::internal)?;
+    let result = tokio::task::spawn_blocking(move || {
+        chain::submit_call_to(chain::Contract::Proposals, "propose", &bytes)
+    })
+    .await
+    .map_err(RpcError::internal)?
+    .map_err(RpcError::internal)?;
     Ok(Json(ProposalCreateOut {
         submit: submit_from_log(result.stdout),
         allocated_id_hint: before,
@@ -1715,7 +1744,7 @@ async fn api_blob_preview(
     let proposal = file.to_proposal_blob().map_err(RpcError::internal)?;
     let digest = blob::gate_blob(&proposal).map_err(|e| match e {
         blob::GateError::DigestMismatch => RpcError::digest_mismatch("blob §4a digest mismatch"),
-        blob::GateError::Encoding(enc) => RpcError::invalid_input(&enc.to_string()),
+        blob::GateError::Encoding(enc) => RpcError::invalid_input(enc.to_string()),
     })?;
     let i = &proposal.intent.intent;
     Ok(Json(SignPreviewOut {
@@ -1764,7 +1793,12 @@ async fn api_proposal_approve(
         };
         let digest = knot_encoding::recompute_and_verify_v3(&intent, &mock_p.digest)
             .map_err(|_| RpcError::digest_mismatch("mock approve digest mismatch"))?;
-        ensure_signers_are_members(&state, mock_p.registry_account_id, &[req.signer.clone()]).await?;
+        ensure_signers_are_members(
+            &state,
+            mock_p.registry_account_id,
+            std::slice::from_ref(&req.signer),
+        )
+        .await?;
         let intent_out = IntentDisplay {
             chain_id: intent.chain_id,
             epoch: intent.epoch,
@@ -1784,16 +1818,15 @@ async fn api_proposal_approve(
             .iter()
             .find(|i| i.name == req.signer)
             .ok_or_else(|| RpcError::identity_not_found(&req.signer))?;
-        let sk = id_rec
-            .require_sk()
-            .map_err(RpcError::invalid_input)?;
+        let sk = id_rec.require_sk().map_err(RpcError::invalid_input)?;
         // Real secure BLS sign of the digest (signature discarded after membership record).
         let _signature = bls::sign(sk, &digest);
         let pk_bytes = id_rec.pk.to_bytes();
         drop(identities);
 
         let mut mock = state.mock.lock().await;
-        mock.approve(id, pk_bytes).map_err(RpcError::invalid_input)?;
+        mock.approve(id, pk_bytes)
+            .map_err(RpcError::invalid_input)?;
         return Ok(Json(ProposalApproveOut {
             submit: mock_ok_submit(
                 format!("mock: approve proposal {id} by {}", req.signer),
@@ -1817,10 +1850,16 @@ async fn api_proposal_approve(
 
     let proposals_self_id =
         chain::contract_self_id_bytes(chain::Contract::Proposals).map_err(RpcError::internal)?;
-    let intent = bls::proposal_intent_v3_from_view(&view, bls::digest_chain_id(), &proposals_self_id);
+    let intent =
+        bls::proposal_intent_v3_from_view(&view, bls::digest_chain_id(), &proposals_self_id);
     let digest = knot_encoding::recompute_and_verify_v3(&intent, &view.signed_digest)
         .map_err(|_| RpcError::digest_mismatch("approve on-chain digest mismatch"))?;
-    ensure_signers_are_members(&state, view.registry_account_id, &[req.signer.clone()]).await?;
+    ensure_signers_are_members(
+        &state,
+        view.registry_account_id,
+        std::slice::from_ref(&req.signer),
+    )
+    .await?;
     let intent_out = IntentDisplay {
         chain_id: intent.chain_id,
         epoch: intent.epoch,
@@ -1840,9 +1879,7 @@ async fn api_proposal_approve(
         .iter()
         .find(|i| i.name == req.signer)
         .ok_or_else(|| RpcError::identity_not_found(&req.signer))?;
-    let sk = id_rec
-        .require_sk()
-        .map_err(RpcError::invalid_input)?;
+    let sk = id_rec.require_sk().map_err(RpcError::invalid_input)?;
     let args = ApproveArgs {
         proposal_id: id,
         signer: id_rec.pk,
@@ -1851,11 +1888,12 @@ async fn api_proposal_approve(
     drop(identities);
 
     let bytes = chain::encode(&args).map_err(RpcError::internal)?;
-    let result =
-        tokio::task::spawn_blocking(move || chain::submit_call_to(chain::Contract::Proposals, "approve", &bytes))
-            .await
-            .map_err(RpcError::internal)?
-            .map_err(RpcError::internal)?;
+    let result = tokio::task::spawn_blocking(move || {
+        chain::submit_call_to(chain::Contract::Proposals, "approve", &bytes)
+    })
+    .await
+    .map_err(RpcError::internal)?
+    .map_err(RpcError::internal)?;
     Ok(Json(ProposalApproveOut {
         submit: submit_from_log(result.stdout),
         intent: intent_out,
@@ -1884,7 +1922,9 @@ async fn api_proposal_status(
 ) -> ApiResult<Json<Option<ProposalStatusOut>>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
-        return Ok(Json(mock.proposal(id).map(|p| mock_proposal_status_out(id, p))));
+        return Ok(Json(
+            mock.proposal(id).map(|p| mock_proposal_status_out(id, p)),
+        ));
     }
     let view: Option<ProposalView> = chain::query_contract(
         chain::Contract::Proposals,
@@ -1929,17 +1969,16 @@ async fn api_proposal_finalize(
         )));
     }
     let bytes = chain::encode(&id).map_err(RpcError::internal)?;
-    let result =
-        tokio::task::spawn_blocking(move || chain::submit_call_to(chain::Contract::Proposals, "finalize", &bytes))
-            .await
-            .map_err(RpcError::internal)?
-            .map_err(RpcError::internal)?;
+    let result = tokio::task::spawn_blocking(move || {
+        chain::submit_call_to(chain::Contract::Proposals, "finalize", &bytes)
+    })
+    .await
+    .map_err(RpcError::internal)?
+    .map_err(RpcError::internal)?;
     Ok(Json(submit_from_log(result.stdout)))
 }
 
-async fn api_proposal_next_id(
-    State(state): State<Arc<AppState>>,
-) -> ApiResult<Json<u64>> {
+async fn api_proposal_next_id(State(state): State<Arc<AppState>>) -> ApiResult<Json<u64>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         return Ok(Json(mock.next_proposal_id()));
@@ -1958,7 +1997,10 @@ fn build_router(state: Arc<AppState>) -> Router {
     let api = Router::new()
         .route("/api/setup/status", get(api_setup_status))
         .route("/api/party", get(api_party_list).post(api_party_signup))
-        .route("/api/identities", get(api_list_identities).post(api_new_identity))
+        .route(
+            "/api/identities",
+            get(api_list_identities).post(api_new_identity),
+        )
         .route("/api/identities/import-pk", post(api_import_pk))
         .route("/api/account/create", post(api_account_create))
         .route("/api/account/{id}", get(api_account_query))
@@ -1973,8 +2015,14 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/quorum-agg/preview", post(api_quorum_agg_preview))
         .route("/api/quorum-agg/submit", post(api_quorum_agg_submit))
         .route("/api/quorum-agg/check", post(api_quorum_agg_check))
-        .route("/api/change-account/preview", post(api_change_account_preview))
-        .route("/api/change-account/submit", post(api_change_account_submit))
+        .route(
+            "/api/change-account/preview",
+            post(api_change_account_preview),
+        )
+        .route(
+            "/api/change-account/submit",
+            post(api_change_account_submit),
+        )
         .route("/api/proposal/create", post(api_proposal_create))
         .route("/api/proposal/{id}/preview", get(api_proposal_preview))
         .route("/api/proposal/{id}/approve", post(api_proposal_approve))
@@ -1982,7 +2030,10 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/proposal/{id}/finalize", post(api_proposal_finalize))
         .route("/api/proposal/next-id", get(api_proposal_next_id))
         .route("/api/blob/{id}/preview", get(api_blob_preview))
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_session));
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            require_session,
+        ));
 
     Router::new()
         .route("/", get(index))
@@ -2037,10 +2088,8 @@ mod generic_rpc_smoke {
     const TEST_OTP: &str = "fixed-smoke-test-otp";
 
     fn test_state_with_identities(names: &[&str]) -> Arc<AppState> {
-        let identities: Vec<keystore::Identity> = names
-            .iter()
-            .map(|name| keystore::generate(name))
-            .collect();
+        let identities: Vec<keystore::Identity> =
+            names.iter().map(|name| keystore::generate(name)).collect();
         Arc::new(AppState {
             identities: Mutex::new(identities),
             password: "smoke-test-password".into(),
@@ -2053,10 +2102,7 @@ mod generic_rpc_smoke {
     }
 
     fn session_cookie_header() -> (&'static str, String) {
-        (
-            "cookie",
-            format!("{SESSION_COOKIE}={TEST_SESSION}"),
-        )
+        ("cookie", format!("{SESSION_COOKIE}={TEST_SESSION}"))
     }
 
     async fn bootstrap_cookie(app: Router) -> String {
@@ -2101,7 +2147,10 @@ mod generic_rpc_smoke {
         let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .expect("body");
-        (status, String::from_utf8(bytes.to_vec()).expect("utf8 body"))
+        (
+            status,
+            String::from_utf8(bytes.to_vec()).expect("utf8 body"),
+        )
     }
 
     #[tokio::test]
@@ -2197,12 +2246,15 @@ mod generic_rpc_smoke {
         assert_eq!(status, StatusCode::OK, "create account: {body}");
         let submit: serde_json::Value = serde_json::from_str(&body).expect("submit json");
         assert_eq!(submit["outcome"], "ok");
-        assert!(submit["tx_hash"]
-            .as_str()
-            .unwrap_or("")
-            .starts_with("mock-create-account-"));
+        assert!(
+            submit["tx_hash"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("mock-create-account-")
+        );
 
-        let (status, next_body) = oneshot_json(app.clone(), "GET", "/api/proposal/next-id", None).await;
+        let (status, next_body) =
+            oneshot_json(app.clone(), "GET", "/api/proposal/next-id", None).await;
         assert_eq!(status, StatusCode::OK);
         assert_eq!(next_body.trim(), "0");
 
@@ -2230,7 +2282,12 @@ mod generic_rpc_smoke {
             oneshot_json(app.clone(), "GET", "/api/proposal/0/preview", None).await;
         assert_eq!(status, StatusCode::OK, "preview: {preview_body}");
         let preview: serde_json::Value = serde_json::from_str(&preview_body).expect("preview json");
-        assert!(preview["digest_hex"].as_str().unwrap_or("").starts_with("0x"));
+        assert!(
+            preview["digest_hex"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("0x")
+        );
         assert_eq!(preview["function_name"], "set_value");
 
         let approve_alice = serde_json::json!({ "signer": "alice", "confirm": true });
@@ -2262,14 +2319,16 @@ mod generic_rpc_smoke {
         .await;
         assert_eq!(status, StatusCode::OK, "approve bob: {body}");
 
-        let (status, body) = oneshot_json(app.clone(), "POST", "/api/proposal/0/finalize", None).await;
+        let (status, body) =
+            oneshot_json(app.clone(), "POST", "/api/proposal/0/finalize", None).await;
         assert_eq!(status, StatusCode::OK, "finalize: {body}");
         let finalized: serde_json::Value = serde_json::from_str(&body).expect("finalize json");
         assert_eq!(finalized["tx_hash"], "mock-finalize-0");
 
         let (status, status_body) = oneshot_json(app, "GET", "/api/proposal/0", None).await;
         assert_eq!(status, StatusCode::OK);
-        let prop: serde_json::Value = serde_json::from_str(&status_body).expect("final status json");
+        let prop: serde_json::Value =
+            serde_json::from_str(&status_body).expect("final status json");
         assert_eq!(prop["status"], "Executed");
         assert_eq!(prop["approvals_len"], 2);
     }
@@ -2317,7 +2376,12 @@ mod generic_rpc_smoke {
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let err: serde_json::Value = serde_json::from_str(&body).expect("error json");
         assert_eq!(err["code"], "confirm_required");
-        assert!(err["message"].as_str().unwrap_or("").contains("Confirm required"));
+        assert!(
+            err["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("Confirm required")
+        );
     }
 
     #[tokio::test]
@@ -2333,7 +2397,11 @@ mod generic_rpc_smoke {
             Some(dup.to_string()),
         )
         .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "duplicate identity: {body}");
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "duplicate identity: {body}"
+        );
         let err: serde_json::Value = serde_json::from_str(&body).expect("error json");
         assert_eq!(err["code"], "identity_exists");
         assert_eq!(err["message"], "Identity already exists.");
@@ -2463,10 +2531,8 @@ mod generic_rpc_smoke {
     }
 
     fn test_state_testnet_with_identities(names: &[&str]) -> Arc<AppState> {
-        let identities: Vec<keystore::Identity> = names
-            .iter()
-            .map(|name| keystore::generate(name))
-            .collect();
+        let identities: Vec<keystore::Identity> =
+            names.iter().map(|name| keystore::generate(name)).collect();
         Arc::new(AppState {
             identities: Mutex::new(identities),
             password: "smoke-test-password".into(),
@@ -2489,17 +2555,21 @@ mod generic_rpc_smoke {
             "signers": ["alice"],
             "confirm": false
         });
-        let (status, resp_body) = oneshot_json(
-            app,
-            "POST",
-            "/api/quorum/submit",
-            Some(body.to_string()),
-        )
-        .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "quorum submit: {resp_body}");
+        let (status, resp_body) =
+            oneshot_json(app, "POST", "/api/quorum/submit", Some(body.to_string())).await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "quorum submit: {resp_body}"
+        );
         let err: serde_json::Value = serde_json::from_str(&resp_body).expect("error json");
         assert_eq!(err["code"], "confirm_required");
-        assert!(err["message"].as_str().unwrap_or("").contains("Confirm required"));
+        assert!(
+            err["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("Confirm required")
+        );
     }
 
     #[tokio::test]
@@ -2521,7 +2591,11 @@ mod generic_rpc_smoke {
             Some(body.to_string()),
         )
         .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "change-account submit: {resp_body}");
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "change-account submit: {resp_body}"
+        );
         let err: serde_json::Value = serde_json::from_str(&resp_body).expect("error json");
         assert_eq!(err["code"], "confirm_required");
     }
@@ -2557,13 +2631,20 @@ mod generic_rpc_smoke {
         .await;
         assert_eq!(status, StatusCode::OK, "quorum preview: {body}");
         let preview: serde_json::Value = serde_json::from_str(&body).expect("preview json");
-        assert!(preview["digest_hex"].as_str().unwrap_or("").starts_with("0x"));
+        assert!(
+            preview["digest_hex"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("0x")
+        );
         assert!(!preview["digest_mnemonic"].as_str().unwrap_or("").is_empty());
         assert_eq!(preview["msg_hex"], "0x68656c6c6f");
-        assert!(preview["note"]
-            .as_str()
-            .unwrap_or("")
-            .contains("one signer"));
+        assert!(
+            preview["note"]
+                .as_str()
+                .unwrap_or("")
+                .contains("one signer")
+        );
     }
 
     #[tokio::test]
@@ -2598,7 +2679,12 @@ mod generic_rpc_smoke {
         .await;
         assert_eq!(status, StatusCode::OK, "change-account preview: {body}");
         let preview: serde_json::Value = serde_json::from_str(&body).expect("preview json");
-        assert!(preview["digest_hex"].as_str().unwrap_or("").starts_with("0x"));
+        assert!(
+            preview["digest_hex"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("0x")
+        );
         assert!(!preview["digest_mnemonic"].as_str().unwrap_or("").is_empty());
         assert_eq!(preview["new_threshold"], 1);
     }

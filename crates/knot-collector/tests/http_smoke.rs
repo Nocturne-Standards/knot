@@ -7,14 +7,12 @@
 //! binary's actual listener + JSON wiring, not just handler logic.
 
 use dusk_bytes::Serializable;
-use dusk_core::signatures::bls::{
-    PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
-};
+use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
 use knot_collector::verify::party_signup_preimage;
+use knot_collector::{AppState, store::Store};
 use knot_encoding::{ProposalIntent, proposal_digest};
-use knot_collector::{store::Store, AppState};
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 fn sample_digest() -> (String, [u8; 32]) {
     let intent = ProposalIntent {
@@ -140,7 +138,10 @@ async fn proposal_lifecycle_over_real_http() {
     assert_eq!(append_resp.status(), reqwest::StatusCode::OK);
     let appended: serde_json::Value = append_resp.json().await.expect("parse append body");
     assert_eq!(appended["partials"].as_array().unwrap().len(), 1);
-    assert_eq!(appended["signed_digest"], digest, "append must not mutate digest");
+    assert_eq!(
+        appended["signed_digest"], digest,
+        "append must not mutate digest"
+    );
 
     let list_resp = client
         .get(format!("{base}/v1/proposals"))

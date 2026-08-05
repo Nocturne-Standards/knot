@@ -1,6 +1,6 @@
 //! Shared hex parsing helpers (single `0x` strip, reject `0x0x`).
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 /// Strip one optional `0x` prefix; reject repeated `0x`.
 pub fn strip_single_0x(s: &str) -> Result<&str> {

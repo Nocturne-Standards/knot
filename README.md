@@ -23,7 +23,7 @@ consumes `knot-proposals` / `knot-registry` as a client.
 
 | Crate | License | Version | Role |
 |---|---|---|---|
-| `knot-encoding` | Apache-2.0 | 0.1.2 | Canonical §4a digest + blob helpers + M3 fingerprint |
+| `knot-encoding` | Apache-2.0 | 0.1.2 | Canonical proposal preimage + blob helpers + M3 fingerprint |
 | `knot-registry` | Apache-2.0 | 0.1.6 | On-chain BLS M-of-N quorum registry |
 | `knot-proposals` | Apache-2.0 | 0.3.3 | On-chain propose → approve → finalize `call_raw` |
 | `knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |

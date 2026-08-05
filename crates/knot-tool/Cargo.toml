@@ -43,7 +43,7 @@ pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 sha2 = "0.10"
 rpassword = "7"
 knot-encoding = { path = "../knot-encoding", features = ["call-types"] }
-nocturne-deployments = { git = "https://github.com/aichbindas/nocturne-deployments", rev = "d40ab407b5ad68a9710fd4520d94d51854276d9a", package = "nocturne-deployments" }
+nocturne-deployments = { git = "https://github.com/aichbindas/nocturne-deployments", rev = "d40ab407b5ad68a9710fd4520d94d51854276d9a", package = "nocturne-deployments", optional = true }
 zeroize = "1"
 subtle = "2"
 libc = "0.2"
@@ -54,6 +54,7 @@ directories = "5"
 dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
 tower = { version = "0.5", features = ["util"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "cookies"] }
+tempfile = "3"
 
 # Silences "unexpected cfg" warnings from knot-registry/src/call_types.rs
 # (included via #[path = ...], see src/registry_types.rs) — that crate has a
@@ -61,4 +62,8 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 # about the cfg_attr referencing an unknown feature in *this* crate's build
 # unless we declare the name too.
 [features]
+default = []
 data-driver = []
+# Opt into the git-pinned nocturne-deployments crate (internal convenience).
+# Default build reads pin JSON via NOCTURNE_DEPLOYMENTS / walk-up discovery.
+deployments-crate = ["dep:nocturne-deployments"]

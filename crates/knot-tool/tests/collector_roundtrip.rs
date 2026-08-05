@@ -20,8 +20,8 @@ use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecr
 use knot_tool::blob::{self, PartialFile};
 use knot_tool::bls;
 use knot_tool::collector_client::{CollectorClient, PASSWORD_ENV, USER_ENV};
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 /// Guard that kills the spawned `knot-collector` process on drop, so a
 /// panicking assertion mid-test doesn't leak a listening server.
@@ -52,7 +52,8 @@ fn target_dir() -> PathBuf {
 }
 
 fn free_port() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port to find a free one");
+    let listener =
+        TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port to find a free one");
     listener.local_addr().expect("local addr").port()
 }
 
@@ -68,7 +69,11 @@ fn spawn_collector(bind: &str, db_path: &Path) -> CollectorProcess {
     assert!(build.success(), "cargo build -p knot-collector failed");
 
     let bin = target_dir().join("debug").join("knot-collector");
-    assert!(bin.exists(), "expected collector binary at {}", bin.display());
+    assert!(
+        bin.exists(),
+        "expected collector binary at {}",
+        bin.display()
+    );
 
     let child = Command::new(&bin)
         .env("KNOT_COLLECTOR_BIND", bind)
@@ -164,7 +169,11 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
     let file_blob = blob::BlobFile::from_proposal_blob(&created);
 
     let pushed = client.push(&file_blob).await.expect("push");
-    assert_eq!(pushed.id.len(), 64, "id must be lowercase hex of a 32-byte digest");
+    assert_eq!(
+        pushed.id.len(),
+        64,
+        "id must be lowercase hex of a 32-byte digest"
+    );
 
     let summaries = client.list_proposals().await.expect("list proposals");
     assert_eq!(summaries.len(), 1);
@@ -174,7 +183,11 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
 
     sign_via_collector(&client, &pushed.id, &sk_alice, &pk_alice).await;
     let after_bob = sign_via_collector(&client, &pushed.id, &sk_bob, &pk_bob).await;
-    assert_eq!(after_bob.partials.len(), 2, "alice + bob partials should both be recorded");
+    assert_eq!(
+        after_bob.partials.len(),
+        2,
+        "alice + bob partials should both be recorded"
+    );
 
     let pulled = client.pull(&pushed.id).await.expect("final pull");
     let proposal = pulled.to_proposal_blob().expect("decode final blob");
@@ -214,7 +227,11 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
         )
         .await
         .expect("duplicate signer_pk must replace, not 409");
-    assert_eq!(replaced.partials.len(), 2, "replace must not add a third partial");
+    assert_eq!(
+        replaced.partials.len(),
+        2,
+        "replace must not add a third partial"
+    );
     let alice_partial = replaced
         .partials
         .iter()

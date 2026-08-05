@@ -4,10 +4,9 @@ Untrusted off-chain relay for the multisig suite (Safe Transaction Service
 analogue) — holds serialized proposal blobs and partial signatures so
 signers don't have to email JSON around. **Never holds secret keys, never
 signs, and never submits on-chain transactions.** It may verify public BLS
-signatures and recompute §4a digests so it cannot be used as an
-unauthenticated griefing relay. See
-`docs/superpowers/specs/2026-07-23-knot-collector-monorepo-demo-design.md`
-§2 for the full trust model and target API surface.
+signatures and recompute proposal digests so it cannot be used as an
+unauthenticated griefing relay. See [`docs/security-model.md`](../../docs/security-model.md)
+and [`docs/design-notes.md`](../../docs/design-notes.md) for the trust model.
 
 ## Status
 

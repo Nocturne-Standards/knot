@@ -183,7 +183,10 @@ pub fn normalize_pk(s: &str) -> Result<String, String> {
 /// `signed_digest` (32 bytes) and `signer_pk` (96 bytes) — the two fields
 /// the collector actually inspects.
 pub fn normalize_hex(s: &str, expected_bytes: usize) -> Result<String, String> {
-    let stripped = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    let stripped = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s);
     let bytes = hex::decode(stripped).map_err(|e| format!("invalid hex: {e}"))?;
     if bytes.len() != expected_bytes {
         return Err(format!(

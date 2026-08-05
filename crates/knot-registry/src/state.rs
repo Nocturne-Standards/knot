@@ -50,10 +50,7 @@ mod knot_registry {
             validate_committee(&args.members, args.threshold);
 
             let id = self.next_id;
-            self.next_id = self
-                .next_id
-                .checked_add(1)
-                .expect("next_id overflow");
+            self.next_id = self.next_id.checked_add(1).expect("next_id overflow");
             self.accounts.insert(
                 id,
                 MultisigAccount {
@@ -137,11 +134,8 @@ mod knot_registry {
                 .get(&args.account_id)
                 .unwrap_or_else(|| panic!("no such multisig account"));
 
-            let member_pks: Vec<[u8; 96]> = args
-                .new_members
-                .iter()
-                .map(|pk| pk.to_bytes())
-                .collect();
+            let member_pks: Vec<[u8; 96]> =
+                args.new_members.iter().map(|pk| pk.to_bytes()).collect();
             let msg = change_account_message_v3(
                 u64::from(abi::chain_id()),
                 &abi::self_id().to_bytes(),
@@ -151,8 +145,7 @@ mod knot_registry {
                 args.new_threshold,
             )
             .expect("change_account member set within encoding caps");
-            let (matched, verified) =
-                quorum_counts(&account.members, &msg, &args.sigs);
+            let (matched, verified) = quorum_counts(&account.members, &msg, &args.sigs);
             if verified < account.threshold {
                 panic!(
                     "change_account: quorum not met by current members \
@@ -167,10 +160,7 @@ mod knot_registry {
             let account = self.accounts.get_mut(&args.account_id).unwrap();
             account.members = args.new_members;
             account.threshold = args.new_threshold;
-            account.nonce = account
-                .nonce
-                .checked_add(1)
-                .expect("nonce overflow");
+            account.nonce = account.nonce.checked_add(1).expect("nonce overflow");
             abi::emit("account_changed", args.account_id);
         }
     }
@@ -219,11 +209,7 @@ mod knot_registry {
     /// Returns `(member_matches, sigs_ok)` — how many sig entries named a
     /// real member, and how many distinct members passed `verify_bls`.
     /// Early-rejects when `sigs.len() > members.len()` (audit I6).
-    fn quorum_counts(
-        members: &[BlsPublicKey],
-        msg: &[u8],
-        sigs: &[SignatureEntry],
-    ) -> (u32, u32) {
+    fn quorum_counts(members: &[BlsPublicKey], msg: &[u8], sigs: &[SignatureEntry]) -> (u32, u32) {
         if sigs.len() > members.len() {
             return (0, 0);
         }

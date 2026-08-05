@@ -89,8 +89,7 @@ pub fn checked_u32_len(field: &'static str, len: usize) -> Result<u32, EncodingE
 pub const DOMAIN_PROPOSAL_V2: &[u8] = b"nocturne.knot.multisig.proposal.v2";
 
 /// Domain tag for registry `change_account` quorum message.
-pub const DOMAIN_CHANGE_ACCOUNT_V2: &[u8] =
-    b"nocturne.knot.multisig-registry.change_account.v2";
+pub const DOMAIN_CHANGE_ACCOUNT_V2: &[u8] = b"nocturne.knot.multisig-registry.change_account.v2";
 
 /// v3 proposal signing domain — binds `chain_id`, `self_id`, and `epoch`
 /// (IMPLEMENTATION.md §2.12).
@@ -98,8 +97,7 @@ pub const DOMAIN_PROPOSAL_V3: &[u8] = b"nocturne.knot.multisig.proposal.v3";
 
 /// v3 registry `change_account` quorum domain — binds `chain_id`, `self_id`,
 /// and explicit `member_count` (IMPLEMENTATION.md §2.12).
-pub const DOMAIN_CHANGE_ACCOUNT_V3: &[u8] =
-    b"nocturne.knot.multisig-registry.change_account.v3";
+pub const DOMAIN_CHANGE_ACCOUNT_V3: &[u8] = b"nocturne.knot.multisig-registry.change_account.v3";
 
 /// M12 party roster signup domain — collector relay proof-of-possession.
 pub const DOMAIN_PARTY_V1: &[u8] = b"nocturne.knot.collector.party.v1";
@@ -162,7 +160,10 @@ pub fn change_account_preimage_v3(
     new_threshold: u32,
 ) -> Result<Vec<u8>, EncodingError> {
     let member_count = checked_u32_len("member_pks", member_pks.len())?;
-    let pk_bytes = member_pks.len().checked_mul(96).ok_or(EncodingError::CapacityOverflow)?;
+    let pk_bytes = member_pks
+        .len()
+        .checked_mul(96)
+        .ok_or(EncodingError::CapacityOverflow)?;
     let capacity = DOMAIN_CHANGE_ACCOUNT_V3
         .len()
         .checked_add(8)
@@ -196,8 +197,14 @@ pub fn change_account_digest_v3(
     member_pks: &[[u8; 96]],
     new_threshold: u32,
 ) -> Result<[u8; 32], EncodingError> {
-    let preimage =
-        change_account_preimage_v3(chain_id, self_id, account_id, nonce, member_pks, new_threshold)?;
+    let preimage = change_account_preimage_v3(
+        chain_id,
+        self_id,
+        account_id,
+        nonce,
+        member_pks,
+        new_threshold,
+    )?;
     let mut hasher = Keccak::v256();
     hasher.update(&preimage);
     let mut out = [0u8; 32];
@@ -375,7 +382,8 @@ pub fn proposal_preimage(
     Ok(out)
 }
 
-/// Length-prefixed §2.12 v3 proposal preimage.
+/// Length-prefixed v3 proposal preimage.
+#[allow(clippy::too_many_arguments)]
 pub fn proposal_preimage_v3(
     chain_id: u64,
     self_id: &[u8; 32],
@@ -420,7 +428,8 @@ pub fn proposal_preimage_v3(
     Ok(out)
 }
 
-/// Keccak256 of the §2.12 v3 proposal preimage — full 32 bytes, never truncated.
+/// Keccak256 of the v3 proposal preimage — full 32 bytes, never truncated.
+#[allow(clippy::too_many_arguments)]
 pub fn proposal_digest_v3(
     chain_id: u64,
     self_id: &[u8; 32],
@@ -543,9 +552,8 @@ mod tests {
     #[test]
     fn sample_intent_digest_golden() {
         let digest = sample_intent().digest().unwrap();
-        let expected = hex_decode(
-            "8426c1fa5895fe6b2e3a3fe0e3588eaff4b123fde07b075352264f41dfd9c9dd",
-        );
+        let expected =
+            hex_decode("8426c1fa5895fe6b2e3a3fe0e3588eaff4b123fde07b075352264f41dfd9c9dd");
         assert_eq!(digest, expected);
     }
 
@@ -566,9 +574,8 @@ mod tests {
         let msg = change_account_message(1, 0, &[[0u8; 96], [1u8; 96]], 2);
         assert_eq!(digest.as_slice(), msg.as_slice());
         // Hex locked 2026-08-04 after nocturne.knot domain bump (v2 tags).
-        let expected = hex_decode(
-            "ab2fc0f6d9b490a645b0b5768bcfbfabfce53392251f28bc776e10b6ad22c457",
-        );
+        let expected =
+            hex_decode("ab2fc0f6d9b490a645b0b5768bcfbfabfce53392251f28bc776e10b6ad22c457");
         assert_eq!(digest, expected);
     }
 
@@ -753,9 +760,8 @@ mod tests {
     #[test]
     fn sample_intent_v3_digest_golden() {
         let digest = sample_intent_v3().digest().unwrap();
-        let expected = hex_decode(
-            "2b2243ab796615051a9c4478dfd63f21acd2ebf0857ca6962447bf6f74606e80",
-        );
+        let expected =
+            hex_decode("2b2243ab796615051a9c4478dfd63f21acd2ebf0857ca6962447bf6f74606e80");
         assert_eq!(digest, expected);
     }
 
@@ -766,7 +772,8 @@ mod tests {
         let digest = change_account_digest_v3(0xCA, &self_id, 1, 0, &member_pks, 2).unwrap();
         let msg = change_account_message_v3(0xCA, &self_id, 1, 0, &member_pks, 2).unwrap();
         assert_eq!(digest.as_slice(), msg.as_slice());
-        let expected = hex_decode("0d9f0b3d1d74c4805365e4c495bf6d4e40c8bc7a6732c734fb32e64048dcbf8d");
+        let expected =
+            hex_decode("0d9f0b3d1d74c4805365e4c495bf6d4e40c8bc7a6732c734fb32e64048dcbf8d");
         assert_eq!(digest, expected);
     }
 

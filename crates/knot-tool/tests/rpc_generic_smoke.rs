@@ -108,27 +108,25 @@ async fn wait_for_serve(serve: &mut ServeProcess, client: &reqwest::Client, base
                     stdout.read_to_string(&mut out).ok();
                 }
                 let err = serve_stderr(serve);
-                panic!(
-                    "serve exited early ({status}): stdout={out} stderr={err}"
-                );
+                panic!("serve exited early ({status}): stdout={out} stderr={err}");
             }
             Ok(None) => {}
             Err(e) => panic!("try_wait failed: {e}"),
         }
-        if let Ok(resp) = client.get(format!("{base}/")).send().await {
-            if resp.status().is_success() {
-                for _ in 0..40 {
-                    let stderr = serve_stderr(serve);
-                    if stderr.contains("code=") {
-                        return extract_bootstrap_code(&stderr);
-                    }
-                    tokio::time::sleep(Duration::from_millis(50)).await;
+        if let Ok(resp) = client.get(format!("{base}/")).send().await
+            && resp.status().is_success()
+        {
+            for _ in 0..40 {
+                let stderr = serve_stderr(serve);
+                if stderr.contains("code=") {
+                    return extract_bootstrap_code(&stderr);
                 }
-                panic!(
-                    "bootstrap code missing from serve stderr: {}",
-                    serve_stderr(serve)
-                );
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
+            panic!(
+                "bootstrap code missing from serve stderr: {}",
+                serve_stderr(serve)
+            );
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }

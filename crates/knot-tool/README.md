@@ -62,6 +62,14 @@ your own reverse-proxy wiring — the collector HTTP API in
 [`pm-council-tool`](https://github.com/aichbindas/wen) (product UX for council
 resolve). Knot knot-tool covers registry, proposals, and generic Lab only.
 
+## Contract pins (testnet)
+
+`knot-tool` loads `deployments/testnet.json` via `NOCTURNE_DEPLOYMENTS` or by
+walking up from the crate directory (`deployments/` or `nocturne-deployments/`
+sibling). No private git fetch is required for the default build. Enable
+`--features deployments-crate` to use the optional `nocturne-deployments` git
+dependency instead.
+
 ## Scope
 
 This tool owns both ends of the wire — the contract's own source
@@ -121,13 +129,12 @@ developers can exercise multisig flows; do not treat it as a hardened wallet.
 
 - **Signing scheme**: uses post-hardfork secure `sign`/`sign_multisig`.
   Real testnet is past Aegis/`PreFork` and rejects `sign_insecure` —
-  confirmed for RFQ (`rfq-settlement/README.md`) and for this registry
-  (`member_matches=1, sigs_ok=0` under insecure; secure `change_account`
-  succeeds). `VM::ephemeral()` unit tests in `knot-registry` still
-  sign with `_insecure` because dusk-vm defaults host-query policy to
-  `HardFork::PreFork` with no public override — ephemeral VM tests cannot
-  reach post-hardfork signing policy without upstream dusk-vm support.
-  Matching the test suite's `_insecure` calls in this tool is wrong for
+  confirmed for this registry (`member_matches=1, sigs_ok=0` under insecure;
+  secure `change_account` succeeds). `VM::ephemeral()` unit tests in
+  `knot-registry` still sign with `_insecure` because dusk-vm defaults
+  host-query policy to `HardFork::PreFork` with no public override — ephemeral
+  VM tests cannot reach post-hardfork signing policy without upstream dusk-vm
+  support. Matching the test suite's `_insecure` calls in this tool is wrong for
   live testnet.
 - **RUES free-reads must use raw bodies** (see Scope). An early client bug
   hex-encoded requests and looked like “stuck `account` not found” /
@@ -186,7 +193,7 @@ developers can exercise multisig flows; do not treat it as a hardened wallet.
   `KNOT_COLLECTOR_URL`/`_USER`/`_PASSWORD` env vars (no `--user`/
   `--password` flags, so a password never lands in shell history). The
   collector never sees a secret key or an unsigned digest it could forge —
-  every signer still gates+recomputes the §4a digest locally before signing.
+  every signer still gates+recomputes the proposal digest locally before signing.
   Local AC: `cargo test --test collector_roundtrip` (spawns the real
   `knot-collector` binary as its own process, drives a 2-of-3
   push → sign → sign → pull → aggregate over real HTTP).
@@ -200,7 +207,7 @@ developers can exercise multisig flows; do not treat it as a hardened wallet.
   `proposal approve` print full-digest hex + 24-word BIP39 mnemonic + safety
   number for out-of-band compare. Hardware keys: research note only (below).
 - **M1 intent display (2026-07-23)** — structured `proposal create`
-  (target / function / args / deadline), approve recomputes §4a digest and
+  (target / function / args / deadline), approve recomputes the proposal digest and
   prints **canonical fields first** (refuses on digest mismatch). Web UI
   applies the same gate.
 - Against `knot-registry` / `knot-proposals` on Dusk testnet — confirm
@@ -248,7 +255,7 @@ coordinator cannot forge a matching mnemonic for a different intent.
 Ledger / similar devices expose BLS12-381 primarily for Ethereum 2.0
 validator paths, not as a general clear-signing surface for arbitrary
 Dusk/Piecrust contract call payloads. Clear-signing limits (what the device
-screen can show vs what our §4a intent needs) are the blocker, not raw key
+screen can show vs what our proposal intent preimage needs) are the blocker, not raw key
 custody. Intent rendering stays in this tool for now; hardware adoption is a
 later product decision if device firmware gains usable BLS clear-signing for
 our preimage shape. **No follow-up work in the current suite plan.**

@@ -28,7 +28,7 @@ authorization on top of that answer.
   it if replay matters for their use case.
 - `change_account(ChangeAccountArgs)` — replaces an account's member set /
   threshold, gated by a quorum of the account's *current* members signing
-  over `knot_encoding::change_account_message_v3` (§2.12 v3 domain binds
+  over `knot_encoding::change_account_message_v3` (v3 domain binds
   `chain_id`, registry `self_id`, account id, on-chain nonce, member count,
   new member pks, new threshold → Keccak-256). Nonce is not an args field — it is folded from state into the digest. This path
   *does* have built-in replay protection, since the registry controls that
@@ -52,14 +52,15 @@ authorization on top of that answer.
 - `next_account_id() -> u64` — next id `create_account` will allocate.
 
 `account_meta`, `member_key_bytes`, and `diagnose_quorum` were removed from
-the on-chain ABI (IMPLEMENTATION §4.3 L3). Use
-[`knot-tool`](../knot-tool/README.md) instead — it derives the same ops
-data from `account()` plus local BLS verify (no gas, no RUES verify
-free-read pitfalls).
+the on-chain ABI. Diagnostics are off-chain only — a WASM contract cannot be
+feature-flagged at runtime without shipping two different bytecodes. Use
+[`knot-tool`](../knot-tool/README.md) instead; it derives the same ops data
+from `account()` plus local BLS verify (no gas, no RUES verify free-read
+pitfalls). See [`docs/design-notes.md`](../../docs/design-notes.md).
 
 ## Status
 
-**v3** on next deploy — §2.12 `change_account` digest binds `chain_id` and
+**v3** on next deploy — `change_account` digest binds `chain_id` and
 registry instance. Deploy **registry before proposals**; burn all v2
 `change_account` signatures. Prior testnet pins (v0.1.x) obsolete after cutover.
 
@@ -70,18 +71,15 @@ host query under `VM::ephemeral()` (not mocked) — signing uses
 `sign_multisig_insecure`, not the default secure `sign_multisig`, because
 `VM::ephemeral()` unit tests cannot reach post-hardfork signing policy in
 dusk-vm (PreFork default). **Live testnet clients must use secure
-`sign`/`sign_multisig`** — see
-[`../knot-tool/README.md`](../knot-tool/README.md).
+`sign`/`sign_multisig`** — see [`../knot-tool/README.md`](../knot-tool/README.md).
 
-**23b Phase B (2026-08-03):** `#[archive_attr(repr(C))]` on shared
+**Layout pin (2026-08-03):** `#[archive_attr(repr(C))]` on shared
 `knot-encoding` call types (this crate re-exports). Layout goldens in
 `tests/layout_goldens.rs` (post-pin hex). On-chain ABI types that changed:
 `MultisigAccountView` / `ChangeAccountArgs`. `AccountMeta` /
 `DiagnoseQuorumResult` live only in `knot-encoding` for off-chain
 [`knot-tool`](../knot-tool/README.md) diagnose — not registry contract
-methods. Spec 26 source-carry paragraph cleared by this redeploy (R7).
-Operator ceremony re-wire of downstream callers (e.g. PM council) may stay
-deferred/unwired — OK per Phase B lessons.
+methods.
 
 ## Next steps
 

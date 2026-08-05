@@ -8,9 +8,9 @@ members = [
     "crates/knot-collector",
 ]
 
-# Pins: knot-tool depends on aichbindas/nocturne-deployments (git).
-# Local: optional [patch] or NOCTURNE_DEPLOYMENTS env for pin JSON.
-# CI: GH_PRIVATE_REPO_TOKEN (see .github/workflows/ci.yml).
+# Contract pins: knot-tool loads `deployments/testnet.json` via NOCTURNE_DEPLOYMENTS
+# or walk-up discovery (no private git fetch by default). Optional
+# `--features deployments-crate` on knot-tool opts into nocturne-deployments git dep.
 
 [workspace.package]
 edition = "2024"
