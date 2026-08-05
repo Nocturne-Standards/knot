@@ -6,8 +6,8 @@ owner: null
 deps:
   - 3
 scope:
-  - crates/multisig-proposals/tests/
-  - crates/multisig-tool/src/bls.rs
+  - crates/knot-proposals/tests/
+  - crates/knot-tool/src/bls.rs
   - docs/internal/IMPLEMENTATION.md
 acceptance:
   - Document whether abi::chain_id works under VM::ephemeral

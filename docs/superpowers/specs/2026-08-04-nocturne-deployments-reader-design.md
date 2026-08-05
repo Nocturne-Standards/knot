@@ -6,8 +6,8 @@ Status: approved for scoped cut (“our case now”); full migrate deferred to t
 ## Goal
 
 Knot (and wen tools) can resolve live contract IDs from a shared pin file without
-opening `sme_platform` as the only home. Redeploy of `multisig-registry` /
-`multisig-proposals` records into that pin home.
+opening `sme_platform` as the only home. Redeploy of `knot-registry` /
+`knot-proposals` records into that pin home.
 
 ## Non-goals (later leaves)
 
@@ -19,7 +19,7 @@ opening `sme_platform` as the only home. Redeploy of `multisig-registry` /
 
 1. **Pin home repo** — use / revive `aichbindas/nocturne-deployments` (or sibling path
    `~/dev/aichbindas/nocturne-deployments`). Seed with `testnet.json` keys needed for
-   knot: at least `multisig-registry`, `multisig-proposals` (copy current
+   knot: at least `knot-registry`, `knot-proposals` (copy current
    entries from `sme_platform/deployments/testnet.json`). Keep machine-local
    `wasm_path` as today (ops laptop paths OK; consumers need `contract_id`).
 
@@ -30,7 +30,7 @@ opening `sme_platform` as the only home. Redeploy of `multisig-registry` /
    - Path resolve: `NOCTURNE_DEPLOYMENTS` env → else walk-up
      `deployments/testnet.json` → else optional default sibling.
 
-3. **Wire knot `multisig-tool`** to use the crate instead of local walk-only
+3. **Wire knot `knot-tool`** to use the crate instead of local walk-only
    assuming monorepo root under sme_platform.
 
 4. **Redeploy knot contracts** via existing
@@ -40,7 +40,7 @@ opening `sme_platform` as the only home. Redeploy of `multisig-registry` /
 
 ## Success
 
-- `multisig-tool` reads registry/proposals IDs from shared pins
+- `knot-tool` reads registry/proposals IDs from shared pins
 - Domain-bump redeploy can update those pins without editing sme_platform tree
   for the JSON (scripts may still run from sme_platform)
 

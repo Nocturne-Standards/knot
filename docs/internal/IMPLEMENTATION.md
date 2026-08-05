@@ -35,9 +35,9 @@ Verified facts an implementer can rely on (checked at `7e58d4c`):
 | `abi::chain_id() -> u8` exists, panics if metadata unset | `src/abi.rs:187-194` |
 | `abi::keccak256(Vec<u8>) -> [u8;32]` is a host query | `src/abi.rs:153` |
 | `abi::caller()`, `abi::callstack()` exist | `src/abi.rs:62` |
-| Domain tags are already `nocturne.knot.*.v2` | `crates/multisig-encoding/src/lib.rs:69,72` |
+| Domain tags are already `nocturne.knot.*.v2` | `crates/knot-encoding/src/lib.rs:69,72` |
 | `council_resolve` is fully removed from encoding | `grep -c council_resolve` = 0 |
-| `finalize` has **no** caller/membership check | `crates/multisig-proposals/src/state.rs`, whole fn |
+| `finalize` has **no** caller/membership check | `crates/knot-proposals/src/state.rs`, whole fn |
 | Collector SQL is fully parameterized | `store.rs` — all queries are literals with bound params |
 | Lab escapes HTML at every user-data sink | **Overstated** — string sinks yes; numeric `innerHTML` holes — §11 R9 |
 | Tool API token compares in constant time | `rpc.rs:158-166`, `ct_eq` |
@@ -49,13 +49,13 @@ Verified facts an implementer can rely on (checked at `7e58d4c`):
 
 ### B1 — credential in README and git history · LOCKED
 
-`crates/multisig-tool/README.md:38`
+`crates/knot-tool/README.md:38`
 
 ```
-export MULTISIG_COLLECTOR_PASSWORD='***REMOVED-LEAKED-COLLECTOR-PASSWORD***'
+export KNOT_COLLECTOR_PASSWORD='***REMOVED-LEAKED-COLLECTOR-PASSWORD***'
 ```
 
-Paired with `MULTISIG_COLLECTOR_USER=demo` for `collector.nocturne-standards.org`.
+Paired with `KNOT_COLLECTOR_USER=demo` for `collector.nocturne-standards.org`.
 In history since 2026-07-24.
 
 1. Leonidas rotates the credential on the collector host. **Assume it is public.**
@@ -64,8 +64,8 @@ In history since 2026-07-24.
 
 ### B2 — testnet wallet password · LOCKED
 
-`crates/multisig-tool/README.md:30` — `RUSK_WALLET_PWD=sme-platform-testnet-dev`.
-Also `:33` and `:358` — `MULTISIG_TOOL_PWD='local-dev-only'`.
+`crates/knot-tool/README.md:30` — `RUSK_WALLET_PWD=sme-platform-testnet-dev`.
+Also `:33` and `:358` — `KNOT_PWD='local-dev-only'`.
 
 Accepted risk until launch. Replace all three with `...`.
 
@@ -83,7 +83,7 @@ internal. Full disposition in §5.1.
 
 ### B5 — private git dependency blocks public builds · LOCKED
 
-`crates/multisig-tool/Cargo.toml:45`
+`crates/knot-tool/Cargo.toml:45`
 
 ```toml
 nocturne-deployments = { git = "https://github.com/aichbindas/nocturne-deployments", rev = "d40ab40…" }
@@ -91,7 +91,7 @@ nocturne-deployments = { git = "https://github.com/aichbindas/nocturne-deploymen
 
 The repo's own CI notes it needs *"a PAT with contents:read on private
 aichbindas/nocturne-deployments."* Nobody outside the org can `cargo build`
-`multisig-tool` — the fetch fails before compilation.
+`knot-tool` — the fetch fails before compilation.
 
 **Decision: make `nocturne-deployments` public, AND make the dependency optional
 (off by default).**
@@ -115,7 +115,7 @@ decouples "can strangers build Knot" from "does the pin repo still exist".
 
 ---
 
-## 2. Contracts — `multisig-proposals` v3 and the digest redesign
+## 2. Contracts — `knot-proposals` v3 and the digest redesign
 
 Resolves H1, H2, M1, M2, M3, L1, L2, L13. Contracts are immutable: this is a
 **redeploy**, and these changes land together or not at all.
@@ -156,7 +156,7 @@ registry make signatures fungible between them.
 
 ### 2.3 H2 — change_account digest, concretely
 
-Verified at `7e58d4c`, `crates/multisig-encoding/src/lib.rs:81-99`:
+Verified at `7e58d4c`, `crates/knot-encoding/src/lib.rs:81-99`:
 
 ```
 DOMAIN_CHANGE_ACCOUNT_V2 || account_id || nonce || pk₀..pkₙ || threshold
@@ -234,7 +234,7 @@ decision invalidates all pending ones.
 
 | | Registry account nonce | Proposal uniquifier (`ProposeArgs.nonce`) |
 |---|---|---|
-| Where | `multisig-registry` / `knot-registry` account | Proposal digest + blob intent |
+| Where | `knot-registry` / `knot-registry` account | Proposal digest + blob intent |
 | Job | Anti-replay for `change_account` | Distinguish parallel / re-opened identical intents |
 | Who sets | Contract bumps on successful change | Coordinator / blob author |
 
@@ -563,7 +563,7 @@ plainly that this is not production key custody.
 
 `fs::write` creates at `0o666 & !umask` (typically `0o644`), then chmods to `0o600` —
 secret keys are world-readable in between. `create_dir_all` similarly makes
-`~/.multisig-tool/` at `0o755`.
+`~/.knot-tool/` at `0o755`.
 
 ```rust
 fs::DirBuilder::new().recursive(true).mode(0o700).create(parent)?;
@@ -718,7 +718,7 @@ Confirmed at `7e58d4c` in `keystore.rs:79` and `blob.rs:103,111,124,176,190`.
 ### 3.5 L6 — `default_path()`
 
 `std::env::var("HOME").expect("HOME must be set")` panics. Return `Result`, honour a
-`MULTISIG_TOOL_STORE` override, and use the `directories` crate so it works on Windows
+`KNOT_STORE` override, and use the `directories` crate so it works on Windows
 and follows XDG on Linux. This **changes the default path** — keep the old location as
 a read fallback for one release and log when it is used.
 
@@ -800,12 +800,12 @@ All collector sources are byte-identical between `2fb3c94` and `7e58d4c`, so the
 round-one findings stand unmodified.
 
 **Threat model correction.** The collector enforces **no authentication of its own** —
-`MULTISIG_COLLECTOR_USER`/`PASSWORD` are credentials the *client* sends, and the Rust
+`KNOT_COLLECTOR_USER`/`PASSWORD` are credentials the *client* sends, and the Rust
 code never verifies them. Enforcement is entirely the operator's nginx htpasswd.
 
 Basic Auth is a client-presents-credential scheme, so **every co-signer must hold the
-credential** — `crates/multisig-tool/README.md` instructs exactly this ("give them the
-three `MULTISIG_COLLECTOR_*` values"). Today that is a **single shared `demo` user**,
+credential** — `crates/knot-tool/README.md` instructs exactly this ("give them the
+three `KNOT_COLLECTOR_*` values"). Today that is a **single shared `demo` user**,
 which yields no attribution (logs name `demo`, not a person), no revocation short of
 rotating for everyone, and a blast radius of the whole council.
 
@@ -818,7 +818,7 @@ authentication can only ever tell you *who* acted, never prevent it. The protoco
 fixes are the control.
 
 **Deployment invariant:** because the collector enforces nothing itself, its security
-rests entirely on the proxy being in front. `MULTISIG_COLLECTOR_ALLOW_NON_LOOPBACK`
+rests entirely on the proxy being in front. `KNOT_COLLECTOR_ALLOW_NON_LOOPBACK`
 is what keeps that true. If anyone sets the escape hatch and binds `0.0.0.0`, the API
 is open to the internet with **no authentication at all**. State this in the README.
 
@@ -1085,7 +1085,7 @@ Keep all of these locally; gitignore and `git rm --cached`.
 `.github/workflows/` **stays** — needed.
 
 Keep public: `docs/security-model.md`, `docs/versioning.md`,
-`crates/multisig-proposals/test-target/`, `crates/multisig-tool/static/mock-ledger.js`.
+`crates/knot-proposals/test-target/`, `crates/knot-tool/static/mock-ledger.js`.
 
 **Add `docs/design-notes.md` (public)** — rationale for choices a reader would
 otherwise take for oversights, and which integrators will otherwise ask about. Five
@@ -1177,13 +1177,14 @@ Rationale and the four-tier model: `PUBLIC-REPO-STANDARD.md`.
 Every project keeps one durable list of sensitive values and env vars.
 `.env.example` (tracked, placeholder values) exists at the repo root; `.env` (real
 values) is gitignored. Enumerated from source at `7e58d4c`: `RUSK_WALLET_PWD`,
-`MULTISIG_TOOL_PWD`, `MULTISIG_TOOL_ALLOW_ENV_PWD`, `MULTISIG_COLLECTOR_URL`,
-`MULTISIG_COLLECTOR_USER`, `MULTISIG_COLLECTOR_PASSWORD`, `MULTISIG_COLLECTOR_BIND`,
-`MULTISIG_COLLECTOR_DB`, `MULTISIG_COLLECTOR_ALLOW_NON_LOOPBACK`, `DEMO_MODE`.
+`KNOT_PWD`, `KNOT_ALLOW_ENV_PWD`, `KNOT_COLLECTOR_URL`,
+`KNOT_COLLECTOR_USER`, `KNOT_COLLECTOR_PASSWORD`, `KNOT_COLLECTOR_BIND`,
+`KNOT_COLLECTOR_DB`, `KNOT_COLLECTOR_ALLOW_NON_LOOPBACK`, `DEMO_MODE`.
 
 ### 5.7 Crate renaming · LOCKED — do it
 
-Product is Knot; crates, binary, env vars and `~/.multisig-tool/` all say `multisig`.
+Product is Knot; crate dirs still said `multisig-*` while binary/env already said
+`knot` / `KNOT_*`. Finish the mechanical surface rename before v3 semantics.
 
 **Sequencing: a pure mechanical rename commit with zero behaviour change, landed
 BEFORE the v3 contract work.** Rename, verify tests pass, commit. v3 then lands on
@@ -1195,19 +1196,18 @@ Scope — wider than crate names:
 | Surface | From | To |
 |---|---|---|
 | Crates + directories | `multisig-{encoding,registry,proposals,tool,collector}` | `knot-*` |
-| Module paths | `multisig_encoding::` | `knot_encoding::` |
-| Binary | `multisig-tool` | `knot-tool` |
-| Env vars | `MULTISIG_TOOL_*`, `MULTISIG_COLLECTOR_*` | `KNOT_*`, `KNOT_COLLECTOR_*` |
-| Keystore dir | `~/.multisig-tool/` | `~/.knot/` |
-| HTTP header | `X-Multisig-Tool-Token` | `X-Knot-Token` |
-| WASM artifacts | `multisig_registry.wasm` etc. | `knot_registry.wasm` etc. — update both `Makefile`s and the `include_bytes!` paths in contract tests |
+| Module paths | `multisig_encoding::` etc. | `knot_encoding::` etc. |
+| Binary | `multisig-tool` (interim `knot-tool`) | `knot-tool` |
+| Env vars | `MULTISIG_*` / `MULTISIG_COLLECTOR_*` (interim `KNOT_*`) | `KNOT_*`, `KNOT_COLLECTOR_*` |
+| Keystore dir | `~/.multisig-tool/` (interim `~/.knot-tool/`) | `~/.knot/` |
+| HTTP header | `X-Multisig-Tool-Token` (interim `X-Knot-Token`) | `X-Knot-Token` |
+| WASM artifacts | `multisig_*.wasm` | `knot_*.wasm` — Makefiles + `include_bytes!` in contract tests |
 | `#[path]` includes | `registry_types.rs`, `proposals_types.rs` | follow the crate move |
 | Docs | root `README.md` crate table, all crate READMEs, `docs/versioning.md` | |
 
-**Not renamed:** signing domain tags are already `nocturne.knot.*` — signing is
-unaffected. `deployments/testnet.json` keys (`multisig-registry`,
-`multisig-proposals`, `chain.rs:32-35`) are external deployment data; rename only in
-coordination with the pin repo, or leave them.
+**Not renamed:** signing domain tags stay `nocturne.knot.multisig.*` — crypto domains.
+Pin JSON keys (`"multisig-registry"`, `"multisig-proposals"` in `chain.rs` json_key)
+are external deployment data; rename only with a paired pin-repo update.
 
 Migration details:
 
@@ -1247,11 +1247,11 @@ Live at `7e58d4c` — the README crate table disagrees with `Cargo.toml`:
 
 | Crate | Cargo.toml | README | |
 |---|---|---|---|
-| `multisig-encoding` | 0.1.2 | 0.1.2 | ok |
-| `multisig-registry` | **0.1.6** | **0.1.5** | drift |
-| `multisig-proposals` | **0.3.3** | **0.3.2** | drift |
-| `multisig-tool` | 0.2.0 | 0.2.0 | ok |
-| `multisig-collector` | 0.2.0 | 0.2.0 | ok |
+| `knot-encoding` | 0.1.2 | 0.1.2 | ok |
+| `knot-registry` | **0.1.6** | **0.1.5** | drift |
+| `knot-proposals` | **0.3.3** | **0.3.2** | drift |
+| `knot-tool` | 0.2.0 | 0.2.0 | ok |
+| `knot-collector` | 0.2.0 | 0.2.0 | ok |
 
 Answers the "how do we avoid version drift" question: **do not hand-maintain the
 table.** Either generate it from `cargo metadata` at build time, or add a CI check
@@ -1344,10 +1344,10 @@ defensible rather than odd. See §4.2.
 
 | Location | Current | Change |
 |---|---|---|
-| `crates/multisig-tool/README.md:36` | `MULTISIG_COLLECTOR_URL=https://collector.nocturne-standards.org` | placeholder; no Nocturne-hosted default |
-| `crates/multisig-tool/README.md:52` | "shared relay" | council-operated relay |
-| `crates/multisig-tool/README.md:54` | "Share the collector with co-signers: give them the three values" | the coordinator deploys it for their council |
-| `crates/multisig-collector/README.md:92` | "VPS deploy (operator TODO): bring your own ops (TLS, auth, SQLite backup)" | a real deployment story — see below |
+| `crates/knot-tool/README.md:36` | `KNOT_COLLECTOR_URL=https://collector.nocturne-standards.org` | placeholder; no Nocturne-hosted default |
+| `crates/knot-tool/README.md:52` | "shared relay" | council-operated relay |
+| `crates/knot-tool/README.md:54` | "Share the collector with co-signers: give them the three values" | the coordinator deploys it for their council |
+| `crates/knot-collector/README.md:92` | "VPS deploy (operator TODO): bring your own ops (TLS, auth, SQLite backup)" | a real deployment story — see below |
 
 If councils are expected to self-host, *"bring your own ops"* is not a deployment
 story. Target: `docker compose up` with automatic TLS (Caddy/Traefik sidecar), not a
@@ -1476,9 +1476,9 @@ cut only after this section is accepted. Product §9 (signer UI / `call_args`) i
 **Written against `b1d883d`.** Full read of previously unaudited surfaces
 (2026-08-05). Amendments belong here — not a second frozen audit-as-authority.
 
-**Scope actually read:** `multisig-tool` `rpc.rs`, `main.rs`, `chain.rs`,
+**Scope actually read:** `knot-tool` `rpc.rs`, `main.rs`, `chain.rs`,
 `collector_client.rs`, `membership.rs`, `bls.rs`, `mock_ledger.rs`, `static/`;
-`multisig-collector` `store.rs`, `dto.rs`, `api.rs` (re-verify). Note: tool has
+`knot-collector` `store.rs`, `dto.rs`, `api.rs` (re-verify). Note: tool has
 **no** `store.rs`/`dto.rs` — those live only in the collector (README list was
 imprecise).
 

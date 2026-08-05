@@ -7,7 +7,7 @@ deps:
   - 4
 scope:
   - crates/knot-tool/
-  - crates/multisig-tool/
+  - crates/knot-tool/
 acceptance:
   - CSPRNG uniquifier + --nonce for proposals (caller-supplied; not change-account)
   - M8 fetch threshold / honest offline label

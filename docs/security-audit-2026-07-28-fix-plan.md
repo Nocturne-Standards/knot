@@ -88,7 +88,7 @@ first. If a clean split isn't available, threading the existing error
 string into `CouncilView` (without a typed enum) still satisfies "not
 invisible to the UI."
 
-### 5. `u32::try_from(...).expect(...)` panics (`multisig-encoding`)
+### 5. `u32::try_from(...).expect(...)` panics (`knot-encoding`)
 **Fix**: `proposal_preimage` (`lib.rs:136-169`) and its callers
 `ProposalIntent::digest`/`preimage_bytes` (`lib.rs:107-133`) currently
 return infallibly. Change `proposal_preimage` to return
@@ -99,20 +99,20 @@ exists) with a `FieldTooLarge { field, len }` variant, replacing both
 list was wrong):** the real caller graph, by actual grep of
 `proposal_digest`/`proposal_preimage`/`ProposalIntent::digest`/
 `preimage_bytes`, is:
-- **`multisig-proposals`** — calls `proposal_digest(...)` directly from
+- **`knot-proposals`** — calls `proposal_digest(...)` directly from
   contract code, on-chain, in `state.rs:145` (inside `propose`). This is
   the one real on-chain caller.
-- **`multisig-tool`** — `blob.rs` and `mock_ledger.rs` call
+- **`knot-tool`** — `blob.rs` and `mock_ledger.rs` call
   `ProposalIntent::digest()`/`preimage_bytes()`. Off-chain only.
-- **NOT `multisig-registry`** — it calls a different function,
+- **NOT `knot-registry`** — it calls a different function,
   `change_account_message`, unaffected by this change.
-- **NOT `multisig-collector`** — no `multisig_encoding` dependency at all
+- **NOT `knot-collector`** — no `knot_encoding` dependency at all
   (confirmed: no import anywhere in its `src/`).
 - **NOT `pm-council-tool`** — only uses the fingerprint display helpers
   (`digest_hex`/`digest_mnemonic`/`digest_safety_number` in `blob.rs:200-207`),
   which don't call `proposal_preimage` and aren't touched by this fix.
-**Blast radius**: `multisig-encoding/src/lib.rs`, plus call-site updates in
-`multisig-proposals/src/state.rs:145` and `multisig-tool/src/{blob.rs,mock_ledger.rs}`.
+**Blast radius**: `knot-encoding/src/lib.rs`, plus call-site updates in
+`knot-proposals/src/state.rs:145` and `knot-tool/src/{blob.rs,mock_ledger.rs}`.
 Grep both call sites before considering this done (root CLAUDE.md's
 change-propagation rule) — no other crate needs touching.
 **Test plan**: regression-test that in-bounds inputs still produce
@@ -120,25 +120,25 @@ identical digest bytes after the signature change; unit-test the new error
 path via the isolated length check (constructing an actual 4 GiB payload
 isn't practical).
 **Risk**: encoded bytes/digest are unchanged for all in-bounds inputs, so
-on-chain behavior is identical — but because `multisig-proposals` calls
+on-chain behavior is identical — but because `knot-proposals` calls
 `proposal_digest` directly from contract code, landing this **does**
-require `make wasm && make test` in `multisig-proposals/` and, since it's
+require `make wasm && make test` in `knot-proposals/` and, since it's
 already deployed (testnet v0.3.0 per the suite README), **a testnet
-redeploy** to actually ship. `multisig-registry` is unaffected and needs no
+redeploy** to actually ship. `knot-registry` is unaffected and needs no
 rebuild for this specific finding.
 
-### 6. Unguarded `+=` on `next_id`/`nonce` (`multisig-registry`)
+### 6. Unguarded `+=` on `next_id`/`nonce` (`knot-registry`)
 **Verification note**: audit cites `state.rs:29-32,49-64`. The struct
 fields (29-32) and `next_id += 1` in `create_account` (line 53) are within
 that range. `nonce += 1` is actually in `change_account` at **line 222**,
 outside the cited range — same bug, slightly off line pointer.
 **Fix**: `self.next_id += 1` → `self.next_id = self.next_id.checked_add(1).expect("next_id overflow")`;
 `account.nonce += 1` → `account.nonce = account.nonce.checked_add(1).expect("nonce overflow")`.
-Panic-on-overflow matches this codebase's existing idiom (`multisig-proposals`
+Panic-on-overflow matches this codebase's existing idiom (`knot-proposals`
 already uses `checked_add(...).expect(...)` for `deadline`).
-**Blast radius**: `multisig-registry/src/state.rs`, two one-line changes.
+**Blast radius**: `knot-registry/src/state.rs`, two one-line changes.
 **On-chain contract** — requires `make wasm && make test` in
-`multisig-registry/`.
+`knot-registry/`.
 **Test plan**: existing suite as regression; add a test constructing
 `nonce: u64::MAX` directly (if the harness allows) asserting panic instead
 of wraparound — wraparound is the actual exploitable replay risk.
@@ -146,7 +146,7 @@ of wraparound — wraparound is the actual exploitable replay risk.
 
 ## Low — dispositions
 
-### 7. Constant-time token comparison (`multisig-tool/src/rpc.rs:221`, `pm-council-tool/src/rpc.rs:139-143`)
+### 7. Constant-time token comparison (`knot-tool/src/rpc.rs:221`, `pm-council-tool/src/rpc.rs:139-143`)
 **Fix now**, batched together — identical fix in two crates. Both
 `require_token` middlewares do `v == state.token`. Neither crate depends on
 `subtle` today. Add `subtle = "2"` to both `Cargo.toml`s and replace the
@@ -159,9 +159,9 @@ pass unchanged; timing itself isn't unit-testable, rely on review that
 `ct_eq` preconditions are met.
 **Risk**: none — identical pass/fail semantics.
 
-### 8. PBKDF2-SHA256 100k rounds (`multisig-tool/src/keystore.rs:34`)
+### 8. PBKDF2-SHA256 100k rounds (`knot-tool/src/keystore.rs:34`)
 **Fix now** — in scope (audit's out-of-scope note is for
-`pm-council-tool`'s keystore, not `multisig-tool`'s). Bump `PBKDF2_ROUNDS`
+`pm-council-tool`'s keystore, not `knot-tool`'s). Bump `PBKDF2_ROUNDS`
 (line 34) from `100_000` to `600_000` (current OWASP floor). This breaks
 decryption of existing `identities.dat` files encrypted under the old
 round count. Two options: (a) store the round count in the file header,
@@ -175,7 +175,7 @@ choice to the user before implementing — don't assume (b).
 **Risk**: (b) locks out existing local stores without migration — the error
 message must be explicit.
 
-### 9. No cap on total proposal/party-roster row count (`multisig-collector/src/store.rs`)
+### 9. No cap on total proposal/party-roster row count (`knot-collector/src/store.rs`)
 **Defer.** Per-proposal caps already exist (`MAX_PARTIALS=32`,
 `MAX_NOTE_CHARS=512`, `MAX_BODY_BYTES=64KiB`); a global row cap is
 resource-exhaustion hardening for a misconfigured-reverse-proxy scenario
@@ -184,25 +184,25 @@ fix. Sketch for later: `MAX_TOTAL_PROPOSALS`/`MAX_TOTAL_PARTY_ROWS`
 constants, checked via `COUNT(*)` in `create_proposal` (`store.rs:120`) and
 `upsert_party_member` (`store.rs:247`) before insert.
 
-### 10. Unbounded proposal count, no pruning (`multisig-proposals/src/state.rs:117-188`)
+### 10. Unbounded proposal count, no pruning (`knot-proposals/src/state.rs:117-188`)
 **Defer**, per the audit's own framing — per-field sizes are capped
 already; pruning a permissionless-propose design raises unresolved
 questions (who prunes, what happens to in-flight approvals) better handled
 as a lifecycle/fee design discussion, not a standalone patch.
 
-### 11. Unbounded total account count (`multisig-registry`)
+### 11. Unbounded total account count (`knot-registry`)
 **Won't-fix** — confirmed intentional (permissionless `create_account`,
 audit itself labels this a documented tradeoff). No action.
 
-### 12. `usize` capacity-sum overflow on 32-bit targets (`multisig-encoding/src/lib.rs:148-158`)
+### 12. `usize` capacity-sum overflow on 32-bit targets (`knot-encoding/src/lib.rs:148-158`)
 **Defer.** Only reachable on 32-bit targets with `overflow-checks=true`;
 inputs are already bounded elsewhere (`MAX_FUNCTION_NAME_LEN`/
-`MAX_CALL_ARGS_LEN` in `multisig-proposals`) so practical overflow can't
+`MAX_CALL_ARGS_LEN` in `knot-proposals`) so practical overflow can't
 occur on this workspace's actual targets (`wasm32-unknown-unknown`,
 x86_64/aarch64 hosts). Cheap to fold `checked_add` in alongside #5 if
 already touching this function; not worth a standalone change.
 
-### 13. Wordlist-length invariant only `debug_assert_eq!` (`multisig-encoding/src/fingerprint.rs:34,52-56`)
+### 13. Wordlist-length invariant only `debug_assert_eq!` (`knot-encoding/src/fingerprint.rs:34,52-56`)
 **Fix now** — cheap, closes the stated release-build OOB-panic risk.
 Promote both `debug_assert_eq!` (word count at line 34, index count at line
 58) to real `assert_eq!` so a release build fails loudly rather than
@@ -213,14 +213,14 @@ add a `#[test]` asserting `wordlist().len() == 2048` against the bundled
 **Test plan**: the new test itself.
 **Risk**: none — behavior unchanged for the current (correct) wordlist.
 
-### 14. Dead `remove_party_member` fn (`multisig-collector/src/store.rs:298`)
+### 14. Dead `remove_party_member` fn (`knot-collector/src/store.rs:298`)
 **Fix now** — confirmed dead: only called from its own tests
 (`store.rs:684,687`), no `rpc.rs` route reaches it. Delete the fn and its
 two test call sites (or convert them to test the underlying delete SQL
 directly if that coverage is worth keeping). Confirm with the user before
 deleting per repo convention (ask before removing things).
 **Blast radius**: `store.rs` only.
-**Test plan**: `cargo test -p multisig-collector` passes after removal.
+**Test plan**: `cargo test -p knot-collector` passes after removal.
 **Risk**: none.
 
 ## Work batches
@@ -229,23 +229,23 @@ deleting per repo convention (ask before removing things).
 pm-council-tool half). Same crate, overlapping files (`rpc.rs`/`chain.rs`).
 Off-chain — rebuild + restart the local tool only.
 
-**Batch B — multisig-encoding** (#5's `Result` conversion, #12's
+**Batch B — knot-encoding** (#5's `Result` conversion, #12's
 `checked_add` bundled in, #13's wordlist assert). #5 changes an API
-`multisig-proposals` calls directly from contract code (verified:
+`knot-proposals` calls directly from contract code (verified:
 `state.rs:145`) — this batch **requires `make wasm && make test` in
-`multisig-proposals/` and a testnet redeploy**, plus updating the two
-off-chain call sites in `multisig-tool` (`blob.rs`, `mock_ledger.rs`).
-`multisig-registry` is **not** affected (it uses `change_account_message`,
+`knot-proposals/` and a testnet redeploy**, plus updating the two
+off-chain call sites in `knot-tool` (`blob.rs`, `mock_ledger.rs`).
+`knot-registry` is **not** affected (it uses `change_account_message`,
 a different function) and needs no change or redeploy for this batch.
 
-**Batch C — multisig-tool constant-time compare** (#7's multisig-tool
+**Batch C — knot-tool constant-time compare** (#7's knot-tool
 half). Separate crate/binary from Batch A but identical fix — fine to land
 in the same PR sequence as its own commit.
 
-**Batch D — multisig-registry on-chain fix** (#6). Independent of Batch B
-— confirmed `multisig-registry` does not call the function Batch B
+**Batch D — knot-registry on-chain fix** (#6). Independent of Batch B
+— confirmed `knot-registry` does not call the function Batch B
 changes, so these two batches don't need sequencing relative to each
-other. **Requires `make wasm && make test` in `multisig-registry/` and a
+other. **Requires `make wasm && make test` in `knot-registry/` and a
 real testnet redeploy** — treat as a real-consequence action, not
 local-only.
 
@@ -257,11 +257,11 @@ deleting). Independent, no urgency.
 
 ## Redeploy summary
 
-- **Requires testnet contract redeploy**: Batch D (`multisig-registry`,
-  for #6) and Batch B (`multisig-proposals`, for #5 — confirmed direct
+- **Requires testnet contract redeploy**: Batch D (`knot-registry`,
+  for #6) and Batch B (`knot-proposals`, for #5 — confirmed direct
   on-chain caller of the changed function). These two are independent of
   each other; neither blocks the other.
 - **Local rebuild + restart only**: Batch A (`pm-council-tool`), Batch C
-  (`multisig-tool`), Batch E, and the `multisig-tool`/`multisig-encoding`
+  (`knot-tool`), Batch E, and the `knot-tool`/`knot-encoding`
   off-chain-only portions of Batch B (`blob.rs`, `mock_ledger.rs`,
   `fingerprint.rs`).

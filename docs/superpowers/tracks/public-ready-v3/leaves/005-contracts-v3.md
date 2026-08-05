@@ -8,8 +8,8 @@ deps:
 scope:
   - crates/knot-registry/
   - crates/knot-proposals/
-  - crates/multisig-registry/
-  - crates/multisig-proposals/
+  - crates/knot-registry/
+  - crates/knot-proposals/
 acceptance:
   - State/methods per §2.10–2.11
   - Rich events §2.13

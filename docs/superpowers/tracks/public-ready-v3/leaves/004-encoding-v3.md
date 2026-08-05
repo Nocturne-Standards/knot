@@ -6,7 +6,7 @@ owner: null
 deps:
   - 2
 scope:
-  - crates/multisig-encoding/
+  - crates/knot-encoding/
   - crates/knot-encoding/
 acceptance:
   - DOMAIN_*_V3 preimages with self_id/chain_id/epoch/member_count per §2.12

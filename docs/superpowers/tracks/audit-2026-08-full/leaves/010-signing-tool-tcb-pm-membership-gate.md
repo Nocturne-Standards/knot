@@ -5,9 +5,9 @@ status: superseded
 owner: planner-migrate
 deps: []
 scope:
-  - crates/multisig-tool/src/rpc.rs
-  - crates/multisig-tool/src/main.rs
-  - crates/multisig-tool/static/
+  - crates/knot-tool/src/rpc.rs
+  - crates/knot-tool/src/main.rs
+  - crates/knot-tool/static/
 acceptance:
   - api_pm_resolve_sign and CLI Sign reject non-member PK after live registry account fetch
   - UI disables Sign until membership check succeeds

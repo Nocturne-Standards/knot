@@ -21,8 +21,8 @@ Planner context…
 
 Full crate + host surface inventory landed in
 `docs/launch-gap-map-2026-08.md` §Surface inventory: 5 workspace crates
-(`multisig-encoding` 0.1.2, `multisig-registry` 0.1.5, `multisig-proposals`
-0.3.2, `multisig-tool` 0.2.0, `multisig-collector` 0.2.0 AGPL) cross-checked
+(`knot-encoding` 0.1.2, `knot-registry` 0.1.5, `knot-proposals`
+0.3.2, `knot-tool` 0.2.0, `knot-collector` 0.2.0 AGPL) cross-checked
 against root `README.md`'s Status table (found stale versions there — feeds
 gap map row A12), plus 7 host surfaces (tool CLI, tool loopback RPC, tool
 web UI, collector HTTP API, registry contract, proposals contract, and the

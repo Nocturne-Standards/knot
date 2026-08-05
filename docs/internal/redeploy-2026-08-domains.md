@@ -8,23 +8,23 @@ domain tags (`nocturne.knot.*`) instead of legacy `sme-platform.*` strings.
 | Surface | Old domain | New domain |
 |---------|-----------|------------|
 | Proposal §4a preimage | `sme-platform.multisig.proposal.v1` | `nocturne.knot.multisig.proposal.v2` |
-| Registry `change_account` | `sme-platform.multisig-registry.change_account.v1` | `nocturne.knot.multisig-registry.change_account.v2` |
+| Registry `change_account` | `sme-platform.knot-registry.change_account.v1` | `nocturne.knot.multisig-registry.change_account.v2` |
 
 Constants: `DOMAIN_PROPOSAL_V2`, `DOMAIN_CHANGE_ACCOUNT_V2` in
-`crates/multisig-encoding/src/lib.rs`.
+`crates/knot-encoding/src/lib.rs`.
 
 ## Operator steps
 
-1. **Rebuild WASM** — `multisig-registry` and `multisig-proposals` (both
-   depend on `multisig-encoding` for digest verification).
+1. **Rebuild WASM** — `knot-registry` and `knot-proposals` (both
+   depend on `knot-encoding` for digest verification).
 2. **Deploy** both contracts to target network (testnet first). Use the
    `sme_platform` wrappers — they exec shared scripts in `nocturne-deployments`
    and dual-write primary + local mirror pins:
 
    ```bash
    # from sme_platform (wallet .env.testnet loaded via CALLER_REPO_ROOT):
-   ./scripts/deploy-contract.sh /path/to/knot/crates/multisig-registry -y
-   ./scripts/deploy-contract.sh /path/to/knot/crates/multisig-proposals -y
+   ./scripts/deploy-contract.sh /path/to/knot/crates/knot-registry -y
+   ./scripts/deploy-contract.sh /path/to/knot/crates/knot-proposals -y
    ```
 
    Primary pin lands in `nocturne-deployments/testnet.json`; mirror in
@@ -33,7 +33,7 @@ Constants: `DOMAIN_PROPOSAL_V2`, `DOMAIN_CHANGE_ACCOUNT_V2` in
    ```bash
    export CALLER_REPO_ROOT=/path/to/knot
    export NOCTURNE_DEPLOYMENTS_ROOT=/path/to/nocturne-deployments
-   $NOCTURNE_DEPLOYMENTS_ROOT/scripts/deploy-contract.sh crates/multisig-registry -y
+   $NOCTURNE_DEPLOYMENTS_ROOT/scripts/deploy-contract.sh crates/knot-registry -y
    ```
 
    Override primary pin only if needed: `export DEPLOYMENTS_FILE=…` before deploy.
@@ -43,17 +43,17 @@ Constants: `DOMAIN_PROPOSAL_V2`, `DOMAIN_CHANGE_ACCOUNT_V2` in
    redeploy. Operators must:
    - Re-sign pending proposals with the updated tool/collector.
    - Re-collect `change_account` quorum signatures if a rotation was in flight.
-4. **Update tooling** — ensure `multisig-tool` / `multisig-collector` are on
-   the same `multisig-encoding` revision before asking signers to approve.
+4. **Update tooling** — ensure `knot-tool` / `knot-collector` are on
+   the same `knot-encoding` revision before asking signers to approve.
    Pin lookup uses `nocturne-deployments` (symlink `deployments` →
    `aichbindas/nocturne-deployments`, or `NOCTURNE_DEPLOYMENTS`).
 
 ## Verification
 
 ```bash
-cargo test -p multisig-encoding
-(cd crates/multisig-registry && make test)
-(cd crates/multisig-proposals && make test)
+cargo test -p knot-encoding
+(cd crates/knot-registry && make test)
+(cd crates/knot-proposals && make test)
 ```
 
 Golden digests (sample vectors):
