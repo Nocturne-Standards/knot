@@ -1,7 +1,4 @@
 //! Local reader for `deployments/testnet.json` contract pin files.
-//!
-//! Default build uses this module. Enable `deployments-crate` to delegate to
-//! the optional `nocturne-deployments` git dependency instead.
 
 use std::collections::HashMap;
 use std::env;

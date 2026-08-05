@@ -9,8 +9,7 @@ members = [
 ]
 
 # Contract pins: knot-tool loads `deployments/testnet.json` via NOCTURNE_DEPLOYMENTS
-# or walk-up discovery (no private git fetch by default). Optional
-# `--features deployments-crate` on knot-tool opts into nocturne-deployments git dep.
+# or walk-up discovery — no private git dependency.
 
 [workspace.package]
 edition = "2024"
