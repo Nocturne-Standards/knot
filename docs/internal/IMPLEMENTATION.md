@@ -39,7 +39,7 @@ Verified facts an implementer can rely on (checked at `7e58d4c`):
 | `council_resolve` is fully removed from encoding | `grep -c council_resolve` = 0 |
 | `finalize` has **no** caller/membership check | `crates/knot-proposals/src/state.rs`, whole fn |
 | Collector SQL is fully parameterized | `store.rs` — all queries are literals with bound params |
-| Lab escapes HTML at every user-data sink | **Overstated** — string sinks yes; numeric `innerHTML` holes — §11 R9 |
+| Lab escapes HTML at every string sink (`escapeHtml` / `textContent`) | `app.js` — §11 R9 (2026-08-05) |
 | Tool API token compares in constant time | `rpc.rs:158-166`, `ct_eq` |
 | `rusk-wallet` is invoked with argument arrays, no shell | `chain.rs:290-299` |
 
