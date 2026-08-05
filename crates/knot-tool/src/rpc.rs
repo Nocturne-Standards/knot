@@ -128,7 +128,7 @@ pub async fn serve_with_options(
     }
     eprintln!("knot-tool listening on {url}");
     eprintln!("Authorize /api/* with header X-Knot-Token (value injected into local HTML only).");
-    eprintln!("TESTNET ONLY. Open the URL above in your browser.");
+    eprintln!("Open the URL above in your browser.");
     if opts.open_browser || opts.open_tab.is_some() {
         open_default_browser(&url);
     }
