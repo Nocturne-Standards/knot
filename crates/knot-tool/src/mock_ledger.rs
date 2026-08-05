@@ -44,6 +44,14 @@ impl DemoMode {
             DemoMode::Testnet => "testnet",
         }
     }
+
+    /// Loud serve banner suffix — reflects actual mode risk (R6).
+    pub fn serve_banner_label(&self) -> &'static str {
+        match self {
+            DemoMode::Mock => "in-process mock ledger (no chain writes)",
+            DemoMode::Testnet => "TESTNET ONLY (live chain writes)",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -534,6 +542,14 @@ mod tests {
     fn demo_mode_as_str_for_setup_status() {
         assert_eq!(DemoMode::Mock.as_str(), "mock");
         assert_eq!(DemoMode::Testnet.as_str(), "testnet");
+        assert!(
+            DemoMode::Mock.serve_banner_label().contains("mock ledger"),
+            "mock banner should not say TESTNET ONLY"
+        );
+        assert!(
+            DemoMode::Testnet.serve_banner_label().contains("TESTNET ONLY"),
+            "testnet banner must warn about live writes"
+        );
 
         #[derive(serde::Serialize)]
         struct SetupStatusSlice<'a> {

@@ -361,8 +361,7 @@ URL — it is injected into the served HTML only. Or via this repo's preview con
 
 The UI matches the Agent Pay demo visual language (Literata/Sora, cream/sky)
 as **three slides**: cover → demo studio → use cases. Set
-`DEMO_MODE=mock` (default for local demos) or `DEMO_MODE=testnet` for live
-chain writes before `serve`. In the
+`DEMO_MODE=mock` or `DEMO_MODE=testnet` before `serve`. In the
 studio, **Start walkthrough** runs the **five-beat** proposals path
 (Cast → Form council → Look up → Propose & first approve → Threshold &
 finalize) — creates alice/bob/carol, prefills fields, and advances on

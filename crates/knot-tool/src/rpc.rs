@@ -92,7 +92,11 @@ pub async fn serve_with_options(
 
     let demo_mode = DemoMode::from_env().map_err(anyhow::Error::msg)?;
     eprintln!("════════════════════════════════════════════════════════");
-    eprintln!("  DEMO_MODE={} — TESTNET ONLY", demo_mode.as_str());
+    eprintln!(
+        "  DEMO_MODE={} — {}",
+        demo_mode.as_str(),
+        demo_mode.serve_banner_label()
+    );
     eprintln!("════════════════════════════════════════════════════════");
 
     let mut token_bytes = [0u8; 32];
