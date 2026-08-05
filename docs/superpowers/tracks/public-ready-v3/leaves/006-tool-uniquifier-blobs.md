@@ -39,4 +39,10 @@ Lab session/cookie work is **#14**, not this leaf.
 - L7/L8/L14: `bls::aggregate` Result, `write_atomic`, `GateError`
 - R5/R11: `validate_collector_url`, `validate_proposal_id` in collector client
 
+### Fix-pass (review L14 shared-code)
+
+- Commit: `9159e7e` — `fix(encoding): typed GateError at source for digest gate`
+- Tests: `knot-encoding` 25 passed; `knot-tool` 55 passed
+- `GateError` in `knot-encoding`; `knot-tool::blob::gate_blob` delegates to `gate_blob_for_signing`
+
 ## Proposal (worker, if BLOCKED)
