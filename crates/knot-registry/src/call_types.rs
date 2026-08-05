@@ -5,6 +5,6 @@
 //! `use` paths keep working.
 
 pub use knot_encoding::call_types::{
-    AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
-    SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
+    VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };

@@ -9,8 +9,8 @@ mod knot_registry {
     use knot_encoding::change_account_message_v3;
 
     use knot_registry::call_types::{
-        AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult,
-        MultisigAccountView, SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+        ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
+        VerifyQuorumAggregateArgs, VerifyQuorumArgs,
     };
 
     /// Soft cap on committee size — enough for operator councils; bounds
@@ -74,67 +74,9 @@ mod knot_registry {
             })
         }
 
-        /// Same lookup as `account`, but returns only scalars — no
-        /// `BlsPublicKey` values on the wire. Diagnostic for the testnet
-        /// free-read path that always returns `None` from `account`.
-        pub fn account_meta(&self, id: u64) -> Option<AccountMeta> {
-            self.accounts.get(&id).map(|a| AccountMeta {
-                threshold: a.threshold,
-                nonce: a.nonce,
-                members_len: a.members.len() as u32,
-            })
-        }
-
-        /// Raw compressed member public keys (96 bytes each). Diagnostic for
-        /// comparing on-chain membership against an off-chain keystore.
-        pub fn member_key_bytes(&self, id: u64) -> Option<Vec<Vec<u8>>> {
-            self.accounts.get(&id).map(|a| {
-                a.members
-                    .iter()
-                    .map(|pk| pk.to_bytes().to_vec())
-                    .collect()
-            })
-        }
-
-        /// Next account id that `create_account` will hand out. Free-read
-        /// probe for whether *any* of this contract's state is visible to
-        /// RUES queries (should be >0 after successful creates).
+        /// Next account id that `create_account` will hand out.
         pub fn next_account_id(&self) -> u64 {
             self.next_id
-        }
-
-        /// Breaks `quorum_met` into observable counters + dumps member key
-        /// bytes. Thin wrapper over [`quorum_counts`] plus a member-pk dump.
-        /// Used on testnet where free-read `verify_quorum` returns HTTP 500
-        /// and `change_account` only surfaces a single panic string.
-        pub fn diagnose_quorum(&self, args: VerifyQuorumArgs) -> DiagnoseQuorumResult {
-            let Some(account) = self.accounts.get(&args.account_id) else {
-                return DiagnoseQuorumResult {
-                    exists: false,
-                    threshold: 0,
-                    members_len: 0,
-                    member_matches: 0,
-                    sigs_ok: 0,
-                    member_pk_bytes: Vec::new(),
-                };
-            };
-
-            let member_pk_bytes: Vec<Vec<u8>> = account
-                .members
-                .iter()
-                .map(|pk| pk.to_bytes().to_vec())
-                .collect();
-            let (member_matches, sigs_ok) =
-                quorum_counts(&account.members, &args.msg, &args.sigs);
-
-            DiagnoseQuorumResult {
-                exists: true,
-                threshold: account.threshold,
-                members_len: account.members.len() as u32,
-                member_matches,
-                sigs_ok,
-                member_pk_bytes,
-            }
         }
 
         /// Pure verification primitive — see `VerifyQuorumArgs`'s doc for
@@ -158,7 +100,7 @@ mod knot_registry {
         /// Returns `false` (never panics) for an unknown account, a
         /// `signer_keys` set smaller than the threshold, a set containing a
         /// duplicate or non-member key, or an aggregate signature that
-        /// doesn't verify — mirrors `verify_quorum`'s bool convention.
+        /// doesn't verify — same bool convention as `verify_quorum`.
         pub fn verify_quorum_aggregate(&self, args: VerifyQuorumAggregateArgs) -> bool {
             let Some(account) = self.accounts.get(&args.account_id) else {
                 return false;

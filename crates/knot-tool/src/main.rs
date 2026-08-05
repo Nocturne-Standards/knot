@@ -23,13 +23,13 @@ use clap::{Parser, Subcommand};
 use dusk_bytes::Serializable;
 use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-use knot_tool::{blob, bls, collector_client, membership, mock_ledger};
+use knot_tool::{blob, bls, collector_client, diagnose, membership, mock_ledger};
 
 use proposals_types::call_types::{
     ApproveArgs, ProposalStatus, ProposalView, ProposeArgs,
 };
 use registry_types::call_types::{
-    AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
     SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
 
@@ -175,7 +175,7 @@ enum QuorumCmd {
         #[arg(long = "signer", required = true)]
         signers: Vec<String>,
     },
-    /// Free-read diagnose_quorum — membership/verify counters + member key dump.
+    /// Off-chain diagnose — membership/verify counters + member key dump.
     Diagnose {
         #[arg(long)]
         account: u64,
@@ -512,40 +512,38 @@ fn print_write_result(label: &str, r: chain::WriteResult) {
     println!("{}", r.stdout);
 }
 
-/// Free-read verify can return false / sigs_ok=0 on live testnet even when
-/// the same secure signatures succeed on mutating paths (`change_account`).
-/// Surface counters and warn when membership matches but verifies fail.
+async fn fetch_account(account_id: u64) -> Result<Option<MultisigAccountView>> {
+    let bytes = chain::encode(&account_id)?;
+    chain::query("account", bytes).await
+}
+
+/// Surface off-chain diagnose counters; still free-read `verify_quorum` for comparison.
 async fn print_quorum_free_read(
     label: &str,
-    _account: u64,
+    account_id: u64,
     args: &VerifyQuorumArgs,
     local_signer_hex: &[String],
 ) -> Result<()> {
-    let bytes = chain::encode(args)?;
-    match chain::query::<DiagnoseQuorumResult>("diagnose_quorum", bytes.clone()).await {
-        Ok(d) => {
-            println!(
-                "{label} diagnose: exists={}, threshold={}, members_len={}, member_matches={}, sigs_ok={}",
-                d.exists, d.threshold, d.members_len, d.member_matches, d.sigs_ok
-            );
-            if d.member_matches > 0 && d.sigs_ok == 0 {
-                println!(
-                    "note: free-read verify looks untrusted here (members matched, sigs_ok=0). \
-                     Prefer change_account panic counters or a proposals finalize for crisp demos; \
-                     see README Known caveats."
-                );
-            }
-            for (i, k) in d.member_pk_bytes.iter().enumerate() {
-                let hex_k = hex::encode(k);
-                let local_hit = local_signer_hex.iter().any(|p| p == &hex_k);
-                println!("  on-chain member[{i}] {hex_k} local_signer_match={local_hit}");
-            }
-        }
-        Err(e) => println!("{label} diagnose failed: {e}"),
+    let view = fetch_account(account_id).await?;
+    let d = diagnose::diagnose_quorum(view.as_ref(), args);
+    println!(
+        "{label} diagnose: exists={}, threshold={}, members_len={}, member_matches={}, sigs_ok={}",
+        d.exists, d.threshold, d.members_len, d.member_matches, d.sigs_ok
+    );
+    if d.member_matches > 0 && d.sigs_ok == 0 {
+        println!(
+            "note: signatures did not verify locally — check message bytes and signer keys."
+        );
     }
+    for (i, k) in d.member_pk_bytes.iter().enumerate() {
+        let hex_k = hex::encode(k);
+        let local_hit = local_signer_hex.iter().any(|p| p == &hex_k);
+        println!("  member[{i}] {hex_k} local_signer_match={local_hit}");
+    }
+    let bytes = chain::encode(args)?;
     match chain::query::<bool>("verify_quorum", bytes).await {
-        Ok(passed) => println!("{label} check => {passed}"),
-        Err(e) => println!("{label} check failed: {e}"),
+        Ok(passed) => println!("{label} on-chain check => {passed}"),
+        Err(e) => println!("{label} on-chain check failed: {e}"),
     }
     Ok(())
 }
@@ -648,24 +646,22 @@ async fn main() -> Result<()> {
                 }
             }
             AccountCmd::Meta { account_id } => {
-                let bytes = chain::encode(&account_id)?;
-                let meta: Option<AccountMeta> = chain::query("account_meta", bytes).await?;
-                match meta {
-                    Some(m) => println!(
+                let view = fetch_account(account_id).await?;
+                match view {
+                    Some(v) => println!(
                         "account_meta {account_id}: threshold={}, nonce={}, members_len={}",
-                        m.threshold, m.nonce, m.members_len
+                        v.threshold, v.nonce, v.members.len()
                     ),
                     None => println!("account_meta {account_id}: not found"),
                 }
             }
             AccountCmd::Keys { account_id } => {
-                let bytes = chain::encode(&account_id)?;
-                let keys: Option<Vec<Vec<u8>>> = chain::query("member_key_bytes", bytes).await?;
-                match keys {
-                    Some(keys) => {
-                        println!("member_key_bytes {account_id}: {} keys", keys.len());
-                        for (i, k) in keys.iter().enumerate() {
-                            println!("  [{i}] {}", hex::encode(k));
+                let view = fetch_account(account_id).await?;
+                match view {
+                    Some(v) => {
+                        println!("member_key_bytes {account_id}: {} keys", v.members.len());
+                        for (i, pk) in v.members.iter().enumerate() {
+                            println!("  [{i}] {}", hex::encode(pk.to_bytes()));
                         }
                     }
                     None => println!("member_key_bytes {account_id}: not found"),
