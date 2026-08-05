@@ -41,9 +41,10 @@ cargo run -p knot-tool -- serve --bind 127.0.0.1:8877
 # or: cargo run -p knot-tool -- serve --bind 127.0.0.1:8877
 ```
 
-Open the printed `http://127.0.0.1:8877/` URL (API bearer token is printed once
-and embedded in the page). Re-running `init` against
-an existing store only unlocks + summarizes — it does not wipe identities.
+Set `DEMO_MODE=mock` or `DEMO_MODE=testnet`, then open the printed bootstrap URL
+(`http://127.0.0.1:8877/?code=…`) — one-shot OTP sets an HttpOnly session cookie;
+the secret is never embedded in HTML. Re-running `init` against an existing store
+only unlocks + summarizes — it does not wipe identities.
 
 | Env | Purpose |
 |---|---|
@@ -98,11 +99,13 @@ submission goes two ways:
   wallet format (that's one BIP39-seed wallet — wrong shape for N
   independently-named identities); reuses the same class of vetted crates
   instead of inventing a new format.
-- The local RPC (`serve`) binds `127.0.0.1` only — refuses any other bind
-  address outright (see `rpc::serve`'s check). Every `/api/*` route requires
-  a random bearer token generated at process start
-  (`X-Knot-Token` header) — printed once to the terminal, embedded
-  into the served `index.html`. No token, no access (`401`).
+- The local RPC (`serve`) binds loopback only — refuses any non-loopback
+  address (see `rpc::validate_loopback_bind`). `serve` requires explicit
+  `DEMO_MODE=mock` or `DEMO_MODE=testnet`. Session auth: CLI prints a
+  one-shot bootstrap URL (`/?code=…`); visiting it sets an HttpOnly
+  `SameSite=Strict` session cookie used for `/api/*`. No cookie → `401`.
+  `X-Knot-Token` header is optional (tests/scripting only); HTML never
+  embeds the session secret.
 - `--network testnet` / the testnet RUES base URL are hard-coded, not
   configurable via any flag, env var, or UI control.
 - All shelling-out uses argument arrays (`std::process::Command`), never a
@@ -359,9 +362,9 @@ free-read diagnose/check follow-up and warns when it looks untrusted.
 knot-tool serve --bind 127.0.0.1:8877
 ```
 
-Prints a loopback URL (`http://127.0.0.1:8877/`) and the API auth header
-name (`X-Knot-Token`). The token value is **not** printed in the
-URL — it is injected into the served HTML only. Or via this repo's preview convention:
+Prints a loopback bootstrap URL (`http://127.0.0.1:8877/?code=…`) — open it
+once to set the HttpOnly session cookie. `X-Knot-Token` is optional for
+tests; the session secret is never embedded in served HTML. Or via this repo's preview convention:
 `scripts/run-knot-tool-native.sh` (wired into `.claude/launch.json` as
 `knot-tool`, port 8877) — uses a fixed dev password
 (`KNOT_ALLOW_ENV_PWD=1` + `KNOT_PWD=...`), fine for local dev only.
