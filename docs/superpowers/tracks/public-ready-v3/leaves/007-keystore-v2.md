@@ -21,4 +21,7 @@ Planner context…
 
 ## Evidence (worker)
 
-## Proposal (worker, if BLOCKED)
+- Commit on `feat/public-ready-v3-rename`
+- `cargo test -p knot-tool keystore::` — 11/11 pass
+- `cargo test -p knot-tool` — all pass
+- Report: `.superpowers/sdd/task-7-report.md`
