@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# Public-surface / leak gate. Regex SSOT — MCP must exec this, not reimplement.
+# See PUBLIC-REPO-STANDARD §5 and TOOLING-AUDIT-LESSONS.md
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$ROOT" ]]; then
+  echo "check-public-surface: not inside a git work tree" >&2
+  exit 1
+fi
+cd "$ROOT"
+
+ALLOWLIST_FILE="${PUBLIC_SURFACE_ALLOWLIST:-.public-surface-allowlist}"
+# Knot is pre-launch: default soft private-tier. Set ALLOW_PRIVATE_TIER=0 before public push.
+ALLOW_PRIVATE_TIER="${ALLOW_PRIVATE_TIER:-1}"
+SELF_NAME="scripts/check-public-surface.sh"
+KIT_SELF="bin/check-public-surface.sh"
+
+fail=0
+warn=0
+
+is_allowlisted() {
+  local line="$1"
+  [[ -f "$ALLOWLIST_FILE" ]] || return 1
+  while IFS= read -r pat || [[ -n "$pat" ]]; do
+    [[ -z "$pat" || "$pat" =~ ^[[:space:]]*# ]] && continue
+    if [[ "$line" == *"$pat"* ]]; then
+      return 0
+    fi
+  done < "$ALLOWLIST_FILE"
+  return 1
+}
+
+filter_hits() {
+  # stdin: git grep lines; stdout: non-allowlisted
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" ]] && continue
+    if is_allowlisted "$line"; then
+      continue
+    fi
+    # Always ignore the gate script itself and allowlist file
+    case "$line" in
+      "$SELF_NAME":*|"$KIT_SELF":*|*"/$SELF_NAME":*|*"/$KIT_SELF":*|.public-surface-allowlist:*|docs/internal/PUBLIC-REPO-STANDARD.md:*|docs/internal/TOOLING-AUDIT-LESSONS.md:*)
+        continue
+        ;;
+    esac
+    printf '%s\n' "$line"
+  done
+}
+
+check() {
+  # check <severity> <label> <regex>
+  # severity: hard | soft  (soft becomes warn when ALLOW_PRIVATE_TIER=1)
+  local severity="$1" label="$2" regex="$3"
+  local hits
+  hits="$(git grep -nIE "$regex" -- \
+    ':!.git' \
+    ':!target' \
+    ':!node_modules' \
+    ':!.worktrees' \
+    ':!scripts/check-public-surface.sh' \
+    ':!bin/check-public-surface.sh' \
+    ':!.public-surface-allowlist' \
+    2>/dev/null || true)"
+  if [[ -z "$hits" ]]; then
+    return 0
+  fi
+  hits="$(printf '%s\n' "$hits" | filter_hits)"
+  if [[ -z "$hits" ]]; then
+    return 0
+  fi
+  if [[ "$severity" == soft && "$ALLOW_PRIVATE_TIER" == 1 ]]; then
+    echo "WARN ($label) — ALLOW_PRIVATE_TIER=1:"
+    printf '%s\n' "$hits"
+    warn=1
+    return 0
+  fi
+  echo "BLOCKED: $label"
+  printf '%s\n' "$hits"
+  fail=1
+}
+
+# Always hard: real-looking password/secret assignments (not TOKEN placeholders like __TOKEN__)
+check hard "possible credential" '(PASSWORD|PWD|SECRET|API_KEY) *= *(['\''"][^'\''".][^'\''"]{5,}|[^'\''"[:space:].$][^[:space:]]{5,})'
+
+# Absolute paths: hard after public launch; soft while ALLOW_PRIVATE_TIER=1
+check soft "absolute local path" '/(Users|home)/[a-zA-Z]'
+
+# Soft until private tier is stripped for public launch
+check soft "spec section reference" '§[0-9]'
+check soft "wave/track/milestone" '\b(Wave|Track|Phase) [0-9A-Z]\b'
+check soft "spec number" '\b[Ss]pec [0-9]'
+check soft "private doc path" '(docs/superpowers|docs/internal|references/|rusk-experiments|deployments/testnet\.json)'
+check soft "internal repo name" '(nocturne-agent-kit|nocturne-mcp-|pituitary)'
+check soft "escaping relative link" '\]\(\.\./\.\./\.\./'
+check soft "unresolved marker" '\b(TODO|FIXME|XXX|HACK)\b'
+
+if ((fail)); then
+  exit 1
+fi
+if ((warn)); then
+  echo "check-public-surface: completed with warnings (ALLOW_PRIVATE_TIER=1)"
+fi
+exit 0

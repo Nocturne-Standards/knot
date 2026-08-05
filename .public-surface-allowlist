@@ -1,0 +1,28 @@
+# Substrings that neutralize a leak-gate hit (line contains any of these → ignored).
+# Tune before public launch; unset ALLOW_PRIVATE_TIER in CI when ready to fail-closed.
+
+# Historical domain tags that cannot change (on-chain)
+sme-platform
+nocturne.knot
+
+# Public protocol section labels (§4a / §4b) and common doc section refs
+§4
+§2
+§7
+
+# Internal tooling names still present until public carve
+nocturne-agent-kit
+nocturne-mcp-
+pituitary
+.nocturne-agent-kit-adopted
+.cursor/mcp.json
+AGENTS.md
+.pituitary/
+
+# Scripts and this allowlist
+scripts/check-public-surface.sh
+.public-surface-allowlist
+
+# Spec / design docs that discuss the patterns (private tier until launch)
+docs/internal/
+docs/superpowers/
