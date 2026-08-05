@@ -47,6 +47,8 @@ nocturne-deployments = { git = "https://github.com/aichbindas/nocturne-deploymen
 zeroize = "1"
 subtle = "2"
 libc = "0.2"
+argon2 = "0.5"
+directories = "5"
 
 [dev-dependencies]
 dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }

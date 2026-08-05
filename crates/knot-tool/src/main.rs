@@ -552,7 +552,10 @@ async fn print_quorum_free_read(
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let store_path = cli.store.clone().unwrap_or_else(keystore::resolve_default_path);
+    let store_path = match cli.store.clone() {
+        Some(p) => p,
+        None => keystore::resolve_default_path()?,
+    };
 
     match cli.cmd {
         Cmd::Init { name } => {

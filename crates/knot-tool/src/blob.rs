@@ -201,7 +201,14 @@ impl<'de> Deserialize<'de> for BlobFile {
 }
 
 fn hex32(s: &str) -> Result<[u8; 32]> {
-    let bytes = hex::decode(s.trim_start_matches("0x")).context("expected hex")?;
+    let stripped = s
+        .trim()
+        .strip_prefix("0x")
+        .unwrap_or(s.trim());
+    if stripped.starts_with("0x") {
+        bail!("repeated 0x prefix");
+    }
+    let bytes = hex::decode(stripped).context("expected hex")?;
     bytes
         .as_slice()
         .try_into()
@@ -209,7 +216,14 @@ fn hex32(s: &str) -> Result<[u8; 32]> {
 }
 
 fn hex96(s: &str) -> Result<[u8; 96]> {
-    let bytes = hex::decode(s.trim_start_matches("0x")).context("expected hex")?;
+    let stripped = s
+        .trim()
+        .strip_prefix("0x")
+        .unwrap_or(s.trim());
+    if stripped.starts_with("0x") {
+        bail!("repeated 0x prefix");
+    }
+    let bytes = hex::decode(stripped).context("expected hex")?;
     bytes
         .as_slice()
         .try_into()

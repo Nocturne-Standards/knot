@@ -30,7 +30,7 @@ From this repo root:
 export RUSK_WALLET_PWD=...   # rusk-wallet keystore password (testnet)
 # Optional scripting — both required, or omit both and type the keystore password:
 export KNOT_ALLOW_ENV_PWD=1
-export KNOT_PWD=...                      # unlocks ~/.knot/identities.dat
+export KNOT_PWD=...                      # unlocks default identity store (see Security model)
 
 # Shared collector (if you use one) — password is the nginx htpasswd you handed out:
 export KNOT_COLLECTOR_URL=https://collector.nocturne-standards.org
@@ -85,20 +85,26 @@ submission goes two ways:
 
 ## Security model
 
+**Test tooling only — not production key custody.** In production each identity
+holds its own key in its own wallet. This local encrypted store exists so
+developers can exercise multisig flows; do not treat it as a hardened wallet.
+
 - Every identity's secret key lives only in this process (in memory) or the
-  local encrypted keystore file (`~/.knot/identities.dat` by
-  default) — signing happens server-side; the web UI's JS never receives a
-  secret key, only names/public keys/messages/signatures.
-- Keystore: AES-256-GCM, key derived via PBKDF2-HMAC-SHA256 (600k rounds)
-  from a password prompted at startup. Rounds are a **compile-time constant**
-  (not persisted in the keystore file) — bumping rounds invalidates existing
-  stores; delete `~/.knot/identities.dat` (or your `--store` path)
-  and re-import identities after an upgrade. `KNOT_PWD` is honored only
-  when `KNOT_ALLOW_ENV_PWD=1` is also set (scripting); otherwise the
-  tool refuses the env password with a clear error. Not `rusk-wallet`'s
-  wallet format (that's one BIP39-seed wallet — wrong shape for N
-  independently-named identities); reuses the same class of vetted crates
-  instead of inventing a new format.
+  local encrypted keystore file (platform data dir by default, see below) —
+  signing happens server-side; the web UI's JS never receives a secret key,
+  only names/public keys/messages/signatures.
+- Keystore v2: AES-256-GCM with header bytes as associated data; key derived via
+  **Argon2id** (64 MiB, t=3, p=4) for new stores. Legacy v1 files (PBKDF2
+  600k rounds, JSON plaintext) load once and are silently re-saved as v2.
+  Saves are atomic (`tmp` + `rename` + directory fsync; `F_FULLFSYNC` on
+  macOS), rotate a `.bak` copy, and create files at mode `0o600` / parent
+  `0o700` on Unix. Over-permissive stores are refused on load.
+  `identity export <name>` prints a public key for sharing;
+  `identity import-pk <name> <pk>` adds a pk-only member. `KNOT_PWD` is honored
+  only when `KNOT_ALLOW_ENV_PWD=1` is also set (scripting); otherwise the tool
+  refuses the env password with a clear error. Not `rusk-wallet`'s wallet format
+  (that's one BIP39-seed wallet — wrong shape for N independently-named
+  identities); reuses vetted crates instead of inventing a new format.
 - The local RPC (`serve`) binds loopback only — refuses any non-loopback
   address (see `rpc::validate_loopback_bind`). `serve` requires explicit
   `DEMO_MODE=mock` or `DEMO_MODE=testnet`. Session auth: CLI prints a
@@ -353,8 +359,8 @@ knot-tool party list
 Writes print `=== fn: tx included/propagated ===` or `=== fn: FAIL (contract panic) ===`
 plus any `Panic: ...` line (governance counters). Quorum submit also runs a
 free-read diagnose/check follow-up and warns when it looks untrusted.
-`--store <path>` (global flag) overrides the default keystore location
-(`~/.knot/identities.dat`).
+`--store <path>` (global flag) or `KNOT_STORE` overrides the default keystore
+location (platform data dir; legacy `~/.knot/identities.dat` read fallback).
 
 ### Web UI
 
