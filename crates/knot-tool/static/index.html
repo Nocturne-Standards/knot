@@ -230,6 +230,77 @@
 
           <button type="button" class="slide-arrow" id="btn-beat-next" aria-label="Next beat">›</button>
         </div>
+
+        <details class="dev-drawer" id="dev-drawer" hidden>
+          <summary>Developer drawer (testnet only)</summary>
+          <div class="dev-drawer-inner">
+            <section class="dev-panel" id="panel-quorum-verify">
+              <header class="pane-head">
+                <h4>Quorum verify (unsafe UTF-8)</h4>
+                <p class="lede">Arbitrary message demo — preview fingerprint, then submit with confirm. Prefer one signer per serve process.</p>
+              </header>
+              <label class="field-block">
+                <span class="value-name">Council id</span>
+                <input id="quorum-account" type="number" min="0" value="0" dir="ltr" />
+              </label>
+              <label class="field-block">
+                <span class="value-name">Message</span>
+                <input id="quorum-msg" type="text" dir="ltr" placeholder="hello" />
+              </label>
+              <label class="field-block">
+                <span class="value-name">Signers (comma-separated)</span>
+                <input id="quorum-signers" type="text" dir="ltr" placeholder="alice,bob" />
+              </label>
+              <div class="intent-card" id="quorum-preview-card" hidden>
+                <p class="section-label">Fingerprint</p>
+                <p class="intent-description" id="quorum-fingerprint"></p>
+                <div class="actions actions-center">
+                  <button type="button" class="primary" id="btn-quorum-confirm" onclick="confirmQuorumIntent()">Looks right - continue</button>
+                </div>
+              </div>
+              <div class="actions actions-center">
+                <button type="button" class="ghost" onclick="quorumPreview()">Preview</button>
+                <button type="button" class="primary" id="btn-quorum-submit" onclick="quorumSubmit()" disabled>Submit verify_quorum</button>
+              </div>
+              <div class="outcome" id="quorum-outcome" hidden></div>
+            </section>
+
+            <section class="dev-panel" id="panel-change-account">
+              <header class="pane-head">
+                <h4>Rotate council (change_account)</h4>
+                <p class="lede">Replace members/threshold — preview digest, then submit with confirm.</p>
+              </header>
+              <label class="field-block">
+                <span class="value-name">Council id</span>
+                <input id="change-account-id" type="number" min="0" value="0" dir="ltr" />
+              </label>
+              <label class="field-block">
+                <span class="value-name">New members (comma-separated)</span>
+                <input id="change-new-members" type="text" dir="ltr" placeholder="alice,bob" />
+              </label>
+              <label class="compact-field">
+                <span class="value-name">New threshold</span>
+                <input id="change-new-threshold" type="number" min="1" value="2" dir="ltr" />
+              </label>
+              <label class="field-block">
+                <span class="value-name">Signers (comma-separated)</span>
+                <input id="change-signers" type="text" dir="ltr" placeholder="alice,bob" />
+              </label>
+              <div class="intent-card" id="change-preview-card" hidden>
+                <p class="section-label">Fingerprint</p>
+                <p class="intent-description" id="change-fingerprint"></p>
+                <div class="actions actions-center">
+                  <button type="button" class="primary" id="btn-change-confirm" onclick="confirmChangeAccountIntent()">Looks right - continue</button>
+                </div>
+              </div>
+              <div class="actions actions-center">
+                <button type="button" class="ghost" onclick="changeAccountPreview()">Preview</button>
+                <button type="button" class="primary" id="btn-change-submit" onclick="changeAccountSubmit()" disabled>Submit change_account</button>
+              </div>
+              <div class="outcome" id="change-outcome" hidden></div>
+            </section>
+          </div>
+        </details>
       </div>
     </section>
 

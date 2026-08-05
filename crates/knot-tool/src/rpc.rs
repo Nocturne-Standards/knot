@@ -1044,6 +1044,58 @@ struct QuorumSubmitReq {
     #[serde(default)]
     hex: bool,
     signers: Vec<String>,
+    /// Must be true on submit — call preview first, then confirm before signing.
+    #[serde(default)]
+    confirm: bool,
+}
+
+#[derive(Serialize)]
+struct QuorumSignPreviewOut {
+    account_id: u64,
+    msg_hex: String,
+    digest_hex: String,
+    digest_mnemonic: String,
+    digest_safety_number: String,
+    signers: Vec<String>,
+    /// Soft hint when multiple local signers are requested in one serve call.
+    note: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ChangeAccountPreviewOut {
+    account_id: u64,
+    nonce: u64,
+    new_members: Vec<String>,
+    new_threshold: u32,
+    signers: Vec<String>,
+    digest_hex: String,
+    digest_mnemonic: String,
+    digest_safety_number: String,
+    note: Option<String>,
+}
+
+fn multi_signer_serve_note(signers: &[String]) -> Option<String> {
+    if signers.len() > 1 {
+        Some(
+            "Prefer one signer identity per serve process — run separate serve instances per member when possible."
+                .into(),
+        )
+    } else {
+        None
+    }
+}
+
+fn quorum_preview_out(account_id: u64, msg: &[u8], signers: &[String]) -> QuorumSignPreviewOut {
+    let (digest_hex, digest_mnemonic, digest_safety_number) = bls::message_fingerprint_display(msg);
+    QuorumSignPreviewOut {
+        account_id,
+        msg_hex: format!("0x{}", hex::encode(msg)),
+        digest_hex,
+        digest_mnemonic,
+        digest_safety_number,
+        signers: signers.to_vec(),
+        note: multi_signer_serve_note(signers),
+    }
 }
 
 fn msg_bytes(msg: &str, hex_flag: bool) -> ApiResult<Vec<u8>> {
@@ -1150,10 +1202,22 @@ async fn free_read_quorum(args: &VerifyQuorumArgs) -> ApiResult<(Option<Diagnose
     Ok((diagnose, check))
 }
 
+async fn api_quorum_preview(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<QuorumSubmitReq>,
+) -> ApiResult<Json<QuorumSignPreviewOut>> {
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
+    let msg = msg_bytes(&req.msg, req.hex)?;
+    Ok(Json(quorum_preview_out(req.account, &msg, &req.signers)))
+}
+
 async fn api_quorum_submit(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
 ) -> ApiResult<Json<SubmitOut>> {
+    if !req.confirm {
+        return Err(RpcError::confirm_required());
+    }
     mock_drawer_unavailable(&state)?;
     ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
@@ -1221,10 +1285,22 @@ async fn api_quorum_diagnose(
     api_quorum_check(State(state), Json(req)).await
 }
 
+async fn api_quorum_agg_preview(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<QuorumSubmitReq>,
+) -> ApiResult<Json<QuorumSignPreviewOut>> {
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
+    let msg = msg_bytes(&req.msg, req.hex)?;
+    Ok(Json(quorum_preview_out(req.account, &msg, &req.signers)))
+}
+
 async fn api_quorum_agg_submit(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
 ) -> ApiResult<Json<SubmitOut>> {
+    if !req.confirm {
+        return Err(RpcError::confirm_required());
+    }
     mock_drawer_unavailable(&state)?;
     ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
@@ -1313,12 +1389,61 @@ struct ChangeAccountReq {
     new_members: Vec<String>,
     new_threshold: u32,
     signers: Vec<String>,
+    #[serde(default)]
+    confirm: bool,
+}
+
+async fn api_change_account_preview(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ChangeAccountReq>,
+) -> ApiResult<Json<ChangeAccountPreviewOut>> {
+    let mut new_members = Vec::with_capacity(req.new_members.len());
+    for name in &req.new_members {
+        new_members.push(find_pk(&state, name).await?);
+    }
+
+    let current = if state.demo_mode == DemoMode::Mock {
+        let mock = state.mock.lock().await;
+        let account = mock
+            .account(req.account)
+            .ok_or_else(|| RpcError::account_not_found(req.account))?;
+        account.to_account_view()
+    } else {
+        let current: Option<MultisigAccountView> =
+            chain::query("account", chain::encode(&req.account).map_err(RpcError::internal)?)
+                .await
+                .map_err(RpcError::internal)?;
+        current.ok_or_else(|| RpcError::account_not_found(req.account))?
+    };
+
+    let msg = bls::change_account_message(req.account, current.nonce, &new_members, req.new_threshold);
+    ensure_pks_are_members_view(
+        req.account,
+        &resolve_signer_pks_locked(&state, &req.signers).await?,
+        &current,
+    )?;
+    let (digest_hex, digest_mnemonic, digest_safety_number) = bls::message_fingerprint_display(&msg);
+    let note = multi_signer_serve_note(&req.signers);
+    Ok(Json(ChangeAccountPreviewOut {
+        account_id: req.account,
+        nonce: current.nonce,
+        new_members: req.new_members,
+        new_threshold: req.new_threshold,
+        signers: req.signers,
+        digest_hex,
+        digest_mnemonic,
+        digest_safety_number,
+        note,
+    }))
 }
 
 async fn api_change_account_submit(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ChangeAccountReq>,
 ) -> ApiResult<Json<SubmitOut>> {
+    if !req.confirm {
+        return Err(RpcError::confirm_required());
+    }
     mock_drawer_unavailable(&state)?;
     let mut new_members = Vec::with_capacity(req.new_members.len());
     for name in &req.new_members {
@@ -1788,11 +1913,14 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/account/{id}/keys", get(api_account_keys))
         .route("/api/account/next-id", get(api_account_next_id))
         .route("/api/registry/accounts", get(api_registry_accounts))
+        .route("/api/quorum/preview", post(api_quorum_preview))
         .route("/api/quorum/submit", post(api_quorum_submit))
         .route("/api/quorum/check", post(api_quorum_check))
         .route("/api/quorum/diagnose", post(api_quorum_diagnose))
+        .route("/api/quorum-agg/preview", post(api_quorum_agg_preview))
         .route("/api/quorum-agg/submit", post(api_quorum_agg_submit))
         .route("/api/quorum-agg/check", post(api_quorum_agg_check))
+        .route("/api/change-account/preview", post(api_change_account_preview))
         .route("/api/change-account/submit", post(api_change_account_submit))
         .route("/api/proposal/create", post(api_proposal_create))
         .route("/api/proposal/{id}/preview", get(api_proposal_preview))
@@ -2279,5 +2407,146 @@ mod generic_rpc_smoke {
         let err: serde_json::Value = serde_json::from_str(&body).expect("error json");
         assert_eq!(err["code"], "invalid_hex");
         assert_eq!(err["message"], "Invalid hex encoding.");
+    }
+
+    fn test_state_testnet_with_identities(names: &[&str]) -> Arc<AppState> {
+        let identities: Vec<keystore::Identity> = names
+            .iter()
+            .map(|name| keystore::generate(name))
+            .collect();
+        Arc::new(AppState {
+            identities: Mutex::new(identities),
+            password: "smoke-test-password".into(),
+            store_path: PathBuf::from("/tmp/knot-tool-smoke-identities.dat"),
+            otp: Mutex::new(Some(TEST_OTP.into())),
+            session_token: TEST_SESSION.into(),
+            demo_mode: DemoMode::Testnet,
+            mock: Mutex::new(MockLedger::new()),
+        })
+    }
+
+    #[tokio::test]
+    async fn quorum_submit_without_confirm_is_rejected() {
+        let state = test_state_testnet_with_identities(&["alice", "bob"]);
+        let app = build_router(state);
+
+        let body = serde_json::json!({
+            "account": 0,
+            "msg": "hello",
+            "signers": ["alice"],
+            "confirm": false
+        });
+        let (status, resp_body) = oneshot_json(
+            app,
+            "POST",
+            "/api/quorum/submit",
+            Some(body.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "quorum submit: {resp_body}");
+        let err: serde_json::Value = serde_json::from_str(&resp_body).expect("error json");
+        assert_eq!(err["code"], "confirm_required");
+        assert!(err["message"].as_str().unwrap_or("").contains("Confirm required"));
+    }
+
+    #[tokio::test]
+    async fn change_account_submit_without_confirm_is_rejected() {
+        let state = test_state_testnet_with_identities(&["alice", "bob"]);
+        let app = build_router(state);
+
+        let body = serde_json::json!({
+            "account": 0,
+            "new_members": ["alice", "bob"],
+            "new_threshold": 2,
+            "signers": ["alice"],
+            "confirm": false
+        });
+        let (status, resp_body) = oneshot_json(
+            app,
+            "POST",
+            "/api/change-account/submit",
+            Some(body.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "change-account submit: {resp_body}");
+        let err: serde_json::Value = serde_json::from_str(&resp_body).expect("error json");
+        assert_eq!(err["code"], "confirm_required");
+    }
+
+    #[tokio::test]
+    async fn quorum_preview_returns_fingerprint() {
+        let state = test_state_with_identities(&["alice", "bob"]);
+        let app = build_router(state);
+
+        let create_account = serde_json::json!({
+            "members": ["alice", "bob"],
+            "threshold": 2
+        });
+        oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/account/create",
+            Some(create_account.to_string()),
+        )
+        .await;
+
+        let preview_req = serde_json::json!({
+            "account": 0,
+            "msg": "hello",
+            "signers": ["alice", "bob"]
+        });
+        let (status, body) = oneshot_json(
+            app,
+            "POST",
+            "/api/quorum/preview",
+            Some(preview_req.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "quorum preview: {body}");
+        let preview: serde_json::Value = serde_json::from_str(&body).expect("preview json");
+        assert!(preview["digest_hex"].as_str().unwrap_or("").starts_with("0x"));
+        assert!(!preview["digest_mnemonic"].as_str().unwrap_or("").is_empty());
+        assert_eq!(preview["msg_hex"], "0x68656c6c6f");
+        assert!(preview["note"]
+            .as_str()
+            .unwrap_or("")
+            .contains("one signer"));
+    }
+
+    #[tokio::test]
+    async fn change_account_preview_returns_fingerprint() {
+        let state = test_state_with_identities(&["alice", "bob"]);
+        let app = build_router(state);
+
+        let create_account = serde_json::json!({
+            "members": ["alice", "bob"],
+            "threshold": 2
+        });
+        oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/account/create",
+            Some(create_account.to_string()),
+        )
+        .await;
+
+        let preview_req = serde_json::json!({
+            "account": 0,
+            "new_members": ["alice"],
+            "new_threshold": 1,
+            "signers": ["alice", "bob"]
+        });
+        let (status, body) = oneshot_json(
+            app,
+            "POST",
+            "/api/change-account/preview",
+            Some(preview_req.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "change-account preview: {body}");
+        let preview: serde_json::Value = serde_json::from_str(&body).expect("preview json");
+        assert!(preview["digest_hex"].as_str().unwrap_or("").starts_with("0x"));
+        assert!(!preview["digest_mnemonic"].as_str().unwrap_or("").is_empty());
+        assert_eq!(preview["new_threshold"], 1);
     }
 }
