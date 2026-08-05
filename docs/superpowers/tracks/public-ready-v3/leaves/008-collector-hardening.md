@@ -1,8 +1,8 @@
 ---
 id: 8
 slug: collector-hardening
-status: TODO
-owner: null
+status: IN_PROGRESS
+owner: cursor-agent
 deps:
   - 4
 scope:
