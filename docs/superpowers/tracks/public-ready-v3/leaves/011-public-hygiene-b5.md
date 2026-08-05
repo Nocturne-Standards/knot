@@ -1,8 +1,8 @@
 ---
 id: 11
 slug: public-hygiene-b5
-status: TODO
-owner: null
+status: CLAIMED
+owner: cursor-agent
 deps:
   - 3
 scope:
