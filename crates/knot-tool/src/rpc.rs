@@ -767,10 +767,22 @@ async fn api_party_signup(
     Json(req): Json<PartySignupReq>,
 ) -> ApiResult<Json<PartyMemberOut>> {
     mock_drawer_unavailable(&state)?;
+    let sig = {
+        let identities = state.identities.lock().await;
+        let identity = identities
+            .iter()
+            .find(|i| i.name == req.name)
+            .ok_or_else(|| RpcError::identity_not_found(&req.name))?;
+        let sk = identity
+            .require_sk()
+            .map_err(|e| RpcError::invalid_input(e.to_string()))?;
+        bls::party_signup_sig_hex(sk, &identity.pk, &req.name)
+            .map_err(|e| RpcError::invalid_input(e.to_string()))?
+    };
     let pk = find_pk(&state, &req.name).await?;
     let client = CollectorClient::resolve(None).map_err(RpcError::collector_config)?;
     let member = client
-        .signup_party(&req.name, &bs58_pk(&pk), req.note.as_deref())
+        .signup_party(&req.name, &bs58_pk(&pk), &sig, req.note.as_deref())
         .await
         .map_err(RpcError::internal)?;
     Ok(Json(member.into()))

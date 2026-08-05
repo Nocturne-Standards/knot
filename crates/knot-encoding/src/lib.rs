@@ -101,6 +101,21 @@ pub const DOMAIN_PROPOSAL_V3: &[u8] = b"nocturne.knot.multisig.proposal.v3";
 pub const DOMAIN_CHANGE_ACCOUNT_V3: &[u8] =
     b"nocturne.knot.multisig-registry.change_account.v3";
 
+/// M12 party roster signup domain — collector relay proof-of-possession.
+pub const DOMAIN_PARTY_V1: &[u8] = b"nocturne.knot.collector.party.v1";
+
+/// Length-prefixed party signup message (M12): `DOMAIN || name_len:u32_le || name || pk[96]`.
+pub fn party_signup_preimage(name: &str, pk_bytes: &[u8; 96]) -> Result<Vec<u8>, EncodingError> {
+    let name_bytes = name.as_bytes();
+    let name_len = checked_u32_len("name", name_bytes.len())?;
+    let mut out = Vec::with_capacity(DOMAIN_PARTY_V1.len() + 4 + name_bytes.len() + 96);
+    out.extend_from_slice(DOMAIN_PARTY_V1);
+    out.extend_from_slice(&name_len.to_le_bytes());
+    out.extend_from_slice(name_bytes);
+    out.extend_from_slice(pk_bytes);
+    Ok(out)
+}
+
 /// Full 32-byte digest members must sign to authorize a committee change.
 ///
 /// `member_pks` are compressed BLS pk bytes (96 each), in the same order

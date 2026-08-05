@@ -18,6 +18,7 @@ use std::time::Duration;
 use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
 use knot_tool::blob::{self, PartialFile};
+use knot_tool::bls;
 use knot_tool::collector_client::{CollectorClient, PASSWORD_ENV, USER_ENV};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -191,29 +192,45 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
     assert!(key_bytes.contains(&pk_bob.to_bytes()));
 
     // Re-posting the same signer_pk replaces (last-write-wins), does not 409.
+    let alice_pk_hex = format!("0x{}", hex::encode(pk_alice.to_bytes()));
+    let alice_sig = after_bob
+        .partials
+        .iter()
+        .find(|p| {
+            p.signer_pk
+                .trim_start_matches("0x")
+                .eq_ignore_ascii_case(alice_pk_hex.trim_start_matches("0x"))
+        })
+        .expect("alice partial present")
+        .sig
+        .clone();
     let replaced = client
         .append_partial(
             &pushed.id,
             &PartialFile {
-                signer_pk: format!("0x{}", hex::encode(pk_alice.to_bytes())),
-                sig: format!("0x{}", "00".repeat(48)),
+                signer_pk: alice_pk_hex.clone(),
+                sig: alice_sig.clone(),
             },
         )
         .await
         .expect("duplicate signer_pk must replace, not 409");
     assert_eq!(replaced.partials.len(), 2, "replace must not add a third partial");
-    let alice_pk_hex = format!("0x{}", hex::encode(pk_alice.to_bytes()));
     let alice_partial = replaced
         .partials
         .iter()
-        .find(|p| p.signer_pk.trim_start_matches("0x").eq_ignore_ascii_case(alice_pk_hex.trim_start_matches("0x")))
+        .find(|p| {
+            p.signer_pk
+                .trim_start_matches("0x")
+                .eq_ignore_ascii_case(alice_pk_hex.trim_start_matches("0x"))
+        })
         .expect("alice partial present");
-    assert_eq!(alice_partial.sig, format!("0x{}", "00".repeat(48)));
+    assert_eq!(alice_partial.sig, alice_sig);
 
     // Party-finder roster roundtrip: signup -> list (no DELETE — upsert-only).
-    let pk_hex = format!("0x{}", hex::encode(pk_alice.to_bytes()));
+    let pk_hex = alice_pk_hex;
+    let sig = bls::party_signup_sig_hex(&sk_alice, &pk_alice, "alice").expect("party signup sig");
     let member = client
-        .signup_party("alice", &pk_hex, Some("roundtrip test"))
+        .signup_party("alice", &pk_hex, &sig, Some("roundtrip test"))
         .await
         .expect("party signup");
     assert_eq!(member.name, "alice");

@@ -294,7 +294,10 @@ async fn signup_party(
         .as_slice()
         .try_into()
         .expect("pk is 96 bytes");
-    let preimage = party_signup_preimage(name, &pk_bytes);
+    let preimage = match party_signup_preimage(name, &pk_bytes) {
+        Ok(p) => p,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, format!("name: {e}")),
+    };
     if !verify_bls_standard(&pk_bytes, &preimage, &sig_bytes) {
         return error_response(StatusCode::BAD_REQUEST, "sig: BLS verification failed");
     }
@@ -388,7 +391,7 @@ mod tests {
 
     fn sign_party(sk: &BlsSecretKey, pk: &BlsPublicKey, name: &str) -> String {
         let pk_bytes = pk.to_bytes();
-        let preimage = party_signup_preimage(name, &pk_bytes);
+        let preimage = party_signup_preimage(name, &pk_bytes).expect("test name");
         let sig = sk.sign(&preimage);
         format!("0x{}", hex::encode(sig.to_bytes()))
     }

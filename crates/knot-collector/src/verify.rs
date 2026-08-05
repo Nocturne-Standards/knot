@@ -14,20 +14,7 @@ use dusk_core::signatures::bls::{
     Signature as BlsSignature,
 };
 
-/// Domain-separated party roster signup preimage (M12).
-pub const DOMAIN_PARTY_V1: &[u8] = b"nocturne.knot.collector.party.v1";
-
-/// Builds the length-prefixed party signup message: domain || name_len || name || pk[96].
-pub fn party_signup_preimage(name: &str, pk_bytes: &[u8; 96]) -> Vec<u8> {
-    let name_bytes = name.as_bytes();
-    let name_len = u32::try_from(name_bytes.len()).expect("name length capped before call");
-    let mut out = Vec::with_capacity(DOMAIN_PARTY_V1.len() + 4 + name_bytes.len() + 96);
-    out.extend_from_slice(DOMAIN_PARTY_V1);
-    out.extend_from_slice(&name_len.to_le_bytes());
-    out.extend_from_slice(name_bytes);
-    out.extend_from_slice(pk_bytes);
-    out
-}
+pub use knot_encoding::{party_signup_preimage, DOMAIN_PARTY_V1};
 
 /// Verifies a BLS multisig partial over `msg` (typically the 32-byte proposal digest).
 fn sig_bytes_to_array(sig: &[u8]) -> Option<[u8; 48]> {
