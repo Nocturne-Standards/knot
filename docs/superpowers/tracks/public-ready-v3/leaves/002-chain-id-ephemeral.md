@@ -1,8 +1,8 @@
 ---
 id: 2
 slug: chain-id-ephemeral
-status: TODO
-owner: null
+status: IN_PROGRESS
+owner: cursor-agent
 deps:
   - 3
 scope:
