@@ -27,15 +27,15 @@ Everything below is lab **Status**, env, and maintainer run notes. Dense on purp
 From this repo root:
 
 ```bash
-export RUSK_WALLET_PWD=sme-platform-testnet-dev   # rusk-wallet keystore password (testnet)
+export RUSK_WALLET_PWD=...   # rusk-wallet keystore password (testnet)
 # Optional scripting — both required, or omit both and type the keystore password:
 export MULTISIG_TOOL_ALLOW_ENV_PWD=1
-export MULTISIG_TOOL_PWD='local-dev-only'                      # unlocks ~/.multisig-tool/identities.dat
+export MULTISIG_TOOL_PWD=...                      # unlocks ~/.multisig-tool/identities.dat
 
 # Shared collector (if you use one) — password is the nginx htpasswd you handed out:
 export MULTISIG_COLLECTOR_URL=https://collector.nocturne-standards.org
 export MULTISIG_COLLECTOR_USER=demo                # collector htpasswd user (not WEN metadata user)
-export MULTISIG_COLLECTOR_PASSWORD='***REMOVED-LEAKED-COLLECTOR-PASSWORD***'
+export MULTISIG_COLLECTOR_PASSWORD=...
 
 ./scripts/multisig-first-run.sh --serve
 # or: cd multisig && cargo run -p multisig-tool -- serve --bind 127.0.0.1:8877
@@ -355,7 +355,7 @@ name (`X-Multisig-Tool-Token`). The token value is **not** printed in the
 URL — it is injected into the served HTML only. Or via this repo's preview convention:
 `scripts/run-multisig-tool-native.sh` (wired into `.claude/launch.json` as
 `multisig-tool`, port 8877) — uses a fixed dev password
-(`MULTISIG_TOOL_ALLOW_ENV_PWD=1` + `MULTISIG_TOOL_PWD=local-dev-only`), fine for local dev only.
+(`MULTISIG_TOOL_ALLOW_ENV_PWD=1` + `MULTISIG_TOOL_PWD=...`), fine for local dev only.
 
 The UI matches the Agent Pay demo visual language (Literata/Sora, cream/sky)
 as **three slides**: cover → demo studio → use cases. Default mode is
