@@ -82,7 +82,12 @@ async function api(path, opts = {}) {
   let body;
   try { body = JSON.parse(text); } catch { body = text; }
   if (!res.ok) {
-    const msg = typeof body === "string" ? body : (body.error || JSON.stringify(body));
+    const msg =
+      typeof body === "object" && body !== null && typeof body.message === "string"
+        ? body.message
+        : typeof body === "string"
+          ? body
+          : JSON.stringify(body);
     throw new Error(`${res.status}: ${msg}`);
   }
   return body;

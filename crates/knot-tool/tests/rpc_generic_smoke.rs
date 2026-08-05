@@ -378,7 +378,10 @@ async fn approve_rejects_non_member_identity() {
         .expect("approve carol");
     assert_eq!(non_member.status(), reqwest::StatusCode::FORBIDDEN);
     let err_body = non_member.text().await.expect("error body");
-    assert!(err_body.contains("not a member"));
+    let err: serde_json::Value = serde_json::from_str(&err_body).expect("error json");
+    assert_eq!(err["code"], "not_a_member");
+    assert_eq!(err["message"], "Signer is not a committee member.");
+    assert!(!err_body.contains("registry account"));
 
     let member = client
         .post(format!("{base}/api/proposal/0/approve"))
