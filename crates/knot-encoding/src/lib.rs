@@ -60,6 +60,26 @@ impl core::fmt::Display for EncodingError {
 
 impl core::error::Error for EncodingError {}
 
+/// Digest-gate failure — distinguish mismatch from encoding limits (L14).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GateError {
+    DigestMismatch,
+    Encoding(EncodingError),
+}
+
+impl core::fmt::Display for GateError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            GateError::DigestMismatch => {
+                write!(f, "signed_digest does not match recomputed digest")
+            }
+            GateError::Encoding(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl core::error::Error for GateError {}
+
 /// Reject lengths that cannot be represented as u32 length-prefix fields.
 pub fn checked_u32_len(field: &'static str, len: usize) -> Result<u32, EncodingError> {
     u32::try_from(len).map_err(|_| EncodingError::FieldTooLarge { field, len })
@@ -442,13 +462,16 @@ pub fn proposal_digest(
 }
 
 /// Recompute digest from intent fields and assert it matches `claimed`.
-/// Returns `Ok(digest)` or `Err` if the blob's claimed digest disagrees.
-pub fn recompute_and_verify(intent: &ProposalIntent, claimed: &[u8; 32]) -> Result<[u8; 32], ()> {
-    let got = intent.digest().map_err(|_| ())?;
+/// Returns `Ok(digest)` or [`GateError`] if encoding fails or digest disagrees.
+pub fn recompute_and_verify(
+    intent: &ProposalIntent,
+    claimed: &[u8; 32],
+) -> Result<[u8; 32], GateError> {
+    let got = intent.digest().map_err(GateError::Encoding)?;
     if &got == claimed {
         Ok(got)
     } else {
-        Err(())
+        Err(GateError::DigestMismatch)
     }
 }
 
@@ -456,12 +479,12 @@ pub fn recompute_and_verify(intent: &ProposalIntent, claimed: &[u8; 32]) -> Resu
 pub fn recompute_and_verify_v3(
     intent: &ProposalIntentV3,
     claimed: &[u8; 32],
-) -> Result<[u8; 32], ()> {
-    let got = intent.digest().map_err(|_| ())?;
+) -> Result<[u8; 32], GateError> {
+    let got = intent.digest().map_err(GateError::Encoding)?;
     if &got == claimed {
         Ok(got)
     } else {
-        Err(())
+        Err(GateError::DigestMismatch)
     }
 }
 
@@ -469,8 +492,8 @@ pub fn recompute_and_verify_v3(
 ///
 /// Always recomputes from **canonical** `intent` fields. `human_summary` is
 /// never trusted (phishing surface) — callers must display canonical fields
-/// and only then sign. Returns `Err(())` when `signed_digest` ≠ recomputed.
-pub fn gate_blob_for_signing(blob: &ProposalBlob) -> Result<[u8; 32], ()> {
+/// and only then sign. Returns [`GateError`] when `signed_digest` ≠ recomputed.
+pub fn gate_blob_for_signing(blob: &ProposalBlob) -> Result<[u8; 32], GateError> {
     let _ = blob.intent.human_summary.as_ref(); // intentionally unused for trust
     recompute_and_verify(&blob.intent.intent, &blob.signed_digest)
 }

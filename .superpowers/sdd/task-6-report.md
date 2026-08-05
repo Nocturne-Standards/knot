@@ -13,21 +13,23 @@
 | M9 verify partials locally | yes | `bls::verify_multisig` (V2 then V1); `aggregate_partials` drops invalid/malformed with named stderr |
 | L7 Result aggregate | yes | `bls::aggregate` returns `Result`; callers use `?` |
 | L8 atomic blob write | yes | `blob::write_atomic` (tmp+rename+dir fsync); `write_file` uses it |
-| L14 typed errors | yes | `blob::GateError` (DigestMismatch / Encoding); `gate_blob` + RPC mapping |
+| L14 typed errors | yes | `knot-encoding::GateError` (DigestMismatch / Encoding); `gate_blob_for_signing` / `recompute_and_verify*`; `knot-tool::blob::gate_blob` delegates |
 | R5 collector URL allowlist | yes | `validate_collector_url` in `collector_client::resolve` |
 | R11 proposal id 64-hex | yes | `validate_proposal_id` on `pull` / `append_partial` |
 
 ## Tests
 
 ```
-cargo test -p knot-tool  → 55 passed (lib + integration)
+cargo test -p knot-encoding  → 25 passed
+cargo test -p knot-tool      → 55 passed (lib + integration)
 ```
 
 New unit tests: CSPRNG nonce, gate typed errors, M8/M9 aggregate guards, atomic write, R5/R11 collector client, empty aggregate.
 
 ## Files
 
-- `crates/knot-tool/src/blob.rs` — uniquifier, gate, atomic write, M8/M9 aggregate
+- `crates/knot-encoding/src/lib.rs` — `GateError`; typed `recompute_and_verify` / `gate_blob_for_signing`
+- `crates/knot-tool/src/blob.rs` — uniquifier, gate delegate, atomic write, M8/M9 aggregate
 - `crates/knot-tool/src/bls.rs` — Result aggregate, verify_multisig
 - `crates/knot-tool/src/collector_client.rs` — R5, R11
 - `crates/knot-tool/src/main.rs` — CLI nonce + threshold fetch on aggregate
@@ -37,4 +39,7 @@ New unit tests: CSPRNG nonce, gate typed errors, M8/M9 aggregate guards, atomic 
 
 - change-account `--nonce` latch (#14) untouched
 - collector server (#8) untouched
-- `knot-encoding` `gate_blob_for_signing` still returns `()`; tool uses local `gate_blob` with typed errors (leaf scope knot-tool only)
+
+## Fix-pass (review L14 shared-code)
+
+Moved `GateError` + typed gate into `knot-encoding`; deleted duplicate digest-gate logic from `knot-tool::blob::gate_blob` (now delegates to `gate_blob_for_signing`). README gate reference accurate again.

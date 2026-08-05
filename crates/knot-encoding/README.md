@@ -28,7 +28,8 @@ cannot drift.
 
 - `proposal_digest(...)` / `ProposalIntent::digest()` — full 32-byte Keccak256
   of the length-prefixed preimage (never truncate).
-- `recompute_and_verify(intent, claimed)` — signer-side anti-blind-signing check.
+- `recompute_and_verify(intent, claimed)` / `recompute_and_verify_v3` —
+  signer-side anti-blind-signing check; returns typed [`GateError`].
 - `gate_blob_for_signing(blob)` — same check for a §4b blob; ignores
   `human_summary` for trust (display must use canonical fields).
 - `digest_mnemonic(digest)` / `digest_hex` / `digest_safety_number` — full-hash
