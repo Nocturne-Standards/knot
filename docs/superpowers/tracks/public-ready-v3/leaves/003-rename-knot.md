@@ -1,8 +1,8 @@
 ---
 id: 3
 slug: rename-knot
-status: TODO
-owner: null
+status: CLAIMED
+owner: cursor-agent
 deps:
   - 1
 scope:
