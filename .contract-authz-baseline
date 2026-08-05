@@ -1,0 +1,35 @@
+# Contract authorization baseline.
+#
+# One line per exported contract method. After each, state who may call it.
+# Reviewed entries look like:
+#   crates/x/src/state.rs:debit    owner-allowlisted settlement contracts only
+#   crates/x/src/state.rs:get_info PUBLIC — read-only, leaks no session data
+#
+crates/knot-proposals/src/state.rs:approve	PUBLIC — caller must be committee member with valid BLS sig over digest
+crates/knot-proposals/src/state.rs:epoch	PUBLIC — read-only scalar
+crates/knot-proposals/src/state.rs:finalize	PUBLIC — permissionless when quorum met and deadline valid
+crates/knot-proposals/src/state.rs:init_registry	contract owner only (require_owner)
+crates/knot-proposals/src/state.rs:next_proposal_id	PUBLIC — read-only scalar
+crates/knot-proposals/src/state.rs:proposal	PUBLIC — read-only view
+crates/knot-proposals/src/state.rs:proposal_ttl	PUBLIC — read-only scalar
+crates/knot-proposals/src/state.rs:propose	PUBLIC — anyone; digest uniqueness + epoch/deadline enforced on-chain
+crates/knot-proposals/src/state.rs:prune	PUBLIC — permissionless batch (max 128)
+crates/knot-proposals/src/state.rs:set_proposal_ttl	contract owner only (require_owner)
+crates/knot-proposals/src/state.rs:set_tombstone	contract owner only (require_owner)
+crates/knot-proposals/src/state.rs:status	PUBLIC — read-only scalar
+crates/knot-proposals/test-target/src/lib.rs:chain_id	PUBLIC — test-only read-only host probe
+crates/knot-proposals/test-target/src/lib.rs:configure_reenter	PUBLIC — test-only reentrancy fixture
+crates/knot-proposals/test-target/src/lib.rs:fail_set	PUBLIC — test-only intentional panic
+crates/knot-proposals/test-target/src/lib.rs:hit_count	PUBLIC — test-only read-only counter
+crates/knot-proposals/test-target/src/lib.rs:set_value	PUBLIC — test-only mutator
+crates/knot-proposals/test-target/src/lib.rs:set_value_reenter_finalize	PUBLIC — test-only reentrancy mutator
+crates/knot-proposals/test-target/src/lib.rs:value	PUBLIC — test-only read-only scalar
+crates/knot-registry/src/state.rs:account	PUBLIC — read-only view (may be None on testnet free-read)
+crates/knot-registry/src/state.rs:account_meta	PUBLIC — read-only scalars only
+crates/knot-registry/src/state.rs:change_account	PUBLIC — current committee quorum BLS over change_account_message_v3
+crates/knot-registry/src/state.rs:create_account	PUBLIC — anyone may register a committee
+crates/knot-registry/src/state.rs:diagnose_quorum	PUBLIC — read-only diagnostic verify
+crates/knot-registry/src/state.rs:member_key_bytes	PUBLIC — read-only diagnostic keys
+crates/knot-registry/src/state.rs:next_account_id	PUBLIC — read-only scalar
+crates/knot-registry/src/state.rs:verify_quorum	PUBLIC — read-only BLS verify helper
+crates/knot-registry/src/state.rs:verify_quorum_aggregate	PUBLIC — read-only aggregate BLS verify helper

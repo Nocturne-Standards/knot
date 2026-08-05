@@ -91,12 +91,19 @@ pub struct MockAccountMeta {
     pub member_count: u32,
 }
 
+/// Stable mock proposals contract id for v3 digests (Lab-only).
+pub const MOCK_PROPOSALS_SELF_ID: [u8; 32] = [0xB3; 32];
+/// Stable mock registry contract id for v3 `change_account` digests (Lab-only).
+pub const MOCK_REGISTRY_SELF_ID: [u8; 32] = [0xA1; 32];
+/// Chain id baked into mock digests (matches live testnet `init_chain_id`).
+pub const MOCK_CHAIN_ID: u64 = 2;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MockProposal {
     pub id: u64,
     pub status: MockProposalStatus,
     pub registry_account_id: u64,
-    pub chain_id: u64,
+    pub epoch: u64,
     pub nonce: u64,
     pub target: [u8; 32],
     pub function_name: String,
@@ -111,6 +118,7 @@ pub struct MockLedger {
     proposals: BTreeMap<u64, MockProposal>,
     next_account_id: u64,
     next_proposal_id: u64,
+    epoch: u64,
 }
 
 impl Default for MockLedger {
@@ -126,6 +134,7 @@ impl MockLedger {
             proposals: BTreeMap::new(),
             next_account_id: 0,
             next_proposal_id: 0,
+            epoch: 0,
         }
     }
 
@@ -183,6 +192,7 @@ impl MockLedger {
     }
 
     /// `target`: 32-byte contract id; `function_name` + `call_args` as on proposals API.
+    /// `nonce` is the caller uniquifier (§2.12 v3), not the registry account nonce.
     pub fn create_proposal(
         &mut self,
         registry_account_id: u64,
@@ -190,16 +200,17 @@ impl MockLedger {
         function_name: String,
         call_args: Vec<u8>,
         deadline: u64,
-        chain_id: u64,
+        nonce: u64,
     ) -> Result<u64, String> {
-        let account = self
+        let _account = self
             .accounts
             .get(&registry_account_id)
             .ok_or_else(|| format!("unknown registry account {registry_account_id}"))?;
-        let nonce = account.nonce;
 
-        let digest = knot_encoding::ProposalIntent {
-            chain_id,
+        let digest = knot_encoding::ProposalIntentV3 {
+            chain_id: MOCK_CHAIN_ID,
+            self_id: MOCK_PROPOSALS_SELF_ID,
+            epoch: self.epoch,
             committee_id: registry_account_id,
             nonce,
             target_contract_id: target,
@@ -218,7 +229,7 @@ impl MockLedger {
                 id,
                 status: MockProposalStatus::Open,
                 registry_account_id,
-                chain_id,
+                epoch: self.epoch,
                 nonce,
                 target,
                 function_name,
@@ -273,11 +284,8 @@ impl MockLedger {
 
         let account = self
             .accounts
-            .get_mut(&proposal.registry_account_id)
+            .get(&proposal.registry_account_id)
             .ok_or_else(|| "unknown registry account for proposal".to_string())?;
-        if proposal.nonce != account.nonce {
-            return Err("proposal nonce is stale".into());
-        }
         if (proposal.approvals.len() as u32) < account.threshold {
             return Err(format!(
                 "finalize: quorum not met (approvals={}, threshold={})",
@@ -285,11 +293,6 @@ impl MockLedger {
                 account.threshold
             ));
         }
-
-        account.nonce = account
-            .nonce
-            .checked_add(1)
-            .ok_or_else(|| "committee nonce overflow".to_string())?;
 
         let proposal = self.proposals.get_mut(&id).expect("proposal exists");
         proposal.status = MockProposalStatus::Finalized;
@@ -341,7 +344,7 @@ mod tests {
         let function_name = "set_value".to_string();
         let call_args = vec![1, 2, 3, 4];
         let deadline = 999u64;
-        let chain_id = 2u64;
+        let nonce = 0u64;
 
         let proposal_id = ledger
             .create_proposal(
@@ -350,7 +353,7 @@ mod tests {
                 function_name.clone(),
                 call_args.clone(),
                 deadline,
-                chain_id,
+                nonce,
             )
             .expect("create proposal");
         assert_eq!(proposal_id, 0);
@@ -359,18 +362,20 @@ mod tests {
         let p = ledger.proposal(proposal_id).expect("proposal exists");
         assert_eq!(p.status, MockProposalStatus::Open);
         assert_eq!(p.registry_account_id, account_id);
-        assert_eq!(p.chain_id, chain_id);
-        assert_eq!(p.nonce, 0);
+        assert_eq!(p.epoch, 0);
+        assert_eq!(p.nonce, nonce);
         assert_eq!(p.target, target);
         assert_eq!(p.function_name, function_name);
         assert_eq!(p.call_args, call_args);
         assert_eq!(p.deadline, deadline);
         assert!(p.approvals.is_empty());
 
-        let expected = knot_encoding::ProposalIntent {
-            chain_id,
+        let expected = knot_encoding::ProposalIntentV3 {
+            chain_id: MOCK_CHAIN_ID,
+            self_id: MOCK_PROPOSALS_SELF_ID,
+            epoch: 0,
             committee_id: account_id,
-            nonce: 0,
+            nonce,
             target_contract_id: target,
             function_name,
             call_args,
@@ -394,7 +399,7 @@ mod tests {
                 "noop".into(),
                 vec![],
                 0,
-                2,
+                0,
             )
             .expect("create proposal");
 
@@ -420,7 +425,7 @@ mod tests {
                 "set_value".into(),
                 vec![42],
                 100,
-                2,
+                0,
             )
             .expect("create proposal");
 
@@ -437,7 +442,7 @@ mod tests {
         assert_eq!(p.approvals.len(), 2);
 
         let acct = ledger.account(account_id).expect("account");
-        assert_eq!(acct.nonce, 1, "committee nonce bumps on finalize");
+        assert_eq!(acct.nonce, 0, "v3 finalize does not bump committee nonce");
     }
 
     #[test]
@@ -453,7 +458,7 @@ mod tests {
                 "noop".into(),
                 vec![],
                 0,
-                2,
+                0,
             )
             .expect("create proposal");
 
@@ -594,7 +599,7 @@ mod tests {
                 "set_value".into(),
                 vec![7, 8],
                 1_000,
-                2,
+                0,
             )
             .expect("create proposal");
         let digest = ledger.proposal(proposal_id).expect("proposal").digest;
@@ -619,8 +624,8 @@ mod tests {
         assert_eq!(tx_hash, "mock-finalize-0");
         assert_eq!(
             ledger.account(account_id).expect("account").nonce,
-            1,
-            "committee nonce bumps on finalize"
+            0,
+            "v3 finalize does not bump committee nonce"
         );
     }
 }

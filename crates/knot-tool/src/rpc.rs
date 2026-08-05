@@ -40,10 +40,12 @@ use crate::{chain, keystore};
 use knot_tool::bls;
 use knot_tool::collector_client::{self, CollectorClient};
 use knot_tool::membership;
-use knot_tool::mock_ledger::{DemoMode, MockLedger, MockProposal, MockProposalStatus};
+use knot_tool::mock_ledger::{
+    DemoMode, MockLedger, MockProposal, MockProposalStatus, MOCK_CHAIN_ID, MOCK_PROPOSALS_SELF_ID,
+    MOCK_REGISTRY_SELF_ID,
+};
 
 /// Chain id baked into mock proposals (matches live testnet `init_chain_id`).
-const MOCK_CHAIN_ID: u64 = 2;
 
 const SESSION_COOKIE: &str = "knot_session";
 
@@ -666,8 +668,10 @@ fn mock_proposal_preview(p: &MockProposal) -> ApiResult<SignPreviewOut> {
             "Proposal is not open.",
         ));
     }
-    let intent = knot_encoding::ProposalIntent {
-        chain_id: p.chain_id,
+    let intent = knot_encoding::ProposalIntentV3 {
+        chain_id: MOCK_CHAIN_ID,
+        self_id: MOCK_PROPOSALS_SELF_ID,
+        epoch: p.epoch,
         committee_id: p.registry_account_id,
         nonce: p.nonce,
         target_contract_id: p.target,
@@ -675,13 +679,14 @@ fn mock_proposal_preview(p: &MockProposal) -> ApiResult<SignPreviewOut> {
         call_args: p.call_args.clone(),
         deadline: p.deadline,
     };
-    let digest = knot_encoding::recompute_and_verify(&intent, &p.digest)
+    let digest = knot_encoding::recompute_and_verify_v3(&intent, &p.digest)
         .map_err(|_| RpcError::digest_mismatch("mock digest mismatch"))?;
     Ok(SignPreviewOut {
         digest_hex: format!("0x{}", hex::encode(digest)),
         digest_mnemonic: knot_encoding::digest_mnemonic(&digest),
         digest_safety_number: knot_encoding::digest_safety_number(&digest),
         chain_id: intent.chain_id,
+        epoch: intent.epoch,
         committee_id: intent.committee_id,
         nonce: intent.nonce,
         target_hex: format!("0x{}", hex::encode(intent.target_contract_id)),
@@ -700,7 +705,7 @@ fn mock_proposal_status_out(id: u64, p: MockProposal) -> ProposalStatusOut {
         id,
         status: status.into(),
         registry_account_id: p.registry_account_id,
-        chain_id: p.chain_id,
+        epoch: p.epoch,
         nonce: p.nonce,
         target: format!("0x{}", hex::encode(p.target)),
         function: p.function_name,
@@ -1416,7 +1421,19 @@ async fn api_change_account_preview(
         current.ok_or_else(|| RpcError::account_not_found(req.account))?
     };
 
-    let msg = bls::change_account_message(req.account, current.nonce, &new_members, req.new_threshold);
+    let registry_self_id = if state.demo_mode == DemoMode::Mock {
+        MOCK_REGISTRY_SELF_ID
+    } else {
+        chain::contract_self_id_bytes(chain::Contract::Registry).map_err(RpcError::internal)?
+    };
+
+    let msg = bls::change_account_message(
+        &registry_self_id,
+        req.account,
+        current.nonce,
+        &new_members,
+        req.new_threshold,
+    );
     ensure_pks_are_members_view(
         req.account,
         &resolve_signer_pks_locked(&state, &req.signers).await?,
@@ -1457,7 +1474,16 @@ async fn api_change_account_submit(
     let current =
         current.ok_or_else(|| RpcError::account_not_found(req.account))?;
 
-    let msg = bls::change_account_message(req.account, current.nonce, &new_members, req.new_threshold);
+    let registry_self_id =
+        chain::contract_self_id_bytes(chain::Contract::Registry).map_err(RpcError::internal)?;
+
+    let msg = bls::change_account_message(
+        &registry_self_id,
+        req.account,
+        current.nonce,
+        &new_members,
+        req.new_threshold,
+    );
     ensure_pks_are_members_view(req.account, &resolve_signer_pks_locked(&state, &req.signers).await?, &current)?;
     let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
 
@@ -1484,6 +1510,9 @@ struct ProposalCreateReq {
     args_hex: String,
     #[serde(default)]
     deadline: u64,
+    /// Caller uniquifier (§2.12 v3); defaults to 0 for lab/demo.
+    #[serde(default)]
+    nonce: u64,
 }
 
 #[derive(Serialize)]
@@ -1517,7 +1546,7 @@ async fn api_proposal_create(
                 req.function,
                 call_args,
                 req.deadline,
-                MOCK_CHAIN_ID,
+                req.nonce,
             )
             .map_err(RpcError::invalid_input)?;
         return Ok(Json(ProposalCreateOut {
@@ -1540,6 +1569,7 @@ async fn api_proposal_create(
         target: ContractId::from_bytes(target_bytes),
         function_name: req.function,
         call_args,
+        nonce: req.nonce,
         deadline: req.deadline,
     };
     let bytes = chain::encode(&args).map_err(RpcError::internal)?;
@@ -1568,6 +1598,7 @@ struct SignPreviewOut {
     digest_mnemonic: String,
     digest_safety_number: String,
     chain_id: u64,
+    epoch: u64,
     committee_id: u64,
     nonce: u64,
     target_hex: String,
@@ -1586,6 +1617,7 @@ struct ProposalApproveOut {
 #[derive(Serialize)]
 struct IntentDisplay {
     chain_id: u64,
+    epoch: u64,
     committee_id: u64,
     nonce: u64,
     target: String,
@@ -1597,7 +1629,10 @@ struct IntentDisplay {
     digest_safety_number: String,
 }
 
-fn proposal_preview_from_view(view: &ProposalView) -> ApiResult<SignPreviewOut> {
+fn proposal_preview_from_view(
+    view: &ProposalView,
+    proposals_self_id: &[u8; 32],
+) -> ApiResult<SignPreviewOut> {
     if view.status != ProposalStatus::Open {
         return Err(RpcError::catalog(
             StatusCode::BAD_REQUEST,
@@ -1605,22 +1640,15 @@ fn proposal_preview_from_view(view: &ProposalView) -> ApiResult<SignPreviewOut> 
             "Proposal is not open.",
         ));
     }
-    let intent = knot_encoding::ProposalIntent {
-        chain_id: view.chain_id,
-        committee_id: view.registry_account_id,
-        nonce: view.nonce,
-        target_contract_id: view.target.to_bytes(),
-        function_name: view.function_name.clone(),
-        call_args: view.call_args.clone(),
-        deadline: view.deadline,
-    };
-    let digest = knot_encoding::recompute_and_verify(&intent, &view.signed_digest)
+    let intent = bls::proposal_intent_v3_from_view(view, bls::digest_chain_id(), proposals_self_id);
+    let digest = knot_encoding::recompute_and_verify_v3(&intent, &view.signed_digest)
         .map_err(|_| RpcError::digest_mismatch("on-chain digest mismatch"))?;
     Ok(SignPreviewOut {
         digest_hex: format!("0x{}", hex::encode(digest)),
         digest_mnemonic: knot_encoding::digest_mnemonic(&digest),
         digest_safety_number: knot_encoding::digest_safety_number(&digest),
         chain_id: intent.chain_id,
+        epoch: intent.epoch,
         committee_id: intent.committee_id,
         nonce: intent.nonce,
         target_hex: format!("0x{}", hex::encode(intent.target_contract_id)),
@@ -1649,7 +1677,9 @@ async fn api_proposal_preview(
     .await
     .map_err(RpcError::internal)?;
     let view = view.ok_or_else(|| RpcError::proposal_not_found(id))?;
-    Ok(Json(proposal_preview_from_view(&view)?))
+    let proposals_self_id =
+        chain::contract_self_id_bytes(chain::Contract::Proposals).map_err(RpcError::internal)?;
+    Ok(Json(proposal_preview_from_view(&view, &proposals_self_id)?))
 }
 
 /// Preview a collector proposals-kind blob (no signing).
@@ -1669,6 +1699,7 @@ async fn api_blob_preview(
         digest_mnemonic: knot_encoding::digest_mnemonic(&digest),
         digest_safety_number: knot_encoding::digest_safety_number(&digest),
         chain_id: i.chain_id,
+        epoch: 0,
         committee_id: i.committee_id,
         nonce: i.nonce,
         target_hex: format!("0x{}", hex::encode(i.target_contract_id)),
@@ -1696,8 +1727,10 @@ async fn api_proposal_approve(
         if mock_p.status != MockProposalStatus::Open {
             return Err(RpcError::proposal_not_open(id));
         }
-        let intent = knot_encoding::ProposalIntent {
-            chain_id: mock_p.chain_id,
+        let intent = knot_encoding::ProposalIntentV3 {
+            chain_id: MOCK_CHAIN_ID,
+            self_id: MOCK_PROPOSALS_SELF_ID,
+            epoch: mock_p.epoch,
             committee_id: mock_p.registry_account_id,
             nonce: mock_p.nonce,
             target_contract_id: mock_p.target,
@@ -1705,11 +1738,12 @@ async fn api_proposal_approve(
             call_args: mock_p.call_args.clone(),
             deadline: mock_p.deadline,
         };
-        let digest = knot_encoding::recompute_and_verify(&intent, &mock_p.digest)
+        let digest = knot_encoding::recompute_and_verify_v3(&intent, &mock_p.digest)
             .map_err(|_| RpcError::digest_mismatch("mock approve digest mismatch"))?;
         ensure_signers_are_members(&state, mock_p.registry_account_id, &[req.signer.clone()]).await?;
         let intent_out = IntentDisplay {
             chain_id: intent.chain_id,
+            epoch: intent.epoch,
             committee_id: intent.committee_id,
             nonce: intent.nonce,
             target: format!("0x{}", hex::encode(intent.target_contract_id)),
@@ -1757,20 +1791,15 @@ async fn api_proposal_approve(
         return Err(RpcError::proposal_not_open(id));
     }
 
-    let intent = knot_encoding::ProposalIntent {
-        chain_id: view.chain_id,
-        committee_id: view.registry_account_id,
-        nonce: view.nonce,
-        target_contract_id: view.target.to_bytes(),
-        function_name: view.function_name.clone(),
-        call_args: view.call_args.clone(),
-        deadline: view.deadline,
-    };
-    let digest = knot_encoding::recompute_and_verify(&intent, &view.signed_digest)
+    let proposals_self_id =
+        chain::contract_self_id_bytes(chain::Contract::Proposals).map_err(RpcError::internal)?;
+    let intent = bls::proposal_intent_v3_from_view(&view, bls::digest_chain_id(), &proposals_self_id);
+    let digest = knot_encoding::recompute_and_verify_v3(&intent, &view.signed_digest)
         .map_err(|_| RpcError::digest_mismatch("approve on-chain digest mismatch"))?;
     ensure_signers_are_members(&state, view.registry_account_id, &[req.signer.clone()]).await?;
     let intent_out = IntentDisplay {
         chain_id: intent.chain_id,
+        epoch: intent.epoch,
         committee_id: intent.committee_id,
         nonce: intent.nonce,
         target: format!("0x{}", hex::encode(intent.target_contract_id)),
@@ -1814,7 +1843,7 @@ struct ProposalStatusOut {
     id: u64,
     status: String,
     registry_account_id: u64,
-    chain_id: u64,
+    epoch: u64,
     nonce: u64,
     target: String,
     function: String,
@@ -1850,7 +1879,7 @@ async fn api_proposal_status(
             id,
             status: status.into(),
             registry_account_id: v.registry_account_id,
-            chain_id: v.chain_id,
+            epoch: v.epoch,
             nonce: v.nonce,
             target: format!("0x{}", hex::encode(v.target.to_bytes())),
             function: v.function_name,

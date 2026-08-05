@@ -47,6 +47,26 @@ fn deployments() -> Result<nocturne_deployments::DeploymentsFile> {
     })
 }
 
+/// Chain id for v3 digests on testnet (`init_chain_id=2` in deploy-history).
+pub const DIGEST_CHAIN_ID: u64 = 2;
+
+pub fn digest_chain_id() -> u64 {
+    std::env::var("KNOT_CHAIN_ID")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DIGEST_CHAIN_ID)
+}
+
+pub fn contract_self_id_bytes(which: Contract) -> Result<[u8; 32]> {
+    let hex = contract_id_hex(which)?;
+    let bytes = hex::decode(hex.trim_start_matches("0x"))
+        .with_context(|| format!("contract id hex for {:?}", which))?;
+    bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("contract id must be 32 bytes"))
+}
+
 pub fn contract_id_hex(which: Contract) -> Result<String> {
     let file = deployments()?;
     let key = which.json_key();

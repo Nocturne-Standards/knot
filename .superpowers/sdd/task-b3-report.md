@@ -41,9 +41,13 @@ then re-propose (partial — consumed-before-deadline tested).
 
 ## Concerns / deferred
 
-- **knot-tool does not compile** (`ProposeArgs.nonce`, `ProposalView.epoch`) — leaf #6
+- ~~**knot-tool does not compile** (`ProposeArgs.nonce`, `ProposalView.epoch`) — leaf #6~~
+  **Fixed 2026-08-05:** `knot-tool` compiles against v3 types; mock/RPC use
+  `proposal_digest_v3` + `change_account_message_v3`; `ProposeArgs.nonce`
+  defaults to 0; `ProposalView.epoch` in status/preview APIs. Full R5/R11
+  CSPRNG uniquifier still leaf #6.
 - **event-decoder arms** not added (emit-only per §2.13; leaf #10)
-- Mock ledger / blob CLI still v2 intent shape until #6
+- Blob CLI still v2 `ProposalIntent` shape until #6
 
 ## Redeploy
 

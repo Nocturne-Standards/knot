@@ -452,6 +452,19 @@ pub fn recompute_and_verify(intent: &ProposalIntent, claimed: &[u8; 32]) -> Resu
     }
 }
 
+/// Recompute §2.12 v3 digest from intent fields and assert it matches `claimed`.
+pub fn recompute_and_verify_v3(
+    intent: &ProposalIntentV3,
+    claimed: &[u8; 32],
+) -> Result<[u8; 32], ()> {
+    let got = intent.digest().map_err(|_| ())?;
+    if &got == claimed {
+        Ok(got)
+    } else {
+        Err(())
+    }
+}
+
 /// Signer-side anti-blind-signing gate for a §4b blob.
 ///
 /// Always recomputes from **canonical** `intent` fields. `human_summary` is
