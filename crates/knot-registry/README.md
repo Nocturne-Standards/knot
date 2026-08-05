@@ -75,11 +75,13 @@ dusk-vm (PreFork default). **Live testnet clients must use secure
 
 **23b Phase B (2026-08-03):** `#[archive_attr(repr(C))]` on shared
 `knot-encoding` call types (this crate re-exports). Layout goldens in
-`tests/layout_goldens.rs` (post-pin hex). DIFFERENT types include
-`MultisigAccountView` / `ChangeAccountArgs` / `AccountMeta` /
-`DiagnoseQuorumResult`. Spec 26 source-carry paragraph cleared by this
-redeploy (R7). Operator ceremony re-wire of downstream callers (e.g. PM
-council) may stay deferred/unwired — OK per Phase B lessons.
+`tests/layout_goldens.rs` (post-pin hex). On-chain ABI types that changed:
+`MultisigAccountView` / `ChangeAccountArgs`. `AccountMeta` /
+`DiagnoseQuorumResult` live only in `knot-encoding` for off-chain
+[`knot-tool`](../knot-tool/README.md) diagnose — not registry contract
+methods. Spec 26 source-carry paragraph cleared by this redeploy (R7).
+Operator ceremony re-wire of downstream callers (e.g. PM council) may stay
+deferred/unwired — OK per Phase B lessons.
 
 ## Next steps
 
