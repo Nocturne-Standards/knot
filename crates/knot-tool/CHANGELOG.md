@@ -5,11 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+### Added
+
+- Optional Cargo feature `deployments-crate` (off by default) for the
+  `nocturne-deployments` git pin reader. Default builds load `testnet.json` via
+  `NOCTURNE_DEPLOYMENTS` or a walk-up path — no private git fetch required.
+
 ### Changed
 
 - Registry diagnostics (`diagnose_quorum`, `account_meta`, `member_key_bytes`) moved
-  off-chain: `knot-tool` derives them from `account()` + local BLS verify (IMPLEMENTATION
-  §4.3 L3). On-chain ABI keeps only `next_account_id` among scalar probes.
+  off-chain: `knot-tool` derives them from `account()` + local BLS verify. On-chain
+  ABI keeps only `next_account_id` among scalar probes.
 
 ## [0.2.0] — 2026-07-24
 
