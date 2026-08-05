@@ -39,8 +39,8 @@ evidence and reasoning behind each finding are useful; the instructions are not.
 | | |
 |---|---|
 | Ready to implement | **§1–§5 LOCKED** |
-| Residual audit | **Done** — §11 (R1/R2 HIGH: Lab token in HTML; multi-key sign sans confirm) |
-| Next | Human review §11, then phase 2 rename (`public-ready-v3` leaf #3) |
+| Residual audit | **Done** — §11 dispositions locked; leaf **#14** Lab/RPC; **#6**/**#8** extended |
+| Next | Phase 2 rename (`#3`) and/or `#14` Lab hardening |
 | Deferred | Launch ops §10; `nocturne-event-decoder` extract; product §9 |
 
 ## Rules
