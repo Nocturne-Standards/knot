@@ -45,8 +45,177 @@ use knot_tool::mock_ledger::{DemoMode, MockLedger, MockProposal, MockProposalSta
 /// Chain id baked into mock proposals (matches live testnet `init_chain_id`).
 const MOCK_CHAIN_ID: u64 = 2;
 
-const MOCK_DRAWER_MSG: &str = "mock mode: use DEMO_MODE=testnet";
 const SESSION_COOKIE: &str = "knot_session";
+
+/// R4: fixed API error catalog — variable / wallet / `Display` details go to stderr only.
+#[derive(Clone, Serialize)]
+struct RpcErrorBody {
+    code: &'static str,
+    message: &'static str,
+}
+
+struct RpcError {
+    status: StatusCode,
+    body: RpcErrorBody,
+}
+
+impl RpcError {
+    fn catalog(status: StatusCode, code: &'static str, message: &'static str) -> Self {
+        Self {
+            status,
+            body: RpcErrorBody { code, message },
+        }
+    }
+
+    fn logged(
+        status: StatusCode,
+        code: &'static str,
+        message: &'static str,
+        detail: impl std::fmt::Display,
+    ) -> Self {
+        eprintln!("knot-tool rpc [{code}]: {detail}");
+        Self::catalog(status, code, message)
+    }
+
+    fn unauthorized() -> Self {
+        Self::catalog(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Session missing or invalid.",
+        )
+    }
+
+    fn identity_exists(name: &str) -> Self {
+        Self::logged(
+            StatusCode::BAD_REQUEST,
+            "identity_exists",
+            "Identity already exists.",
+            format!("identity '{name}'"),
+        )
+    }
+
+    fn identity_not_found(name: &str) -> Self {
+        Self::logged(
+            StatusCode::BAD_REQUEST,
+            "identity_not_found",
+            "Identity not found.",
+            format!("identity '{name}'"),
+        )
+    }
+
+    fn account_not_found(account_id: u64) -> Self {
+        Self::logged(
+            StatusCode::BAD_REQUEST,
+            "account_not_found",
+            "Account not found.",
+            format!("account {account_id}"),
+        )
+    }
+
+    fn proposal_not_found(id: u64) -> Self {
+        Self::logged(
+            StatusCode::BAD_REQUEST,
+            "proposal_not_found",
+            "Proposal not found.",
+            format!("proposal {id}"),
+        )
+    }
+
+    fn proposal_not_open(id: u64) -> Self {
+        Self::logged(
+            StatusCode::BAD_REQUEST,
+            "proposal_not_open",
+            "Proposal is not open.",
+            format!("proposal {id}"),
+        )
+    }
+
+    fn not_a_member(detail: impl std::fmt::Display) -> Self {
+        Self::logged(
+            StatusCode::FORBIDDEN,
+            "not_a_member",
+            "Signer is not a committee member.",
+            detail,
+        )
+    }
+
+    fn invalid_input(detail: impl std::fmt::Display) -> Self {
+        Self::logged(
+            StatusCode::BAD_REQUEST,
+            "invalid_input",
+            "Invalid request.",
+            detail,
+        )
+    }
+
+    fn invalid_hex(detail: impl std::fmt::Display) -> Self {
+        Self::logged(
+            StatusCode::BAD_REQUEST,
+            "invalid_hex",
+            "Invalid hex encoding.",
+            detail,
+        )
+    }
+
+    fn invalid_target() -> Self {
+        Self::catalog(
+            StatusCode::BAD_REQUEST,
+            "invalid_target",
+            "Target must be 32-byte hex.",
+        )
+    }
+
+    fn digest_mismatch(detail: &'static str) -> Self {
+        Self::logged(
+            StatusCode::BAD_REQUEST,
+            "digest_mismatch",
+            "Digest does not match recomputed intent.",
+            detail,
+        )
+    }
+
+    fn confirm_required() -> Self {
+        Self::catalog(
+            StatusCode::BAD_REQUEST,
+            "confirm_required",
+            "Confirm required — call preview first, then POST with confirm:true.",
+        )
+    }
+
+    fn live_mode_required() -> Self {
+        Self::catalog(
+            StatusCode::NOT_IMPLEMENTED,
+            "live_mode_required",
+            "This action requires live testnet mode (DEMO_MODE=testnet).",
+        )
+    }
+
+    fn collector_config(detail: impl std::fmt::Display) -> Self {
+        Self::logged(
+            StatusCode::BAD_REQUEST,
+            "collector_config",
+            "Collector is not configured.",
+            detail,
+        )
+    }
+
+    fn internal(detail: impl std::fmt::Display) -> Self {
+        Self::logged(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "An internal error occurred.",
+            detail,
+        )
+    }
+}
+
+impl IntoResponse for RpcError {
+    fn into_response(self) -> Response {
+        (self.status, Json(self.body)).into_response()
+    }
+}
+
+type ApiResult<T> = Result<T, RpcError>;
 
 struct AppState {
     identities: Mutex<Vec<keystore::Identity>>,
@@ -223,7 +392,7 @@ async fn require_session(
     next: axum::middleware::Next,
 ) -> Response {
     if !session_authorized(&headers, &state.session_token) {
-        return (StatusCode::UNAUTHORIZED, "missing/invalid session").into_response();
+        return RpcError::unauthorized().into_response();
     }
     next.run(request).await
 }
@@ -396,10 +565,10 @@ struct NewIdentityReq {
 async fn api_new_identity(
     State(state): State<Arc<AppState>>,
     Json(req): Json<NewIdentityReq>,
-) -> Result<Json<IdentityOut>, (StatusCode, String)> {
+) -> ApiResult<Json<IdentityOut>> {
     let mut identities = state.identities.lock().await;
     if identities.iter().any(|i| i.name == req.name) {
-        return Err((StatusCode::BAD_REQUEST, format!("identity '{}' already exists", req.name)));
+        return Err(RpcError::identity_exists(&req.name));
     }
     let identity = keystore::generate(&req.name);
     let out = IdentityOut {
@@ -408,8 +577,7 @@ async fn api_new_identity(
         pk_only: false,
     };
     identities.push(identity);
-    keystore::save(&state.store_path, &state.password, &identities)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    keystore::save(&state.store_path, &state.password, &identities).map_err(RpcError::internal)?;
     Ok(Json(out))
 }
 
@@ -422,12 +590,12 @@ struct ImportPkReq {
 async fn api_import_pk(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ImportPkReq>,
-) -> Result<Json<IdentityOut>, (StatusCode, String)> {
+) -> ApiResult<Json<IdentityOut>> {
     let mut identities = state.identities.lock().await;
     if identities.iter().any(|i| i.name == req.name) {
-        return Err((StatusCode::BAD_REQUEST, format!("identity '{}' already exists", req.name)));
+        return Err(RpcError::identity_exists(&req.name));
     }
-    let pk = keystore::parse_pk(&req.pk).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let pk = keystore::parse_pk(&req.pk).map_err(RpcError::invalid_input)?;
     let identity = keystore::from_pk_only(&req.name, pk);
     let out = IdentityOut {
         name: identity.name.clone(),
@@ -435,8 +603,7 @@ async fn api_import_pk(
         pk_only: true,
     };
     identities.push(identity);
-    keystore::save(&state.store_path, &state.password, &identities)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    keystore::save(&state.store_path, &state.password, &identities).map_err(RpcError::internal)?;
     Ok(Json(out))
 }
 
@@ -470,13 +637,9 @@ async fn api_setup_status(State(state): State<Arc<AppState>>) -> Json<SetupStatu
     })
 }
 
-fn to_400<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
-    (StatusCode::BAD_REQUEST, e.to_string())
-}
-
-fn mock_drawer_unavailable(state: &AppState) -> Result<(), (StatusCode, String)> {
+fn mock_drawer_unavailable(state: &AppState) -> ApiResult<()> {
     if state.demo_mode == DemoMode::Mock {
-        Err((StatusCode::NOT_IMPLEMENTED, MOCK_DRAWER_MSG.into()))
+        Err(RpcError::live_mode_required())
     } else {
         Ok(())
     }
@@ -495,9 +658,13 @@ fn mock_ok_submit(log: String, tx_hash: String) -> SubmitOut {
     }
 }
 
-fn mock_proposal_preview(p: &MockProposal) -> Result<SignPreviewOut, (StatusCode, String)> {
+fn mock_proposal_preview(p: &MockProposal) -> ApiResult<SignPreviewOut> {
     if p.status != MockProposalStatus::Open {
-        return Err((StatusCode::BAD_REQUEST, "proposal is not Open".into()));
+        return Err(RpcError::catalog(
+            StatusCode::BAD_REQUEST,
+            "proposal_not_open",
+            "Proposal is not open.",
+        ));
     }
     let intent = knot_encoding::ProposalIntent {
         chain_id: p.chain_id,
@@ -508,12 +675,8 @@ fn mock_proposal_preview(p: &MockProposal) -> Result<SignPreviewOut, (StatusCode
         call_args: p.call_args.clone(),
         deadline: p.deadline,
     };
-    let digest = knot_encoding::recompute_and_verify(&intent, &p.digest).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "REFUSING: mock digest does not match recomputed intent".into(),
-        )
-    })?;
+    let digest = knot_encoding::recompute_and_verify(&intent, &p.digest)
+        .map_err(|_| RpcError::digest_mismatch("mock digest mismatch"))?;
     Ok(SignPreviewOut {
         digest_hex: format!("0x{}", hex::encode(digest)),
         digest_mnemonic: knot_encoding::digest_mnemonic(&digest),
@@ -578,10 +741,10 @@ impl From<collector_client::PartyMember> for PartyMemberOut {
 /// never the collector's Basic Auth password.
 async fn api_party_list(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<PartyMemberOut>>, (StatusCode, String)> {
+) -> ApiResult<Json<Vec<PartyMemberOut>>> {
     mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_400)?;
-    let members = client.list_party().await.map_err(to_500)?;
+    let client = CollectorClient::resolve(None).map_err(RpcError::collector_config)?;
+    let members = client.list_party().await.map_err(RpcError::internal)?;
     Ok(Json(members.into_iter().map(PartyMemberOut::from).collect()))
 }
 
@@ -596,24 +759,24 @@ struct PartySignupReq {
 async fn api_party_signup(
     State(state): State<Arc<AppState>>,
     Json(req): Json<PartySignupReq>,
-) -> Result<Json<PartyMemberOut>, (StatusCode, String)> {
+) -> ApiResult<Json<PartyMemberOut>> {
     mock_drawer_unavailable(&state)?;
     let pk = find_pk(&state, &req.name).await?;
-    let client = CollectorClient::resolve(None).map_err(to_400)?;
+    let client = CollectorClient::resolve(None).map_err(RpcError::collector_config)?;
     let member = client
         .signup_party(&req.name, &bs58_pk(&pk), req.note.as_deref())
         .await
-        .map_err(to_500)?;
+        .map_err(RpcError::internal)?;
     Ok(Json(member.into()))
 }
 
-async fn find_pk(state: &AppState, name: &str) -> Result<BlsPublicKey, (StatusCode, String)> {
+async fn find_pk(state: &AppState, name: &str) -> ApiResult<BlsPublicKey> {
     let identities = state.identities.lock().await;
     identities
         .iter()
         .find(|i| i.name == name)
         .map(|i| i.pk)
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("no identity named '{name}'")))
+        .ok_or_else(|| RpcError::identity_not_found(name))
 }
 
 #[derive(Deserialize)]
@@ -675,14 +838,10 @@ fn submit_from_log(log: String) -> SubmitOut {
     }
 }
 
-fn to_500<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
-    (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-}
-
 async fn api_account_create(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateAccountReq>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SubmitOut>> {
     let mut members = Vec::with_capacity(req.members.len());
     for name in &req.members {
         members.push(find_pk(&state, name).await?);
@@ -692,7 +851,7 @@ async fn api_account_create(
         let mut mock = state.mock.lock().await;
         let id = mock
             .create_account(member_bytes, req.threshold)
-            .map_err(to_400)?;
+            .map_err(RpcError::invalid_input)?;
         return Ok(Json(mock_ok_submit(
             format!("mock: create_account id={id} threshold={}", req.threshold),
             format!("mock-create-account-{id}"),
@@ -702,11 +861,11 @@ async fn api_account_create(
         members,
         threshold: req.threshold,
     };
-    let bytes = chain::encode(&args).map_err(to_500)?;
+    let bytes = chain::encode(&args).map_err(RpcError::internal)?;
     let result = tokio::task::spawn_blocking(move || chain::submit_call("create_account", &bytes))
         .await
-        .map_err(to_500)?
-        .map_err(to_500)?;
+        .map_err(RpcError::internal)?
+        .map_err(RpcError::internal)?;
     Ok(Json(submit_from_log(result.stdout)))
 }
 
@@ -720,7 +879,7 @@ struct AccountView {
 async fn api_account_query(
     State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
-) -> Result<Json<Option<AccountView>>, (StatusCode, String)> {
+) -> ApiResult<Json<Option<AccountView>>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         return Ok(Json(mock.account(id).map(|v| AccountView {
@@ -733,8 +892,8 @@ async fn api_account_query(
                 .collect(),
         })));
     }
-    let bytes = chain::encode(&id).map_err(to_500)?;
-    let view: Option<MultisigAccountView> = chain::query("account", bytes).await.map_err(to_500)?;
+    let bytes = chain::encode(&id).map_err(RpcError::internal)?;
+    let view: Option<MultisigAccountView> = chain::query("account", bytes).await.map_err(RpcError::internal)?;
     Ok(Json(view.map(|v| AccountView {
         threshold: v.threshold,
         nonce: v.nonce,
@@ -752,7 +911,7 @@ struct MetaOut {
 async fn api_account_meta(
     State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
-) -> Result<Json<Option<MetaOut>>, (StatusCode, String)> {
+) -> ApiResult<Json<Option<MetaOut>>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         return Ok(Json(mock.account_meta(id).map(|m| MetaOut {
@@ -761,8 +920,8 @@ async fn api_account_meta(
             members_len: m.member_count,
         })));
     }
-    let bytes = chain::encode(&id).map_err(to_500)?;
-    let meta: Option<AccountMeta> = chain::query("account_meta", bytes).await.map_err(to_500)?;
+    let bytes = chain::encode(&id).map_err(RpcError::internal)?;
+    let meta: Option<AccountMeta> = chain::query("account_meta", bytes).await.map_err(RpcError::internal)?;
     Ok(Json(meta.map(|m| MetaOut {
         threshold: m.threshold,
         nonce: m.nonce,
@@ -773,7 +932,7 @@ async fn api_account_meta(
 async fn api_account_keys(
     State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
-) -> Result<Json<Option<Vec<String>>>, (StatusCode, String)> {
+) -> ApiResult<Json<Option<Vec<String>>>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         return Ok(Json(mock.account(id).map(|a| {
@@ -783,20 +942,20 @@ async fn api_account_keys(
                 .collect()
         })));
     }
-    let bytes = chain::encode(&id).map_err(to_500)?;
-    let keys: Option<Vec<Vec<u8>>> = chain::query("member_key_bytes", bytes).await.map_err(to_500)?;
+    let bytes = chain::encode(&id).map_err(RpcError::internal)?;
+    let keys: Option<Vec<Vec<u8>>> = chain::query("member_key_bytes", bytes).await.map_err(RpcError::internal)?;
     Ok(Json(keys.map(|ks| ks.into_iter().map(hex::encode).collect())))
 }
 
 async fn api_account_next_id(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<u64>, (StatusCode, String)> {
+) -> ApiResult<Json<u64>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         return Ok(Json(mock.next_account_id()));
     }
-    let bytes = chain::encode(&()).map_err(to_500)?;
-    let next: u64 = chain::query("next_account_id", bytes).await.map_err(to_500)?;
+    let bytes = chain::encode(&()).map_err(RpcError::internal)?;
+    let next: u64 = chain::query("next_account_id", bytes).await.map_err(RpcError::internal)?;
     Ok(Json(next))
 }
 
@@ -826,20 +985,20 @@ struct RegistryAccountRow {
 async fn api_registry_accounts(
     State(state): State<Arc<AppState>>,
     Query(q): Query<RegistryAccountsQuery>,
-) -> Result<Json<Vec<RegistryAccountRow>>, (StatusCode, String)> {
+) -> ApiResult<Json<Vec<RegistryAccountRow>>> {
     mock_drawer_unavailable(&state)?;
     let scan = q.limit.clamp(1, 256);
-    let next_bytes = chain::encode(&()).map_err(to_500)?;
+    let next_bytes = chain::encode(&()).map_err(RpcError::internal)?;
     let next: u64 = chain::query("next_account_id", next_bytes)
         .await
-        .map_err(to_500)?;
+        .map_err(RpcError::internal)?;
     let end = next.min(scan);
     let identities = state.identities.lock().await;
     let mut rows = Vec::new();
     for id in 0..end {
-        let bytes = chain::encode(&id).map_err(to_500)?;
+        let bytes = chain::encode(&id).map_err(RpcError::internal)?;
         let view: Option<MultisigAccountView> =
-            chain::query("account", bytes).await.map_err(to_500)?;
+            chain::query("account", bytes).await.map_err(RpcError::internal)?;
         let Some(v) = view else {
             continue;
         };
@@ -887,9 +1046,9 @@ struct QuorumSubmitReq {
     signers: Vec<String>,
 }
 
-fn msg_bytes(msg: &str, hex_flag: bool) -> Result<Vec<u8>, (StatusCode, String)> {
+fn msg_bytes(msg: &str, hex_flag: bool) -> ApiResult<Vec<u8>> {
     if hex_flag {
-        hex::decode(msg.trim_start_matches("0x")).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
+        hex::decode(msg.trim_start_matches("0x")).map_err(RpcError::invalid_hex)
     } else {
         Ok(msg.as_bytes().to_vec())
     }
@@ -898,30 +1057,30 @@ fn msg_bytes(msg: &str, hex_flag: bool) -> Result<Vec<u8>, (StatusCode, String)>
 async fn fetch_registry_account(
     state: &AppState,
     account_id: u64,
-) -> Result<MultisigAccountView, (StatusCode, String)> {
+) -> ApiResult<MultisigAccountView> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         let account = mock
             .account(account_id)
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("account {account_id} not found")))?;
+            .ok_or_else(|| RpcError::account_not_found(account_id))?;
         return Ok(account.to_account_view());
     }
-    let bytes = chain::encode(&account_id).map_err(to_500)?;
-    let view: Option<MultisigAccountView> = chain::query("account", bytes).await.map_err(to_500)?;
-    view.ok_or_else(|| (StatusCode::BAD_REQUEST, format!("account {account_id} not found")))
+    let bytes = chain::encode(&account_id).map_err(RpcError::internal)?;
+    let view: Option<MultisigAccountView> = chain::query("account", bytes).await.map_err(RpcError::internal)?;
+    view.ok_or_else(|| RpcError::account_not_found(account_id))
 }
 
 async fn resolve_signer_pks_locked(
     state: &AppState,
     signer_names: &[String],
-) -> Result<Vec<BlsPublicKey>, (StatusCode, String)> {
+) -> ApiResult<Vec<BlsPublicKey>> {
     let identities = state.identities.lock().await;
     let mut pks = Vec::with_capacity(signer_names.len());
     for name in signer_names {
         let id = identities
             .iter()
             .find(|i| &i.name == name)
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("no identity named '{name}'")))?;
+            .ok_or_else(|| RpcError::identity_not_found(name))?;
         pks.push(id.pk);
     }
     Ok(pks)
@@ -931,37 +1090,37 @@ async fn ensure_signers_are_members(
     state: &AppState,
     account_id: u64,
     signer_names: &[String],
-) -> Result<(), (StatusCode, String)> {
+) -> ApiResult<()> {
     let view = fetch_registry_account(state, account_id).await?;
     let pks = resolve_signer_pks_locked(state, signer_names).await?;
     membership::ensure_pks_are_members(account_id, &pks, &view)
-        .map_err(|e| (StatusCode::FORBIDDEN, e))
+        .map_err(RpcError::not_a_member)
 }
 
 fn ensure_pks_are_members_view(
     account_id: u64,
     signer_pks: &[BlsPublicKey],
     view: &MultisigAccountView,
-) -> Result<(), (StatusCode, String)> {
+) -> ApiResult<()> {
     membership::ensure_pks_are_members(account_id, signer_pks, view)
-        .map_err(|e| (StatusCode::FORBIDDEN, e))
+        .map_err(RpcError::not_a_member)
 }
 
 async fn build_sigs_locked(
     state: &AppState,
     signers: &[String],
     msg: &[u8],
-) -> Result<Vec<SignatureEntry>, (StatusCode, String)> {
+) -> ApiResult<Vec<SignatureEntry>> {
     let identities = state.identities.lock().await;
     let mut sigs = Vec::with_capacity(signers.len());
     for name in signers {
         let id = identities
             .iter()
             .find(|i| &i.name == name)
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("no identity named '{name}'")))?;
+            .ok_or_else(|| RpcError::identity_not_found(name))?;
         let sk = id
             .require_sk()
-            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+            .map_err(RpcError::invalid_input)?;
         sigs.push(SignatureEntry {
             signer: id.pk,
             signature: bls::sign(sk, msg),
@@ -981,8 +1140,8 @@ fn diagnose_to_out(d: &DiagnoseQuorumResult) -> DiagnoseOut {
     }
 }
 
-async fn free_read_quorum(args: &VerifyQuorumArgs) -> Result<(Option<DiagnoseOut>, Option<bool>), (StatusCode, String)> {
-    let bytes = chain::encode(args).map_err(to_500)?;
+async fn free_read_quorum(args: &VerifyQuorumArgs) -> ApiResult<(Option<DiagnoseOut>, Option<bool>)> {
+    let bytes = chain::encode(args).map_err(RpcError::internal)?;
     let diagnose = match chain::query::<DiagnoseQuorumResult>("diagnose_quorum", bytes.clone()).await {
         Ok(d) => Some(diagnose_to_out(&d)),
         Err(_) => None,
@@ -994,7 +1153,7 @@ async fn free_read_quorum(args: &VerifyQuorumArgs) -> Result<(Option<DiagnoseOut
 async fn api_quorum_submit(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SubmitOut>> {
     mock_drawer_unavailable(&state)?;
     ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
@@ -1004,11 +1163,11 @@ async fn api_quorum_submit(
         msg,
         sigs,
     };
-    let bytes = chain::encode(&args).map_err(to_500)?;
+    let bytes = chain::encode(&args).map_err(RpcError::internal)?;
     let result = tokio::task::spawn_blocking(move || chain::submit_call("verify_quorum", &bytes))
         .await
-        .map_err(to_500)?
-        .map_err(to_500)?;
+        .map_err(RpcError::internal)?
+        .map_err(RpcError::internal)?;
     let mut out = submit_from_log(result.stdout);
     out.note = Some(
         "verify_quorum returns bool with no event. Free-read follow-up may be untrusted on live testnet."
@@ -1024,7 +1183,7 @@ async fn api_quorum_submit(
 async fn api_quorum_check(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SubmitOut>> {
     mock_drawer_unavailable(&state)?;
     ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
@@ -1057,7 +1216,7 @@ async fn api_quorum_check(
 async fn api_quorum_diagnose(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SubmitOut>> {
     mock_drawer_unavailable(&state)?;
     api_quorum_check(State(state), Json(req)).await
 }
@@ -1065,7 +1224,7 @@ async fn api_quorum_diagnose(
 async fn api_quorum_agg_submit(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SubmitOut>> {
     mock_drawer_unavailable(&state)?;
     ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
@@ -1076,10 +1235,10 @@ async fn api_quorum_agg_submit(
         let id = identities
             .iter()
             .find(|i| &i.name == name)
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("no identity named '{name}'")))?;
+            .ok_or_else(|| RpcError::identity_not_found(name))?;
         let sk = id
             .require_sk()
-            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+            .map_err(RpcError::invalid_input)?;
         signer_keys.push(id.pk);
         per_signer_sigs.push(bls::sign_multisig(sk, &id.pk, &msg));
     }
@@ -1092,15 +1251,15 @@ async fn api_quorum_agg_submit(
         signer_keys,
         aggregate_sig,
     };
-    let bytes = chain::encode(&args).map_err(to_500)?;
+    let bytes = chain::encode(&args).map_err(RpcError::internal)?;
     let result =
         tokio::task::spawn_blocking(move || chain::submit_call("verify_quorum_aggregate", &bytes))
             .await
-            .map_err(to_500)?
-            .map_err(to_500)?;
+            .map_err(RpcError::internal)?
+            .map_err(RpcError::internal)?;
     let mut out = submit_from_log(result.stdout);
     out.note = Some("Aggregate path: bool return not in wallet log; free-read check may be untrusted.".into());
-    let check_bytes = chain::encode(&args).map_err(to_500)?;
+    let check_bytes = chain::encode(&args).map_err(RpcError::internal)?;
     out.check = chain::query::<bool>("verify_quorum_aggregate", check_bytes).await.ok();
     Ok(Json(out))
 }
@@ -1108,7 +1267,7 @@ async fn api_quorum_agg_submit(
 async fn api_quorum_agg_check(
     State(state): State<Arc<AppState>>,
     Json(req): Json<QuorumSubmitReq>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SubmitOut>> {
     mock_drawer_unavailable(&state)?;
     ensure_signers_are_members(&state, req.account, &req.signers).await?;
     let msg = msg_bytes(&req.msg, req.hex)?;
@@ -1119,10 +1278,10 @@ async fn api_quorum_agg_check(
         let id = identities
             .iter()
             .find(|i| &i.name == name)
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("no identity named '{name}'")))?;
+            .ok_or_else(|| RpcError::identity_not_found(name))?;
         let sk = id
             .require_sk()
-            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+            .map_err(RpcError::invalid_input)?;
         signer_keys.push(id.pk);
         per_signer_sigs.push(bls::sign_multisig(sk, &id.pk, &msg));
     }
@@ -1134,7 +1293,7 @@ async fn api_quorum_agg_check(
         signer_keys,
         aggregate_sig,
     };
-    let bytes = chain::encode(&args).map_err(to_500)?;
+    let bytes = chain::encode(&args).map_err(RpcError::internal)?;
     let check = chain::query::<bool>("verify_quorum_aggregate", bytes).await.ok();
     Ok(Json(SubmitOut {
         log: format!("check={check:?}"),
@@ -1159,7 +1318,7 @@ struct ChangeAccountReq {
 async fn api_change_account_submit(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ChangeAccountReq>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SubmitOut>> {
     mock_drawer_unavailable(&state)?;
     let mut new_members = Vec::with_capacity(req.new_members.len());
     for name in &req.new_members {
@@ -1167,11 +1326,11 @@ async fn api_change_account_submit(
     }
 
     let current: Option<MultisigAccountView> =
-        chain::query("account", chain::encode(&req.account).map_err(to_500)?)
+        chain::query("account", chain::encode(&req.account).map_err(RpcError::internal)?)
             .await
-            .map_err(to_500)?;
+            .map_err(RpcError::internal)?;
     let current =
-        current.ok_or_else(|| (StatusCode::BAD_REQUEST, format!("account {} not found", req.account)))?;
+        current.ok_or_else(|| RpcError::account_not_found(req.account))?;
 
     let msg = bls::change_account_message(req.account, current.nonce, &new_members, req.new_threshold);
     ensure_pks_are_members_view(req.account, &resolve_signer_pks_locked(&state, &req.signers).await?, &current)?;
@@ -1183,11 +1342,11 @@ async fn api_change_account_submit(
         new_threshold: req.new_threshold,
         sigs,
     };
-    let bytes = chain::encode(&args).map_err(to_500)?;
+    let bytes = chain::encode(&args).map_err(RpcError::internal)?;
     let result = tokio::task::spawn_blocking(move || chain::submit_call("change_account", &bytes))
         .await
-        .map_err(to_500)?
-        .map_err(to_500)?;
+        .map_err(RpcError::internal)?
+        .map_err(RpcError::internal)?;
     Ok(Json(submit_from_log(result.stdout)))
 }
 
@@ -1212,16 +1371,16 @@ struct ProposalCreateOut {
 async fn api_proposal_create(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ProposalCreateReq>,
-) -> Result<Json<ProposalCreateOut>, (StatusCode, String)> {
+) -> ApiResult<Json<ProposalCreateOut>> {
     let target_bytes: [u8; 32] = hex::decode(req.target.trim_start_matches("0x"))
-        .map_err(to_500)?
+        .map_err(RpcError::internal)?
         .as_slice()
         .try_into()
-        .map_err(|_| (StatusCode::BAD_REQUEST, "target must be 32-byte hex".into()))?;
+        .map_err(|_| RpcError::invalid_target())?;
     let call_args = if req.args_hex.is_empty() {
         Vec::new()
     } else {
-        hex::decode(req.args_hex.trim_start_matches("0x")).map_err(to_500)?
+        hex::decode(req.args_hex.trim_start_matches("0x")).map_err(RpcError::internal)?
     };
     if state.demo_mode == DemoMode::Mock {
         let mut mock = state.mock.lock().await;
@@ -1235,7 +1394,7 @@ async fn api_proposal_create(
                 req.deadline,
                 MOCK_CHAIN_ID,
             )
-            .map_err(to_400)?;
+            .map_err(RpcError::invalid_input)?;
         return Ok(Json(ProposalCreateOut {
             submit: mock_ok_submit(
                 format!("mock: propose id={id} account={}", req.account),
@@ -1247,10 +1406,10 @@ async fn api_proposal_create(
     let before: u64 = chain::query_contract(
         chain::Contract::Proposals,
         "next_proposal_id",
-        chain::encode(&()).map_err(to_500)?,
+        chain::encode(&()).map_err(RpcError::internal)?,
     )
     .await
-    .map_err(to_500)?;
+    .map_err(RpcError::internal)?;
     let args = ProposeArgs {
         registry_account_id: req.account,
         target: ContractId::from_bytes(target_bytes),
@@ -1258,12 +1417,12 @@ async fn api_proposal_create(
         call_args,
         deadline: req.deadline,
     };
-    let bytes = chain::encode(&args).map_err(to_500)?;
+    let bytes = chain::encode(&args).map_err(RpcError::internal)?;
     let result =
         tokio::task::spawn_blocking(move || chain::submit_call_to(chain::Contract::Proposals, "propose", &bytes))
             .await
-            .map_err(to_500)?
-            .map_err(to_500)?;
+            .map_err(RpcError::internal)?
+            .map_err(RpcError::internal)?;
     Ok(Json(ProposalCreateOut {
         submit: submit_from_log(result.stdout),
         allocated_id_hint: before,
@@ -1313,11 +1472,12 @@ struct IntentDisplay {
     digest_safety_number: String,
 }
 
-fn proposal_preview_from_view(view: &ProposalView) -> Result<SignPreviewOut, (StatusCode, String)> {
+fn proposal_preview_from_view(view: &ProposalView) -> ApiResult<SignPreviewOut> {
     if view.status != ProposalStatus::Open {
-        return Err((
+        return Err(RpcError::catalog(
             StatusCode::BAD_REQUEST,
-            "proposal is not Open".into(),
+            "proposal_not_open",
+            "Proposal is not open.",
         ));
     }
     let intent = knot_encoding::ProposalIntent {
@@ -1329,12 +1489,8 @@ fn proposal_preview_from_view(view: &ProposalView) -> Result<SignPreviewOut, (St
         call_args: view.call_args.clone(),
         deadline: view.deadline,
     };
-    let digest = knot_encoding::recompute_and_verify(&intent, &view.signed_digest).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "REFUSING: on-chain digest does not match recomputed intent".into(),
-        )
-    })?;
+    let digest = knot_encoding::recompute_and_verify(&intent, &view.signed_digest)
+        .map_err(|_| RpcError::digest_mismatch("on-chain digest mismatch"))?;
     Ok(SignPreviewOut {
         digest_hex: format!("0x{}", hex::encode(digest)),
         digest_mnemonic: knot_encoding::digest_mnemonic(&digest),
@@ -1352,22 +1508,22 @@ fn proposal_preview_from_view(view: &ProposalView) -> Result<SignPreviewOut, (St
 async fn api_proposal_preview(
     State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
-) -> Result<Json<SignPreviewOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SignPreviewOut>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         let p = mock
             .proposal(id)
-            .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("proposal {id} not found")))?;
+            .ok_or_else(|| RpcError::proposal_not_found(id))?;
         return Ok(Json(mock_proposal_preview(&p)?));
     }
     let view: Option<ProposalView> = chain::query_contract(
         chain::Contract::Proposals,
         "proposal",
-        chain::encode(&id).map_err(to_500)?,
+        chain::encode(&id).map_err(RpcError::internal)?,
     )
     .await
-    .map_err(to_500)?;
-    let view = view.ok_or_else(|| (StatusCode::BAD_REQUEST, format!("proposal {id} not found")))?;
+    .map_err(RpcError::internal)?;
+    let view = view.ok_or_else(|| RpcError::proposal_not_found(id))?;
     Ok(Json(proposal_preview_from_view(&view)?))
 }
 
@@ -1375,17 +1531,13 @@ async fn api_proposal_preview(
 async fn api_blob_preview(
     State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<String>,
-) -> Result<Json<SignPreviewOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SignPreviewOut>> {
     mock_drawer_unavailable(&state)?;
-    let client = CollectorClient::resolve(None).map_err(to_500)?;
-    let file = client.pull(&id).await.map_err(to_500)?;
-    let proposal = file.to_proposal_blob().map_err(to_500)?;
-    let digest = knot_encoding::gate_blob_for_signing(&proposal).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "REFUSING: signed_digest does not match recomputed §4a digest".into(),
-        )
-    })?;
+    let client = CollectorClient::resolve(None).map_err(RpcError::collector_config)?;
+    let file = client.pull(&id).await.map_err(RpcError::internal)?;
+    let proposal = file.to_proposal_blob().map_err(RpcError::internal)?;
+    let digest = knot_encoding::gate_blob_for_signing(&proposal)
+        .map_err(|_| RpcError::digest_mismatch("blob §4a digest mismatch"))?;
     let i = &proposal.intent.intent;
     Ok(Json(SignPreviewOut {
         digest_hex: format!("0x{}", hex::encode(digest)),
@@ -1405,22 +1557,19 @@ async fn api_proposal_approve(
     State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
     Json(req): Json<ProposalApproveReq>,
-) -> Result<Json<ProposalApproveOut>, (StatusCode, String)> {
+) -> ApiResult<Json<ProposalApproveOut>> {
     if !req.confirm {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "confirm required — call /preview first, then POST with confirm:true".into(),
-        ));
+        return Err(RpcError::confirm_required());
     }
 
     if state.demo_mode == DemoMode::Mock {
         let mock_p = {
             let mock = state.mock.lock().await;
             mock.proposal(id)
-                .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("proposal {id} not found")))?
+                .ok_or_else(|| RpcError::proposal_not_found(id))?
         };
         if mock_p.status != MockProposalStatus::Open {
-            return Err((StatusCode::BAD_REQUEST, format!("proposal {id} is not Open")));
+            return Err(RpcError::proposal_not_open(id));
         }
         let intent = knot_encoding::ProposalIntent {
             chain_id: mock_p.chain_id,
@@ -1431,13 +1580,8 @@ async fn api_proposal_approve(
             call_args: mock_p.call_args.clone(),
             deadline: mock_p.deadline,
         };
-        let digest =
-            knot_encoding::recompute_and_verify(&intent, &mock_p.digest).map_err(|_| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "REFUSING TO SIGN: mock digest does not match recomputed intent".into(),
-                )
-            })?;
+        let digest = knot_encoding::recompute_and_verify(&intent, &mock_p.digest)
+            .map_err(|_| RpcError::digest_mismatch("mock approve digest mismatch"))?;
         ensure_signers_are_members(&state, mock_p.registry_account_id, &[req.signer.clone()]).await?;
         let intent_out = IntentDisplay {
             chain_id: intent.chain_id,
@@ -1456,22 +1600,17 @@ async fn api_proposal_approve(
         let id_rec = identities
             .iter()
             .find(|i| i.name == req.signer)
-            .ok_or_else(|| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("no identity named '{}'", req.signer),
-                )
-            })?;
+            .ok_or_else(|| RpcError::identity_not_found(&req.signer))?;
         let sk = id_rec
             .require_sk()
-            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+            .map_err(RpcError::invalid_input)?;
         // Real secure BLS sign of the digest (signature discarded after membership record).
         let _signature = bls::sign(sk, &digest);
         let pk_bytes = id_rec.pk.to_bytes();
         drop(identities);
 
         let mut mock = state.mock.lock().await;
-        mock.approve(id, pk_bytes).map_err(to_400)?;
+        mock.approve(id, pk_bytes).map_err(RpcError::invalid_input)?;
         return Ok(Json(ProposalApproveOut {
             submit: mock_ok_submit(
                 format!("mock: approve proposal {id} by {}", req.signer),
@@ -1484,13 +1623,13 @@ async fn api_proposal_approve(
     let view: Option<ProposalView> = chain::query_contract(
         chain::Contract::Proposals,
         "proposal",
-        chain::encode(&id).map_err(to_500)?,
+        chain::encode(&id).map_err(RpcError::internal)?,
     )
     .await
-    .map_err(to_500)?;
-    let view = view.ok_or_else(|| (StatusCode::BAD_REQUEST, format!("proposal {id} not found")))?;
+    .map_err(RpcError::internal)?;
+    let view = view.ok_or_else(|| RpcError::proposal_not_found(id))?;
     if view.status != ProposalStatus::Open {
-        return Err((StatusCode::BAD_REQUEST, format!("proposal {id} is not Open")));
+        return Err(RpcError::proposal_not_open(id));
     }
 
     let intent = knot_encoding::ProposalIntent {
@@ -1502,12 +1641,8 @@ async fn api_proposal_approve(
         call_args: view.call_args.clone(),
         deadline: view.deadline,
     };
-    let digest = knot_encoding::recompute_and_verify(&intent, &view.signed_digest).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "REFUSING TO SIGN: on-chain digest does not match recomputed intent".into(),
-        )
-    })?;
+    let digest = knot_encoding::recompute_and_verify(&intent, &view.signed_digest)
+        .map_err(|_| RpcError::digest_mismatch("approve on-chain digest mismatch"))?;
     ensure_signers_are_members(&state, view.registry_account_id, &[req.signer.clone()]).await?;
     let intent_out = IntentDisplay {
         chain_id: intent.chain_id,
@@ -1526,10 +1661,10 @@ async fn api_proposal_approve(
     let id_rec = identities
         .iter()
         .find(|i| i.name == req.signer)
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, format!("no identity named '{}'", req.signer)))?;
+        .ok_or_else(|| RpcError::identity_not_found(&req.signer))?;
     let sk = id_rec
         .require_sk()
-        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+        .map_err(RpcError::invalid_input)?;
     let args = ApproveArgs {
         proposal_id: id,
         signer: id_rec.pk,
@@ -1537,12 +1672,12 @@ async fn api_proposal_approve(
     };
     drop(identities);
 
-    let bytes = chain::encode(&args).map_err(to_500)?;
+    let bytes = chain::encode(&args).map_err(RpcError::internal)?;
     let result =
         tokio::task::spawn_blocking(move || chain::submit_call_to(chain::Contract::Proposals, "approve", &bytes))
             .await
-            .map_err(to_500)?
-            .map_err(to_500)?;
+            .map_err(RpcError::internal)?
+            .map_err(RpcError::internal)?;
     Ok(Json(ProposalApproveOut {
         submit: submit_from_log(result.stdout),
         intent: intent_out,
@@ -1568,7 +1703,7 @@ struct ProposalStatusOut {
 async fn api_proposal_status(
     State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
-) -> Result<Json<Option<ProposalStatusOut>>, (StatusCode, String)> {
+) -> ApiResult<Json<Option<ProposalStatusOut>>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         return Ok(Json(mock.proposal(id).map(|p| mock_proposal_status_out(id, p))));
@@ -1576,10 +1711,10 @@ async fn api_proposal_status(
     let view: Option<ProposalView> = chain::query_contract(
         chain::Contract::Proposals,
         "proposal",
-        chain::encode(&id).map_err(to_500)?,
+        chain::encode(&id).map_err(RpcError::internal)?,
     )
     .await
-    .map_err(to_500)?;
+    .map_err(RpcError::internal)?;
     Ok(Json(view.map(|v| {
         let status = match v.status {
             ProposalStatus::Open => "Open",
@@ -1606,27 +1741,27 @@ async fn api_proposal_status(
 async fn api_proposal_finalize(
     State(state): State<Arc<AppState>>,
     AxPath(id): AxPath<u64>,
-) -> Result<Json<SubmitOut>, (StatusCode, String)> {
+) -> ApiResult<Json<SubmitOut>> {
     if state.demo_mode == DemoMode::Mock {
         let mut mock = state.mock.lock().await;
-        mock.finalize(id).map_err(to_400)?;
+        mock.finalize(id).map_err(RpcError::invalid_input)?;
         return Ok(Json(mock_ok_submit(
             format!("mock: finalize proposal {id}"),
             format!("mock-finalize-{id}"),
         )));
     }
-    let bytes = chain::encode(&id).map_err(to_500)?;
+    let bytes = chain::encode(&id).map_err(RpcError::internal)?;
     let result =
         tokio::task::spawn_blocking(move || chain::submit_call_to(chain::Contract::Proposals, "finalize", &bytes))
             .await
-            .map_err(to_500)?
-            .map_err(to_500)?;
+            .map_err(RpcError::internal)?
+            .map_err(RpcError::internal)?;
     Ok(Json(submit_from_log(result.stdout)))
 }
 
 async fn api_proposal_next_id(
     State(state): State<Arc<AppState>>,
-) -> Result<Json<u64>, (StatusCode, String)> {
+) -> ApiResult<Json<u64>> {
     if state.demo_mode == DemoMode::Mock {
         let mock = state.mock.lock().await;
         return Ok(Json(mock.next_proposal_id()));
@@ -1634,10 +1769,10 @@ async fn api_proposal_next_id(
     let next: u64 = chain::query_contract(
         chain::Contract::Proposals,
         "next_proposal_id",
-        chain::encode(&()).map_err(to_500)?,
+        chain::encode(&()).map_err(RpcError::internal)?,
     )
     .await
-    .map_err(to_500)?;
+    .map_err(RpcError::internal)?;
     Ok(Json(next))
 }
 
@@ -1999,7 +2134,47 @@ mod generic_rpc_smoke {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(body.contains("confirm required"));
+        let err: serde_json::Value = serde_json::from_str(&body).expect("error json");
+        assert_eq!(err["code"], "confirm_required");
+        assert!(err["message"].as_str().unwrap_or("").contains("Confirm required"));
+    }
+
+    #[tokio::test]
+    async fn api_errors_use_code_schema_not_raw_details() {
+        let state = test_state_with_identities(&["alice"]);
+        let app = build_router(state);
+
+        let dup = serde_json::json!({ "name": "alice" });
+        let (status, body) = oneshot_json(
+            app.clone(),
+            "POST",
+            "/api/identities",
+            Some(dup.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "duplicate identity: {body}");
+        let err: serde_json::Value = serde_json::from_str(&body).expect("error json");
+        assert_eq!(err["code"], "identity_exists");
+        assert_eq!(err["message"], "Identity already exists.");
+        assert!(!body.contains("invalid BlsPublicKey"));
+
+        let bad_pk = serde_json::json!({
+            "name": "ghost",
+            "pk": "not-valid-bls-key-material-xyz"
+        });
+        let (status, body) = oneshot_json(
+            app,
+            "POST",
+            "/api/identities/import-pk",
+            Some(bad_pk.to_string()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "bad pk: {body}");
+        let err: serde_json::Value = serde_json::from_str(&body).expect("error json");
+        assert_eq!(err["code"], "invalid_input");
+        assert_eq!(err["message"], "Invalid request.");
+        assert!(!body.contains("not-valid-bls-key-material-xyz"));
+        assert!(!body.contains("invalid BlsPublicKey"));
     }
 
     #[tokio::test]
@@ -2046,7 +2221,10 @@ mod generic_rpc_smoke {
         )
         .await;
         assert_eq!(status, StatusCode::FORBIDDEN, "non-member approve: {body}");
-        assert!(body.contains("not a member"));
+        let err: serde_json::Value = serde_json::from_str(&body).expect("error json");
+        assert_eq!(err["code"], "not_a_member");
+        assert_eq!(err["message"], "Signer is not a committee member.");
+        assert!(!body.contains("registry account"));
 
         let approve_alice = serde_json::json!({ "signer": "alice", "confirm": true });
         let (status, body) = oneshot_json(
