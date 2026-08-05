@@ -1,8 +1,8 @@
 ---
 id: 7
 slug: keystore-v2
-status: TODO
-owner: null
+status: IN_PROGRESS
+owner: cursor-agent
 deps:
   - 3
 scope:
