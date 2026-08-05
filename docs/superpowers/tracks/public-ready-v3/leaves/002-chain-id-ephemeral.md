@@ -1,7 +1,7 @@
 ---
 id: 2
 slug: chain-id-ephemeral
-status: IN_PROGRESS
+status: DONE
 owner: cursor-agent
 deps:
   - 3
@@ -14,9 +14,9 @@ acceptance:
   - "If unset: ship test-only shim before 3b/3c"
   - Blocks encoding/contract v3
 acceptanceDone:
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
 ---
 # Phase 3a: verify abi::chain_id under ephemeral VM
 
