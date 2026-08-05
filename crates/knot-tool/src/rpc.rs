@@ -1,9 +1,15 @@
 //! Local RPC + web UI server. `127.0.0.1`-only by construction (refuses any
-//! other bind address), bearer-token-gated on every `/api/*` route. Signing
+//! other bind address), session-cookie-gated on every `/api/*` route. Signing
 //! happens here, server-side, using identities decrypted into memory once at
 //! startup (password prompted once) — the browser JS never receives a
 //! secret key, only names/public keys/signatures/messages.
+//!
+//! Auth (R1): one-shot OTP in `/?code=…` sets an HttpOnly `SameSite=Strict`
+//! session cookie. HTML never embeds the session secret. `/api/*` accepts the
+//! cookie (primary) or `X-Knot-Token` header matching the session (secondary,
+//! for programmatic tests).
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
@@ -11,7 +17,7 @@ use std::sync::Arc;
 use anyhow::{bail, Result};
 use axum::extract::{Path as AxPath, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use dusk_bytes::Serializable;
@@ -40,12 +46,16 @@ use knot_tool::mock_ledger::{DemoMode, MockLedger, MockProposal, MockProposalSta
 const MOCK_CHAIN_ID: u64 = 2;
 
 const MOCK_DRAWER_MSG: &str = "mock mode: use DEMO_MODE=testnet";
+const SESSION_COOKIE: &str = "knot_session";
 
 struct AppState {
     identities: Mutex<Vec<keystore::Identity>>,
     password: String,
     store_path: PathBuf,
-    token: String,
+    /// One-shot bootstrap code; consumed on first successful `/?code=…`.
+    otp: Mutex<Option<String>>,
+    /// Session secret carried in HttpOnly cookie (and optional `X-Knot-Token`).
+    session_token: String,
     demo_mode: DemoMode,
     /// In-process ledger; only read/written when `demo_mode == Mock`.
     mock: Mutex<MockLedger>,
@@ -99,26 +109,28 @@ pub async fn serve_with_options(
     );
     eprintln!("════════════════════════════════════════════════════════");
 
-    let mut token_bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut token_bytes);
+    let mut otp_bytes = [0u8; 16];
+    OsRng.fill_bytes(&mut otp_bytes);
+    let otp = hex::encode(otp_bytes);
+    let mut session_bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut session_bytes);
+    let session_token = hex::encode(session_bytes);
     let state = Arc::new(AppState {
         identities: Mutex::new(identities),
         password,
         store_path,
-        token: hex::encode(token_bytes),
+        otp: Mutex::new(Some(otp.clone())),
+        session_token,
         demo_mode,
         mock: Mutex::new(MockLedger::new()),
     });
 
     let app = build_router(state);
 
-    // Do not put the bearer token in the printed/opened URL (M8) — it is
-    // injected into the local HTML as `window.KNOT_TOOL_TOKEN`; API
-    // clients must send header `X-Knot-Token`.
-    let mut url = format!("http://{addr}/");
+    let mut url = format!("http://{addr}/?code={otp}");
     if let Some(extra) = &opts.query_extra {
         if !extra.is_empty() {
-            url.push('?');
+            url.push('&');
             url.push_str(extra.trim_start_matches('&').trim_start_matches('?'));
         }
     }
@@ -126,9 +138,10 @@ pub async fn serve_with_options(
         url.push('#');
         url.push_str(tab.trim_start_matches('#'));
     }
-    eprintln!("knot-tool listening on {url}");
-    eprintln!("Authorize /api/* with header X-Knot-Token (value injected into local HTML only).");
-    eprintln!("Open the URL above in your browser.");
+    eprintln!("knot-tool listening on http://{addr}/");
+    eprintln!("Bootstrap session: open {url}");
+    eprintln!("/api/* requires session cookie (set by bootstrap) or X-Knot-Token header.");
+    let _ = std::io::stderr().flush();
     if opts.open_browser || opts.open_tab.is_some() {
         open_default_browser(&url);
     }
@@ -166,37 +179,98 @@ fn open_default_browser(url: &str) {
     }
 }
 
-async fn require_token(
+fn constant_time_eq(got: &str, want: &str) -> bool {
+    let got = got.as_bytes();
+    let want = want.as_bytes();
+    got.len() == want.len() && bool::from(got.ct_eq(want))
+}
+
+fn session_from_cookie(headers: &HeaderMap) -> Option<&str> {
+    let cookie_header = headers.get(header::COOKIE)?.to_str().ok()?;
+    cookie_header.split(';').find_map(|pair| {
+        let pair = pair.trim();
+        let (name, value) = pair.split_once('=')?;
+        if name == SESSION_COOKIE {
+            Some(value)
+        } else {
+            None
+        }
+    })
+}
+
+fn session_authorized(headers: &HeaderMap, session_token: &str) -> bool {
+    session_from_cookie(headers)
+        .map(|v| constant_time_eq(v, session_token))
+        .unwrap_or(false)
+        || headers
+            .get("X-Knot-Token")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| constant_time_eq(v, session_token))
+            .unwrap_or(false)
+}
+
+fn session_cookie_value(session_token: &str) -> Result<axum::http::HeaderValue, ()> {
+    axum::http::HeaderValue::from_str(&format!(
+        "{SESSION_COOKIE}={session_token}; HttpOnly; SameSite=Strict; Path=/"
+    ))
+    .map_err(|_| ())
+}
+
+async fn require_session(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
-    let ok = headers
-        .get("X-Knot-Token")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| {
-            let got = v.as_bytes();
-            let want = state.token.as_bytes();
-            got.len() == want.len() && bool::from(got.ct_eq(want))
-        })
-        .unwrap_or(false);
-    if !ok {
-        return (StatusCode::UNAUTHORIZED, "missing/invalid token").into_response();
+    if !session_authorized(&headers, &state.session_token) {
+        return (StatusCode::UNAUTHORIZED, "missing/invalid session").into_response();
     }
     next.run(request).await
 }
 
-async fn index(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+#[derive(Deserialize, Default)]
+struct IndexQuery {
+    code: Option<String>,
+}
+
+async fn index(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<IndexQuery>,
+) -> Response {
+    if let Some(code) = q.code {
+        let mut otp_guard = state.otp.lock().await;
+        let valid = otp_guard
+            .as_ref()
+            .map(|otp| constant_time_eq(&code, otp))
+            .unwrap_or(false);
+        if !valid {
+            return (StatusCode::UNAUTHORIZED, "invalid or expired bootstrap code").into_response();
+        }
+        *otp_guard = None;
+        let cookie = match session_cookie_value(&state.session_token) {
+            Ok(v) => v,
+            Err(()) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, "session cookie error").into_response();
+            }
+        };
+        return (
+            StatusCode::SEE_OTHER,
+            [(header::SET_COOKIE, cookie)],
+            Redirect::to("/"),
+        )
+            .into_response();
+    }
+
     let template = include_str!("../static/index.html");
-    // Token is process-scoped; never cache HTML across restarts.
     (
+        StatusCode::OK,
         [
             (header::CONTENT_TYPE, "text/html; charset=utf-8"),
             (header::CACHE_CONTROL, "no-store"),
         ],
-        template.replace("__TOKEN__", &state.token),
+        template,
     )
+        .into_response()
 }
 
 async fn app_js() -> impl IntoResponse {
@@ -1592,7 +1666,7 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/proposal/{id}/finalize", post(api_proposal_finalize))
         .route("/api/proposal/next-id", get(api_proposal_next_id))
         .route("/api/blob/{id}/preview", get(api_blob_preview))
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_token));
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), require_session));
 
     Router::new()
         .route("/", get(index))
@@ -1643,7 +1717,8 @@ mod generic_rpc_smoke {
     use axum::http::Request;
     use tower::ServiceExt;
 
-    const TEST_TOKEN: &str = "fixed-smoke-test-token";
+    const TEST_SESSION: &str = "fixed-smoke-test-session-token";
+    const TEST_OTP: &str = "fixed-smoke-test-otp";
 
     fn test_state_with_identities(names: &[&str]) -> Arc<AppState> {
         let identities: Vec<keystore::Identity> = names
@@ -1654,14 +1729,38 @@ mod generic_rpc_smoke {
             identities: Mutex::new(identities),
             password: "smoke-test-password".into(),
             store_path: PathBuf::from("/tmp/knot-tool-smoke-identities.dat"),
-            token: TEST_TOKEN.into(),
+            otp: Mutex::new(Some(TEST_OTP.into())),
+            session_token: TEST_SESSION.into(),
             demo_mode: DemoMode::Mock,
             mock: Mutex::new(MockLedger::new()),
         })
     }
 
-    fn token_header() -> (&'static str, &'static str) {
-        ("X-Knot-Token", TEST_TOKEN)
+    fn session_cookie_header() -> (&'static str, String) {
+        (
+            "cookie",
+            format!("{SESSION_COOKIE}={TEST_SESSION}"),
+        )
+    }
+
+    async fn bootstrap_cookie(app: Router) -> String {
+        let req = Request::builder()
+            .method("GET")
+            .uri(format!("/?code={TEST_OTP}"))
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.expect("bootstrap");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER, "bootstrap redirect");
+        let set_cookie = resp
+            .headers()
+            .get(header::SET_COOKIE)
+            .expect("Set-Cookie")
+            .to_str()
+            .expect("cookie utf8")
+            .to_string();
+        assert!(set_cookie.contains("HttpOnly"));
+        assert!(set_cookie.contains("SameSite=Strict"));
+        set_cookie
     }
 
     async fn oneshot_json(
@@ -1670,8 +1769,11 @@ mod generic_rpc_smoke {
         uri: &str,
         body: Option<String>,
     ) -> (StatusCode, String) {
-        let (name, value) = token_header();
-        let mut builder = Request::builder().method(method).uri(uri).header(name, value);
+        let (name, value) = session_cookie_header();
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(name, value);
         let req = if let Some(json) = body {
             builder = builder.header("content-type", "application/json");
             builder.body(Body::from(json)).unwrap()
@@ -1687,16 +1789,55 @@ mod generic_rpc_smoke {
     }
 
     #[tokio::test]
-    async fn setup_status_mock_mode_and_token_gate() {
+    async fn index_html_never_embeds_session_secret() {
+        let state = test_state_with_identities(&["alice"]);
+        let secret = state.session_token.clone();
+        let app = build_router(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.expect("oneshot");
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let html = String::from_utf8(bytes.to_vec()).expect("utf8 body");
+        assert!(!html.contains(&secret));
+        assert!(!html.contains("KNOT_TOOL_TOKEN"));
+        assert!(!html.contains("__TOKEN__"));
+    }
+
+    #[tokio::test]
+    async fn bootstrap_code_sets_cookie_and_consumes_otp() {
+        let state = test_state_with_identities(&[]);
+        let app = build_router(state);
+
+        let cookie = bootstrap_cookie(app.clone()).await;
+        assert!(cookie.contains(TEST_SESSION));
+
+        let req = Request::builder()
+            .method("GET")
+            .uri(format!("/?code={TEST_OTP}"))
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.expect("reuse otp");
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn setup_status_mock_mode_and_session_gate() {
         let state = test_state_with_identities(&["alice"]);
         let app = build_router(state);
 
-        let no_token = Request::builder()
+        let no_session = Request::builder()
             .method("GET")
             .uri("/api/setup/status")
             .body(Body::empty())
             .unwrap();
-        let resp = app.clone().oneshot(no_token).await.expect("oneshot");
+        let resp = app.clone().oneshot(no_session).await.expect("oneshot");
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 
         let (status, body) = oneshot_json(app, "GET", "/api/setup/status", None).await;
@@ -1704,6 +1845,21 @@ mod generic_rpc_smoke {
         let json: serde_json::Value = serde_json::from_str(&body).expect("json");
         assert_eq!(json["demo_mode"], "mock");
         assert_eq!(json["identities_count"], 1);
+    }
+
+    #[tokio::test]
+    async fn header_token_secondary_auth_for_tests() {
+        let state = test_state_with_identities(&["alice"]);
+        let app = build_router(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/api/setup/status")
+            .header("X-Knot-Token", TEST_SESSION)
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.expect("oneshot");
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]

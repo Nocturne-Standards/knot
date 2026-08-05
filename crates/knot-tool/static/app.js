@@ -1,12 +1,9 @@
-// Plain JS, no build step. Token from index.html.
-// When TOKEN is still "__TOKEN__" (static Lab / Cloudflare), use in-browser MockLedger.
-// When knot-tool serve injects a real token, call the live /api/* mock or testnet backend.
+// Plain JS, no build step. Local `knot-tool serve` uses HttpOnly session cookies
+// (bootstrap via `/?code=…` printed by the CLI). Static Cloudflare Lab sets
+// `window.KNOT_FRONTEND_MOCK === true` explicitly — never inferred from a
+// missing token placeholder.
 
-const TOKEN = window.KNOT_TOOL_TOKEN;
-const USE_FRONTEND_MOCK =
-  window.KNOT_FRONTEND_MOCK === true ||
-  !TOKEN ||
-  TOKEN === "__TOKEN__";
+const USE_FRONTEND_MOCK = window.KNOT_FRONTEND_MOCK === true;
 
 const STORY = {
   cast: ["alice", "bob", "carol"],
@@ -75,9 +72,9 @@ async function api(path, opts = {}) {
   }
   const res = await fetch(path, {
     ...opts,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      "X-Knot-Token": TOKEN,
       ...(opts.headers || {}),
     },
   });
@@ -1241,7 +1238,16 @@ on("btn-close-council-detail", "click", () => closeCouncilDetail());
   try {
     const status = await api("/api/setup/status");
     if (status && status.demo_mode) applyDemoMode(status.demo_mode);
-  } catch (_) {}
+  } catch (e) {
+    if (!USE_FRONTEND_MOCK) {
+      showLabBanner(
+        "<strong>Session required.</strong> Open the bootstrap URL printed by " +
+          "<code>knot-tool serve</code> (one-shot <code>?code=</code>).",
+        false
+      );
+      return;
+    }
+  }
   try {
     await ensureStoryCast();
   } catch (e) {
