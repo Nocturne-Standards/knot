@@ -27,26 +27,21 @@ evidence and reasoning behind each finding are useful; the instructions are not.
 
 ## Where to start
 
-- **Implementing a fix** → `IMPLEMENTATION.md`. §1–§3 are ready to build.
-  §4 is agreed but unspecified — do not implement from it.
+- **Implementing a fix** → `IMPLEMENTATION.md`. §1–§5 LOCKED. Read per-item markers.
+- **Execution order** → `IMPLEMENTATION.md` §10. Track: `public-ready-v3`.
+- **Residual findings** → `IMPLEMENTATION.md` §11 — **review before phase 2**.
 - **Preparing the public repo** → `IMPLEMENTATION.md` §5.
-- **Setting up a new public repo** → `PUBLIC-REPO-STANDARD.md`.
-- **Checking what was decided and why** → `IMPLEMENTATION.md` §8 (decision log).
-- **Product scope, framing, roadmap** → `IMPLEMENTATION.md` §9. Not audit findings.
+- **Checking what was decided and why** → `IMPLEMENTATION.md` §8.
+- **Product scope** → `IMPLEMENTATION.md` §9.
 
-## Status at `7e58d4c`
+## Status at `b1d883d`
 
 | | |
 |---|---|
-| Ready to implement | **Everything in §1–§5.** Blockers, contracts v3, keystore v2, tool blobs, collector, registry, repo hygiene — all LOCKED |
-| Open | `blst` only, and deprioritised — not blocking (§8) |
-| Product scope | Per-council collector, role split, signer UI, `call_args` decoding (§9) |
-| Not yet audited | `rpc.rs` (1862 lines), `main.rs` (1588), `chain.rs`, `store.rs`, `dto.rs`, `collector_client.rs`, `mock_ledger.rs`, static JS |
-
-Triage on the unaudited files found no high-severity issues: SQL is parameterized,
-the Lab escapes HTML at every sink, the API token compares in constant time, and
-`rusk-wallet` is invoked with argument arrays rather than a shell string. A full read
-is still outstanding.
+| Ready to implement | **§1–§5 LOCKED** |
+| Residual audit | **Done** — §11 dispositions locked; leaf **#14** Lab/RPC; **#6**/**#8** extended |
+| Next | Phase 2 rename (`#3`) and/or `#14` Lab hardening |
+| Deferred | Launch ops §10; `nocturne-event-decoder` extract; product §9 |
 
 ## Rules
 
@@ -55,3 +50,4 @@ is still outstanding.
 2. Decisions are recorded in `IMPLEMENTATION.md` only — never in two places.
 3. Superseded content is corrected in `IMPLEMENTATION.md` §7, not edited in place in
    the frozen audit.
+4. Do not invent compatibility work for private, unused prior deployments.

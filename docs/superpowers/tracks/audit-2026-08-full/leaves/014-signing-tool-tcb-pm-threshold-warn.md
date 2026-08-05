@@ -5,7 +5,7 @@ status: superseded
 owner: planner-migrate
 deps: []
 scope:
-  - crates/multisig-tool/src/rpc.rs
+  - crates/knot-tool/src/rpc.rs
 acceptance:
   - api_pm_resolve_init cross-checks or hard-warns on threshold mismatch vs live account
 acceptanceDone:

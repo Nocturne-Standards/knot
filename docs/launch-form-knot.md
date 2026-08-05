@@ -38,8 +38,8 @@ as a first-class Knot surface.
 
 | Constant | New value | Home |
 |---|---|---|
-| Proposal | `nocturne.knot.multisig.proposal.v2` | knot `multisig-encoding` |
-| Change account | `nocturne.knot.multisig-registry.change_account.v2` | knot `multisig-encoding` |
+| Proposal | `nocturne.knot.multisig.proposal.v2` | knot `knot-encoding` |
+| Change account | `nocturne.knot.multisig-registry.change_account.v2` | knot `knot-encoding` |
 | Council resolve | `nocturne.wen.prediction-market.council-resolve.v3` | wen (after peel) |
 
 ## Settled packaging / docs defaults
@@ -113,8 +113,8 @@ flowchart LR
 ### P0 — Peel (knot + wen, coordinated)
 
 1. Move PM-resolve CLI/UI/RPC, `pm_*_types`, standalone PM UI to wen.  
-2. Move `council_resolve_*` out of `multisig-encoding` into wen; set domain **L9**.  
-3. Strip PM routes/flags from `multisig-tool`; collector: remove or relocate `pm_council_resolve` kind.  
+2. Move `council_resolve_*` out of `knot-encoding` into wen; set domain **L9**.  
+3. Strip PM routes/flags from `knot-tool`; collector: remove or relocate `pm_council_resolve` kind.  
 4. Update wen docs that pointed at knot pm-resolve.  
 5. Knot tree must not expose PM-resolve as a product surface.  
 6. **Open wen plan/leaves** that import audit A1–A5 acceptance; schedule fixes in that plan (same wave as peel preferred; **required before wen public claim** of pm-resolve).

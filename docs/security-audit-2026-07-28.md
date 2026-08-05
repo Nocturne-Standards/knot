@@ -22,12 +22,12 @@ not just relayed from sub-agent output.
 | **High** | `pm-council-tool/src/rpc.rs:606-629` | `resolve` submitted to blob's stored `pm_contract_id`, never cross-checked against live-resolved contract id — stale target can succeed silently, not just fail |
 | Medium | `pm-council-tool/src/blob.rs`, `chain.rs` | No live on-chain threshold re-check at sign/submit time (stale-threshold risk docs already flag, but tool gives zero pre-emptive warning) |
 | Medium | `pm-council-tool/src/chain.rs:181-191` | `live_dispute_council` treats any RPC error identically to "getter missing" → silent fallback to file wiring, invisible to UI |
-| Medium | `multisig-encoding/src/lib.rs:145-146` | `u32::try_from(...).expect(...)` panics (not `Result`) on oversized `function_name`/`call_args` from untrusted-origin data |
-| Medium | `multisig-registry/src/state.rs:29-32,49-64` | Unguarded `+=` on `next_id`/`nonce` (u64 wraparound, practically unreachable) |
-| Low | `multisig-tool/src/rpc.rs:221` | Bearer-token compare is `==`, not constant-time |
-| Low | `multisig-tool/src/keystore.rs:34` | PBKDF2-SHA256 100k rounds, below current OWASP guidance (~600k+) |
-| Low | `multisig-collector/src/store.rs` | No cap on total proposal/party-roster count — aggregate disk/memory growth if reverse-proxy auth is misconfigured/skipped |
-| Low | `multisig-proposals/src/state.rs:117-188` | Unbounded proposal count (permissionless propose, no pruning) |
+| Medium | `knot-encoding/src/lib.rs:145-146` | `u32::try_from(...).expect(...)` panics (not `Result`) on oversized `function_name`/`call_args` from untrusted-origin data |
+| Medium | `knot-registry/src/state.rs:29-32,49-64` | Unguarded `+=` on `next_id`/`nonce` (u64 wraparound, practically unreachable) |
+| Low | `knot-tool/src/rpc.rs:221` | Bearer-token compare is `==`, not constant-time |
+| Low | `knot-tool/src/keystore.rs:34` | PBKDF2-SHA256 100k rounds, below current OWASP guidance (~600k+) |
+| Low | `knot-collector/src/store.rs` | No cap on total proposal/party-roster count — aggregate disk/memory growth if reverse-proxy auth is misconfigured/skipped |
+| Low | `knot-proposals/src/state.rs:117-188` | Unbounded proposal count (permissionless propose, no pruning) |
 | Low | `pm-council-tool/src/rpc.rs:139-143` | Token compare is `==`, not constant-time |
 | Info | multiple | See per-crate sections — mostly "matches documented threat model, not a bug" confirmations |
 
@@ -107,7 +107,7 @@ live read.
 
 ---
 
-## multisig-proposals
+## knot-proposals
 
 No Critical/High. Two items the audit specifically targeted as highest-risk
 both checked out safe **by construction**, independently re-verified:
@@ -146,7 +146,7 @@ unguarded `+=`/`+1` on `next_id`/nonce (u64, practically unreachable).
 
 ---
 
-## multisig-registry
+## knot-registry
 
 No Critical/High/Medium beyond one Medium overflow note. Access control,
 `change_account` nonce/replay handling, `next_account_id` allocation (docs'
@@ -166,17 +166,17 @@ design — matches documented intent, flagged as tradeoff not bug).
 
 ---
 
-## multisig-tool
+## knot-tool
 
 No Critical/High/Medium beyond token-compare and KDF notes below. All 8
 security-model claims this audit set out to verify were independently
 confirmed true in code, not just docs: mainnet lockout is a hardcoded `const`
 with no override; browser never receives secret key material (grepped every
 handler); loopback binding is enforced pre-`TcpListener::bind` with no
-flag/env bypass (and unlike the collector, `multisig-tool` has **no**
+flag/env bypass (and unlike the collector, `knot-tool` has **no**
 non-loopback escape hatch at all); bearer token applied via one shared
 `route_layer` over the whole `/api/*` router with no route opting out, 32
-bytes from `OsRng`, never logged; `MULTISIG_TOOL_ALLOW_ENV_PWD` gate requires
+bytes from `OsRng`, never logged; `KNOT_ALLOW_ENV_PWD` gate requires
 both env vars, no single-var fallback; digest recompute-before-sign is
 genuine (`recompute_and_verify` always returns the *recomputed* digest, never
 the caller-claimed one, on both CLI and RPC paths); AES-256-GCM keystore uses
@@ -190,7 +190,7 @@ fresh random salt+nonce every save, key material zeroized, file mode `0o600`.
 
 ---
 
-## multisig-collector
+## knot-collector
 
 Explicitly untrusted-by-design (docs: "assume the collector can lie, omit,
 reorder, append junk"). Verified it never exceeds that posture: no BLS/digest
@@ -221,7 +221,7 @@ Licensing (AGPL-3.0-only + LICENSING.md) consistent with docs.
 
 ---
 
-## multisig-encoding
+## knot-encoding
 
 No Critical/High. Canonical encoding correctness (length-prefixed
 variable-length fields, tested adversarially against field-shifting
@@ -262,10 +262,10 @@ enforced/canonicalized.
 3. **pm-council-tool**: surface `live_dispute_council` fallback-vs-live state
    to the UI instead of `eprintln!`-only; add a threshold staleness check at
    sign/submit (Medium, both).
-4. Constant-time token comparison in `multisig-tool/src/rpc.rs:221` and
+4. Constant-time token comparison in `knot-tool/src/rpc.rs:221` and
    `pm-council-tool/src/rpc.rs:139-143` (Low, cheap fix, do alongside #1
    since it's the same file).
-5. `multisig-encoding`: convert the two length-prefix `expect()`s to
+5. `knot-encoding`: convert the two length-prefix `expect()`s to
    `Result` (Medium).
 6. Everything else in the table is Low/Info — batch whenever convenient, none
    block current testnet-only usage.

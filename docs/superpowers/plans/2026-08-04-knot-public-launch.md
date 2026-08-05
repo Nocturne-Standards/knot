@@ -6,7 +6,7 @@
 
 **Architecture:** Peel PM tooling and `council_resolve_*` out of knot (wen owns receive + A1–A5 fixes per paired plan). Knot keeps encoding (proposal + change_account only), registry, proposals, generic Lab/CLI, collector. Public claim is Prove-only. Docs align across repo, nocturne-docs `/v1/knot/`, and Lab UI.
 
-**Tech Stack:** Rust 2024 / rust-version 1.94, Cargo workspace, Piecrust contracts (`make wasm` / `make test`), Axum Lab (`multisig-tool`), Deno/md nocturne-docs, git worktree on `feat/launch-form-knot` (or successor).
+**Tech Stack:** Rust 2024 / rust-version 1.94, Cargo workspace, Piecrust contracts (`make wasm` / `make test`), Axum Lab (`knot-tool`), Deno/md nocturne-docs, git worktree on `feat/launch-form-knot` (or successor).
 
 **Paired plan:** [`/Users/leonidas/dev/aichbindas/wen/docs/superpowers/plans/2026-08-04-wen-pm-peel-and-fixes.md`](../../../../wen/docs/superpowers/plans/2026-08-04-wen-pm-peel-and-fixes.md) (absolute on disk). Run P0 strip in knot only after wen branch is ready to receive digests, or land digests in wen first then strip knot in the same calendar wave.
 
@@ -27,9 +27,9 @@
 ### Task 1: Inventory strip targets and add failing “no PM surface” guard
 
 **Files:**
-- Create: `crates/multisig-tool/tests/no_pm_resolve_surface.rs` (will fail until Task 3)
+- Create: `crates/knot-tool/tests/no_pm_resolve_surface.rs` (will fail until Task 3)
 - Modify: none yet
-- Reference: `crates/multisig-tool/src/main.rs`, `src/rpc.rs`, `src/pm_*.rs`, `static/pm-*`
+- Reference: `crates/knot-tool/src/main.rs`, `src/rpc.rs`, `src/pm_*.rs`, `static/pm-*`
 
 **Interfaces:**
 - Consumes: current tree with PM-resolve present
@@ -70,13 +70,13 @@ fn main_help_text_has_no_pm_resolve_subcommand_docs() {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cargo test -p multisig-tool --test no_pm_resolve_surface -- --nocapture`  
+Run: `cargo test -p knot-tool --test no_pm_resolve_surface -- --nocapture`  
 Expected: FAIL (files still exist / strings still present)
 
 - [ ] **Step 3: Commit the failing guard**
 
 ```bash
-git add crates/multisig-tool/tests/no_pm_resolve_surface.rs
+git add crates/knot-tool/tests/no_pm_resolve_surface.rs
 git commit -m "test: fail until PM-resolve surface peeled from knot tool"
 git push origin HEAD
 ```
@@ -90,7 +90,7 @@ git push origin HEAD
 - Modify: none in knot until wen PR/branch has `council_resolve_digest` compiling
 
 **Interfaces:**
-- Consumes: wen exports equivalent of today’s `multisig_encoding::council_resolve_digest`
+- Consumes: wen exports equivalent of today’s `knot_encoding::council_resolve_digest`
 - Produces: go/no-go for Task 3
 
 - [ ] **Step 1: Confirm wen branch exposes digest**
@@ -119,14 +119,14 @@ git push origin HEAD
 
 ---
 
-### Task 3: Strip PM-resolve from `multisig-tool` and collector PM kind
+### Task 3: Strip PM-resolve from `knot-tool` and collector PM kind
 
 **Files:**
-- Delete: `crates/multisig-tool/src/pm_resolve_types.rs`, `pm_read_types.rs`, `static/pm-resolve.html`, `static/pm-resolve-app.js`
-- Modify: `crates/multisig-tool/src/main.rs` (remove `PmResolve` CLI), `src/rpc.rs` (remove `/api/pm-resolve/*`, `/api/pm/markets`, standalone_pm_resolve, pm static routes), `src/lib.rs` / `mod` declarations, `src/blob.rs` (PM blob helpers if only used by PM), `README.md`
-- Modify: `crates/multisig-collector/src/dto.rs`, `store.rs`, `api.rs` — remove or gate `pm_council_resolve` kind (prefer remove from knot)
-- Modify: `crates/multisig-tool/tests/collector_roundtrip.rs` — drop PM roundtrip test or move assertion to wen
-- Test: `crates/multisig-tool/tests/no_pm_resolve_surface.rs` (Task 1)
+- Delete: `crates/knot-tool/src/pm_resolve_types.rs`, `pm_read_types.rs`, `static/pm-resolve.html`, `static/pm-resolve-app.js`
+- Modify: `crates/knot-tool/src/main.rs` (remove `PmResolve` CLI), `src/rpc.rs` (remove `/api/pm-resolve/*`, `/api/pm/markets`, standalone_pm_resolve, pm static routes), `src/lib.rs` / `mod` declarations, `src/blob.rs` (PM blob helpers if only used by PM), `README.md`
+- Modify: `crates/knot-collector/src/dto.rs`, `store.rs`, `api.rs` — remove or gate `pm_council_resolve` kind (prefer remove from knot)
+- Modify: `crates/knot-tool/tests/collector_roundtrip.rs` — drop PM roundtrip test or move assertion to wen
+- Test: `crates/knot-tool/tests/no_pm_resolve_surface.rs` (Task 1)
 
 **Interfaces:**
 - Consumes: Task 2 go-ahead
@@ -143,9 +143,9 @@ In `dto.rs`, remove `pm_council_resolve` variant and related structs. Fix `api.r
 - [ ] **Step 3: Run tests**
 
 ```bash
-cargo test -p multisig-tool
-cargo test -p multisig-collector
-cargo test -p multisig-tool --test no_pm_resolve_surface
+cargo test -p knot-tool
+cargo test -p knot-collector
+cargo test -p knot-tool --test no_pm_resolve_surface
 ```
 
 Expected: PASS
@@ -153,18 +153,18 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add -A crates/multisig-tool crates/multisig-collector
+git add -A crates/knot-tool crates/knot-collector
 git commit -m "refactor: peel PM-resolve surface out of knot tool and collector"
 git push origin HEAD
 ```
 
 ---
 
-### Task 4: Remove `council_resolve_*` from `multisig-encoding`
+### Task 4: Remove `council_resolve_*` from `knot-encoding`
 
 **Files:**
-- Modify: `crates/multisig-encoding/src/lib.rs` — delete `DOMAIN_COUNCIL_RESOLVE_V2`, `council_resolve_digest`, `council_resolve_message`, and their unit tests
-- Modify: `crates/multisig-encoding/README.md` — remove council-resolve API section
+- Modify: `crates/knot-encoding/src/lib.rs` — delete `DOMAIN_COUNCIL_RESOLVE_V2`, `council_resolve_digest`, `council_resolve_message`, and their unit tests
+- Modify: `crates/knot-encoding/README.md` — remove council-resolve API section
 - Modify: any `layout_goldens` / exports that mention council resolve
 - Grep whole repo: `council_resolve|DOMAIN_COUNCIL|prediction-market.council`
 
@@ -183,7 +183,7 @@ Remove all knot hits. Leave no `pub use` of council helpers.
 - [ ] **Step 2: Test**
 
 ```bash
-cargo test -p multisig-encoding
+cargo test -p knot-encoding
 ```
 
 Expected: PASS; no council tests remain.
@@ -191,7 +191,7 @@ Expected: PASS; no council tests remain.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/multisig-encoding
+git add crates/knot-encoding
 git commit -m "refactor: move council_resolve digest ownership out of encoding"
 git push origin HEAD
 ```
@@ -201,9 +201,9 @@ git push origin HEAD
 ### Task 5: Rename generic domains to `nocturne.knot.*`
 
 **Files:**
-- Modify: `crates/multisig-encoding/src/lib.rs` constants + goldens/tests that pin digest hex
+- Modify: `crates/knot-encoding/src/lib.rs` constants + goldens/tests that pin digest hex
 - Modify: any fixtures under `crates/multisig-*/tests/` that hardcode old domain preimages
-- Modify: `crates/multisig-encoding/README.md`
+- Modify: `crates/knot-encoding/README.md`
 
 **Interfaces:**
 - Produces:
@@ -223,8 +223,8 @@ Change domain bytes. Run encoding tests; update expected digests in unit tests /
 - [ ] **Step 2: Contract tests**
 
 ```bash
-(cd crates/multisig-registry && make test)
-(cd crates/multisig-proposals && make test)
+(cd crates/knot-registry && make test)
+(cd crates/knot-proposals && make test)
 ```
 
 Expected: PASS against new digests (host-side encoding only for change_account/proposal; on-chain redeploy comes in Task 6).
@@ -232,7 +232,7 @@ Expected: PASS against new digests (host-side encoding only for change_account/p
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/multisig-encoding crates/multisig-registry crates/multisig-proposals
+git add crates/knot-encoding crates/knot-registry crates/knot-proposals
 git commit -m "feat: nocturne.knot domain tags for proposal and change_account"
 git push origin HEAD
 ```
@@ -266,7 +266,7 @@ git push origin HEAD
 **Files:**
 - Modify: `README.md`, each `crates/*/README.md`, `crates/*/CHANGELOG.md` as needed
 - Create: `docs/versioning.md`
-- Modify: `crates/multisig-tool/src/chain.rs` error strings (drop dead `references/testnet-wallet.md`)
+- Modify: `crates/knot-tool/src/chain.rs` error strings (drop dead `references/testnet-wallet.md`)
 
 - [ ] **Step 1: Add `docs/versioning.md`**
 
@@ -293,7 +293,7 @@ git push origin HEAD
 ### Task 8: Lab UI copy — drop “treasury”
 
 **Files:**
-- Modify: `crates/multisig-tool/static/index.html` and related JS copy strings
+- Modify: `crates/knot-tool/static/index.html` and related JS copy strings
 - Modify: tool README Lab sections
 
 - [ ] **Step 1: Replace “treasury” / “Form the treasury”** with “committee” / “multisig account” language.
@@ -303,7 +303,7 @@ git push origin HEAD
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/multisig-tool/static crates/multisig-tool/README.md
+git add crates/knot-tool/static crates/knot-tool/README.md
 git commit -m "docs: Lab copy — committee not treasury"
 git push origin HEAD
 ```
@@ -335,7 +335,7 @@ Fix stale hits.
 ### Task 10: Residual generic Lab tests (A10 remainder) + optional A4
 
 **Files:**
-- Create: `crates/multisig-tool/tests/rpc_generic_smoke.rs` (or unit tests with axum `oneshot`)
+- Create: `crates/knot-tool/tests/rpc_generic_smoke.rs` (or unit tests with axum `oneshot`)
 - Modify: optional shared helper extract for approve/sign if touching A4
 
 - [ ] **Step 1: Add failing test** — e.g. mock-mode health/status or proposal preview handler returns 200 with bearer token.
@@ -347,7 +347,7 @@ Fix stale hits.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/multisig-tool
+git add crates/knot-tool
 git commit -m "test: generic Lab RPC smoke after PM peel"
 git push origin HEAD
 ```
@@ -379,9 +379,9 @@ git push origin HEAD
 - [ ] **Step 1: Run verify checklist**
 
 ```bash
-cargo test -p multisig-encoding -p multisig-tool -p multisig-collector
-(cd crates/multisig-registry && make test)
-(cd crates/multisig-proposals && make test)
+cargo test -p knot-encoding -p knot-tool -p knot-collector
+(cd crates/knot-registry && make test)
+(cd crates/knot-proposals && make test)
 rg -n 'pm-resolve|PmResolve|council_resolve_digest|sme-platform\.multisig' crates/ README.md || true
 ```
 

@@ -50,10 +50,10 @@ kind = "markdown_docs"
 role = "current_state"
 path = "."
 files = [
-  "crates/multisig-collector/README.md",
-  "crates/multisig-encoding/README.md",
-  "crates/multisig-proposals/README.md",
-  "crates/multisig-registry/README.md",
-  "crates/multisig-tool/README.md",
+  "crates/knot-collector/README.md",
+  "crates/knot-encoding/README.md",
+  "crates/knot-proposals/README.md",
+  "crates/knot-registry/README.md",
+  "crates/knot-tool/README.md",
 ]
 

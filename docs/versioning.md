@@ -6,12 +6,12 @@ deployment claim in this repo.
 ## Per-crate semver
 
 Each workspace crate carries its own `version` in `Cargo.toml`
-(`multisig-encoding`, `multisig-registry`, `multisig-proposals`,
-`multisig-tool`, `multisig-collector`). That number is the **source of truth**
+(`knot-encoding`, `knot-registry`, `knot-proposals`,
+`knot-tool`, `knot-collector`). That number is the **source of truth**
 for that crate's API and WASM artifact. Crates version independently — a
 registry bump does not force a tool bump unless the dependency edge requires it.
 
-`multisig-tool --version` and `multisig-collector`'s `/v1/health` `version`
+`knot-tool --version` and `knot-collector`'s `/v1/health` `version`
 field print the same semver as their crate `Cargo.toml`.
 
 ## Git tags vs crate versions

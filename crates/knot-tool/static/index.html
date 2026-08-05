@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Knot - Shared control. Keys stay on your machines.</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/knot-icon.svg" />
+  <link rel="stylesheet" href="/lab/fonts.css" />
+  <link rel="stylesheet" href="/lab/tokens.css" />
+  <link rel="stylesheet" href="/lab/layout.css" />
+  <link rel="stylesheet" href="/lab/components.css" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="slides" id="slides">
+    <!-- 1 · Cover -->
+    <header class="slide hero" id="top">
+      <div class="hero-copy">
+        <p class="hero-brand">
+          <img src="/assets/knot-icon.svg" alt="" width="96" height="96" />
+          <span>Knot</span>
+        </p>
+        <h1>Shared control. Keys stay on your machines.</h1>
+        <p class="hero-lede">
+          Form an M-of-N council, propose an intent, collect approvals to
+          threshold, then finalize - keys never leave the members' machines.
+        </p>
+        <div class="hero-cta">
+          <a class="btn primary" href="#demo">Try the demo</a>
+          <a class="btn ghost" href="#use-cases">Use cases</a>
+          <a
+            class="btn ghost"
+            href="https://docs.nocturne-standards.org/v1/knot/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >View the docs</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2 · Demo studio -->
+    <section class="slide demo-slide" id="demo">
+      <div class="demo-inner">
+        <header class="demo-header" id="status-strip">
+          <div class="demo-banner-slot" id="demo-banner-slot" aria-live="polite"></div>
+          <div class="demo-header-top">
+            <a class="docs-tab" href="https://docs.nocturne-standards.org/v1/knot/" target="_blank" rel="noopener noreferrer">Docs</a>
+            <div class="demo-header-badges">
+              <span class="you-chip" id="status-you">You: -</span>
+              <span class="pill approvals-pill" id="status-approvals">
+                <span class="approvals-state" id="status-prop-state" hidden></span>
+                <span class="approvals-text" id="status-approvals-text">Approvals -</span>
+              </span>
+              <button type="button" class="header-council" id="header-council" hidden aria-hidden="true" title="Look up this council">
+                <span class="header-council-icon" id="header-council-icon"></span>
+                <span class="header-council-id" id="header-council-id"></span>
+              </button>
+            </div>
+          </div>
+          <div class="demo-header-nav">
+            <div class="beat-dots" id="beat-dots" role="tablist" aria-label="Demo beats">
+              <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="cast" data-beat="1">1 · Cast</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council" data-beat="2">2 · Council</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check" data-beat="3">3 · Look up</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="4">4 · Propose</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="finalize" data-beat="5">5 · Finalize</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="beat-slideshow" aria-roledescription="carousel" aria-label="Demo beats">
+          <button type="button" class="slide-arrow" id="btn-beat-prev" aria-label="Previous beat">‹</button>
+
+          <div class="beat-viewport" id="beat-stage">
+            <!-- Beat 1 · Cast -->
+            <div class="tab-panel active" id="panel-cast" role="tabpanel" data-beat="1">
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Beat 1 · Cast</p>
+                  <h3>Meet the cast</h3>
+                  <p class="lede">Named BLS keys stay in this process. Click a member to use them on later beats.</p>
+                </header>
+                <div id="identities-list" class="identities-grid"></div>
+                <div class="add-identity-wrap">
+                  <button type="button" class="add-identity-tile" id="btn-add-identity" aria-haspopup="dialog" aria-expanded="false" aria-controls="identity-popover" title="Create identity">
+                    <span class="add-plus" aria-hidden="true">+</span>
+                    <span class="add-label">New identity</span>
+                  </button>
+                  <div class="popover" id="identity-popover" role="dialog" aria-label="Create identity" hidden>
+                    <label class="popover-field">
+                      <span class="value-name">Name</span>
+                      <input id="new-identity-name" placeholder="alice" autocomplete="off" dir="ltr" />
+                    </label>
+                    <div class="actions actions-center">
+                      <button type="button" class="primary" id="btn-create-identity">Create</button>
+                      <button type="button" class="ghost" id="btn-cancel-identity">Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Beat 2 · Form council -->
+            <div class="tab-panel" id="panel-council" role="tabpanel" hidden data-beat="2">
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Beat 2 · Form council</p>
+                  <h3>Form a multisig account</h3>
+                  <p class="lede">Select members for an M-of-N set. Anyone may create the account - naming keys grants no special power.</p>
+                </header>
+                <div id="council-pick-list" class="identities-grid"></div>
+                <div class="council-form-row">
+                  <label class="compact-field">
+                    <span class="value-name">Threshold</span>
+                    <input id="create-threshold" type="number" min="1" value="2" dir="ltr" />
+                  </label>
+                  <div class="actions actions-center">
+                    <button type="button" class="primary" id="btn-create-account" onclick="submitCreateAccount()">Form council</button>
+                  </div>
+                </div>
+                <div class="outcome outcome-row" id="create-outcome" hidden></div>
+              </div>
+            </div>
+
+            <!-- Beat 3 · Look it up -->
+            <div class="tab-panel" id="panel-check" role="tabpanel" hidden data-beat="3">
+              <div class="pane">
+                <header class="pane-head">
+                  <p class="pane-role">Beat 3 · Look it up</p>
+                  <h3>Look up the council</h3>
+                  <p class="lede">Select a council from this demo run. Free reads confirm members, threshold, and nonce - no gas.</p>
+                </header>
+                <div id="councils-list" class="councils-grid"></div>
+                <div class="outcome" id="query-outcome" hidden></div>
+                <div class="popover popover-wide" id="council-detail-popover" role="dialog" aria-label="Council members" hidden>
+                  <button type="button" class="popover-close" id="btn-close-council-detail" aria-label="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                  <p class="popover-title" id="council-detail-title">Members</p>
+                  <div id="council-detail-members" class="identities-list compact"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Beat 4 · Propose -->
+            <div class="tab-panel" id="panel-proposal" role="tabpanel" hidden data-beat="4">
+              <div class="pane pane-compact">
+                <header class="pane-head">
+                  <p class="pane-role">Beat 4 · Propose</p>
+                  <h3>Propose an intent</h3>
+                  <p class="lede">Pick a purpose and describe what the council should do. The mock chain call stays under the hood.</p>
+                </header>
+
+                <p class="section-label">Purpose</p>
+                <div class="purpose-chips" id="prop-purpose-chips" role="group" aria-label="Proposal purpose">
+                  <button type="button" class="purpose-chip active" data-purpose="Payout">Payout</button>
+                  <button type="button" class="purpose-chip" data-purpose="Config change">Config change</button>
+                  <button type="button" class="purpose-chip" data-purpose="Member rotation">Member rotation</button>
+                </div>
+                <input id="prop-purpose" type="hidden" value="Payout" />
+
+                <label class="field-block">
+                  <span class="value-name">Description</span>
+                  <textarea id="prop-description" rows="2" dir="ltr" placeholder="e.g. Pay vendor invoice #4821 for Q2 tooling"></textarea>
+                </label>
+
+                <input id="prop-account-id" type="hidden" />
+
+                <div class="actions actions-center">
+                  <button type="button" class="primary" onclick="proposalCreate()">Propose</button>
+                </div>
+                <div class="outcome outcome-row" id="prop-outcome" hidden></div>
+              </div>
+            </div>
+
+            <!-- Beat 5 · Finalize -->
+            <div class="tab-panel" id="panel-finalize" role="tabpanel" hidden data-beat="5">
+              <div class="pane pane-compact">
+                <header class="pane-head">
+                  <p class="pane-role">Beat 5 · Finalize</p>
+                  <h3>Approve &amp; finalize</h3>
+                  <p class="lede">Pick a proposal, confirm the intent, approve as each signer, then finalize at threshold.</p>
+                </header>
+
+                <p class="section-label">Proposals</p>
+                <div id="proposals-list" class="proposals-grid"></div>
+
+                <div class="intent-card" id="intent-card" hidden>
+                  <div class="intent-head">
+                    <span class="section-label">Review intent</span>
+                    <span class="fp-hint">
+                      <span class="fp-word">Fingerprint</span>
+                      <button type="button" class="tip-icon" id="btn-fp-tip" aria-label="What is a fingerprint?" aria-expanded="false" aria-controls="fp-tip">
+                        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4"/>
+                          <path d="M8 7.2v3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                          <circle cx="8" cy="5.1" r="0.85" fill="currentColor"/>
+                        </svg>
+                      </button>
+                      <span class="tip-pop" id="fp-tip" role="tooltip" hidden>
+                        A short check-code for this proposal so co-signers can compare intent. In this Lab the digest is a simulated stand-in - not a production BIP39 fingerprint.
+                      </span>
+                    </span>
+                  </div>
+                  <div class="intent-body">
+                    <p class="intent-purpose" id="intent-purpose"></p>
+                    <p class="intent-description" id="intent-description"></p>
+                  </div>
+                  <div class="actions actions-center">
+                    <button type="button" class="primary" id="btn-intent-confirm" onclick="confirmIntent()">Looks right - continue</button>
+                  </div>
+                </div>
+
+                <div id="approve-section" class="approve-section" hidden>
+                  <p class="section-label">Approve as <span class="muted">(one at a time)</span></p>
+                  <div id="prop-signer-list" class="identities-grid"></div>
+                  <input id="prop-signer" type="hidden" />
+                  <input id="prop-id" type="hidden" />
+
+                  <div class="actions actions-center">
+                    <button type="button" class="primary" id="prop-approve-btn" onclick="proposalApprove()" disabled>Approve</button>
+                    <button type="button" class="primary" id="prop-finalize-btn" onclick="proposalFinalize()">Finalize</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" class="slide-arrow" id="btn-beat-next" aria-label="Next beat">›</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 · Use cases -->
+    <section class="slide use-cases-slide" id="use-cases">
+      <div class="section-pad">
+        <div class="section-head">
+          <h2>What councils are for</h2>
+          <p>Same M-of-N rails - different jobs.</p>
+        </div>
+        <div class="use-case-grid">
+          <article class="use-case-card">
+            <div class="use-case-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                <rect x="3" y="6" width="18" height="13" rx="2"/>
+                <path d="M3 10h18" stroke-linecap="round"/>
+                <path d="M8 14h3" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="use-case-copy">
+              <h3>Committee payout</h3>
+              <p>Propose a transfer, collect M approvals, finalize - no one machine holds the spending key.</p>
+            </div>
+          </article>
+          <article class="use-case-card">
+            <div class="use-case-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                <circle cx="12" cy="12" r="8"/>
+                <path d="M12 8v4l2.5 2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="use-case-copy">
+              <h3>Dispute council</h3>
+              <p>Fingerprint-bound council resolve for contested outcomes - shared authority without a single adjudicator.</p>
+            </div>
+          </article>
+          <article class="use-case-card">
+            <div class="use-case-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                <rect x="5" y="11" width="14" height="10" rx="2"/>
+                <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="use-case-copy">
+              <h3>Keys stay local</h3>
+              <p>Named identities live in this Lab session. When you run the real tool binary, signing stays in-process - the server never sees a secret key.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="dots" aria-label="Page navigation">
+    <a href="#top" class="dot active" data-slide="top" aria-label="Cover"></a>
+    <a href="#demo" class="dot" data-slide="demo" aria-label="Demo"></a>
+    <a href="#use-cases" class="dot" data-slide="use-cases" aria-label="Use cases"></a>
+  </nav>
+
+  <nav class="legal-links" aria-label="Legal">
+    <a href="mailto:info@nocturne-standards.org">Contact</a>
+    <a href="https://nocturne-standards.org/privacy.html">Privacy</a>
+  </nav>
+
+  <script>window.KNOT_TOOL_TOKEN = "__TOKEN__";</script>
+  <script src="/mock-ledger.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

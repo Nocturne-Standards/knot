@@ -1,0 +1,23 @@
+# Deliberately its own single-crate workspace (own Cargo.lock, own
+# rust-toolchain.toml) — not a member of the parent `knot` workspace.
+# Needed since Cargo would otherwise treat this as an orphan member of the
+# ancestor workspace `Cargo.toml` workspace it now lives under.
+[workspace]
+
+[package]
+name = "proposals-test-target"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "Apache-2.0"
+publish = false
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }
+dusk-forge = "0.3.0"
+
+[features]
+contract = ["dusk-core/abi-dlmalloc"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]

@@ -17,27 +17,27 @@ Architecture and long-form docs:
 · [GitHub — aichbindas/knot](https://github.com/aichbindas/knot)
 
 `atlas/` (per-project service registry) stays **outside** this repo — it
-consumes `multisig-proposals` / `multisig-registry` as a client.
+consumes `knot-proposals` / `knot-registry` as a client.
 
 ## Crates
 
 | Crate | License | Version | Role |
 |---|---|---|---|
-| `multisig-encoding` | Apache-2.0 | 0.1.2 | Canonical §4a digest + blob helpers + M3 fingerprint |
-| `multisig-registry` | Apache-2.0 | 0.1.6 | On-chain BLS M-of-N quorum registry |
-| `multisig-proposals` | Apache-2.0 | 0.3.3 | On-chain propose → approve → finalize `call_raw` |
-| `multisig-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
-| `multisig-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
+| `knot-encoding` | Apache-2.0 | 0.1.2 | Canonical §4a digest + blob helpers + M3 fingerprint |
+| `knot-registry` | Apache-2.0 | 0.1.6 | On-chain BLS M-of-N quorum registry |
+| `knot-proposals` | Apache-2.0 | 0.3.3 | On-chain propose → approve → finalize `call_raw` |
+| `knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
+| `knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
 
 The Apache suite and **AGPL collector** are intentionally split. Self-host
-`multisig-collector` only if you accept AGPL (or purchase a commercial
-license — see `crates/multisig-collector/LICENSING.md`). Signing stays local
-in `multisig-tool`; the collector never holds secret keys.
+`knot-collector` only if you accept AGPL (or purchase a commercial
+license — see `crates/knot-collector/LICENSING.md`). Signing stays local
+in `knot-tool`; the collector never holds secret keys.
 
 **Consumer dep (encoding):**
 
 ```toml
-multisig-encoding = { git = "https://github.com/aichbindas/knot", tag = "v0.2.0", package = "multisig-encoding", features = ["call-types"] }
+knot-encoding = { git = "https://github.com/aichbindas/knot", tag = "v0.2.0", package = "knot-encoding", features = ["call-types"] }
 ```
 
 Pin a release tag or rev — see [`docs/versioning.md`](docs/versioning.md) for
@@ -46,40 +46,41 @@ how crate semvers relate to git tags.
 ## Layout
 
 ```
-multisig/
+.
 ├── Cargo.toml
 ├── LICENSE-APACHE / LICENSE-AGPL
 ├── docs/
 │   ├── security-model.md
 │   └── versioning.md
-├── crates/multisig-encoding/
-├── crates/multisig-registry/
-├── crates/multisig-proposals/
-├── crates/multisig-tool/
-└── crates/multisig-collector/
+├── crates/knot-encoding/
+├── crates/knot-registry/
+├── crates/knot-proposals/
+├── crates/knot-tool/
+└── crates/knot-collector/
 ```
 
 ## Deploy
 
 - **Collector:** bind the process to loopback; put TLS + auth on the reverse
   proxy. The host must never hold BLS secret keys — signing stays on
-  participants' machines (`multisig-tool`). API surface is documented in
-  `crates/multisig-collector/README.md`; bring your own VPS ops.
+  participants' machines (`knot-tool`). API surface is documented in
+  `crates/knot-collector/README.md`; bring your own VPS ops.
 - **Licensing:** Apache suite + AGPL collector — see root `LICENSE-*` and
-  `crates/multisig-collector/LICENSING.md`.
+  `crates/knot-collector/LICENSING.md`.
 
 ## Quick commands
 
 ```bash
-cargo build -p multisig-tool
-cargo test -p multisig-encoding
+cargo build -p knot-tool
+cargo test -p knot-encoding
 
 # Contract crates build/test WASM via their own Makefiles (cwd-sensitive):
-(cd crates/multisig-registry && make wasm && make test)
-(cd crates/multisig-proposals && make wasm && make test)
+(cd crates/knot-registry && make wasm && make test)
+(cd crates/knot-proposals && make wasm && make test)
 ```
 
-Cold-start the Lab: `./scripts/multisig-first-run.sh --serve` from repo root.
+Cold-start the Lab: `cargo run -p knot-tool -- init` then
+`cargo run -p knot-tool -- serve --bind 127.0.0.1:8877`.
 See each crate's `README.md` for API surface and usage detail.
 
 Maintainer deploy timeline: [`docs/internal/deploy-history.md`](docs/internal/deploy-history.md).

@@ -19,9 +19,9 @@ Plan Task 12.
 
 ## Evidence (worker)
 
-- `cargo test -p multisig-encoding` 16 PASS; `multisig-collector` PASS
-- `multisig-tool` lib + `no_pm_resolve_surface` + `rpc_generic_smoke` + `collector_roundtrip` PASS
-- `multisig-registry` / `multisig-proposals` `make test` PASS
+- `cargo test -p knot-encoding` 16 PASS; `knot-collector` PASS
+- `knot-tool` lib + `no_pm_resolve_surface` + `rpc_generic_smoke` + `collector_roundtrip` PASS
+- `knot-registry` / `knot-proposals` `make test` PASS
 - `rg`: no `PmResolve` / `council_resolve_digest` / old `sme-platform.multisig.proposal` in live crates (guard test strings only)
 - Wen A1–A5: DECISIONS link to `pm-peel-and-fixes` / `7ae9728`
 - Operator still: redeploy registry+proposals per `docs/internal/redeploy-2026-08-domains.md`; tag when ready

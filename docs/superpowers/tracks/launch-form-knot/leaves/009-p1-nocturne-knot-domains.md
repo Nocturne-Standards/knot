@@ -5,7 +5,7 @@ status: DONE
 owner: worker
 deps: []
 scope:
-  - crates/multisig-encoding/
+  - crates/knot-encoding/
   - docs/internal/
 acceptance:
   - DOMAIN proposal/change_account use nocturne.knot.* v2 strings
@@ -33,9 +33,9 @@ Plan Tasks 5–6.
     `ab2fc0f6d9b490a645b0b5768bcfbfabfce53392251f28bc776e10b6ad22c457`
 - Redeploy note: `docs/internal/redeploy-2026-08-domains.md`
 - Tests:
-  - `cargo test -p multisig-encoding` — 16 passed
-  - `make test` in `multisig-registry` — 22 passed (14 contract + 8 layout)
-  - `make test` in `multisig-proposals` — 23 passed (16 contract + 7 layout)
+  - `cargo test -p knot-encoding` — 16 passed
+  - `make test` in `knot-registry` — 22 passed (14 contract + 8 layout)
+  - `make test` in `knot-proposals` — 23 passed (16 contract + 7 layout)
 - No live digest-path `sme-platform.multisig` hits remain in `crates/` (only
   historical references in audit/gap-map docs).
 

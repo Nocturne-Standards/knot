@@ -1990,6 +1990,104 @@ dependencies = [
 ]
 
 [[package]]
+name = "knot-collector"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "bs58 0.5.1",
+ "hex",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "knot-encoding"
+version = "0.1.2"
+dependencies = [
+ "bytecheck",
+ "dusk-core",
+ "proptest",
+ "rand 0.8.7",
+ "rkyv",
+ "serde",
+ "sha2 0.10.9",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "knot-proposals"
+version = "0.3.3"
+dependencies = [
+ "bytecheck",
+ "dusk-bls12_381",
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-data-driver",
+ "dusk-forge",
+ "dusk-vm",
+ "knot-encoding",
+ "rand 0.8.7",
+ "rkyv",
+ "serde",
+]
+
+[[package]]
+name = "knot-registry"
+version = "0.1.6"
+dependencies = [
+ "bytecheck",
+ "dusk-bls12_381",
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-data-driver",
+ "dusk-forge",
+ "dusk-vm",
+ "knot-encoding",
+ "rand 0.8.7",
+ "rkyv",
+ "serde",
+]
+
+[[package]]
+name = "knot-tool"
+version = "0.2.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "axum",
+ "bs58 0.5.1",
+ "bytecheck",
+ "clap",
+ "dusk-bls12_381",
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-vm",
+ "hex",
+ "knot-encoding",
+ "nocturne-deployments",
+ "pbkdf2",
+ "rand 0.8.7",
+ "reqwest",
+ "rkyv",
+ "rpassword",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "tiny-keccak",
+ "tokio",
+ "tower",
+ "zeroize",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2154,104 +2252,6 @@ checksum = "c334ab77a6d4f29c5c2e41149c0f03af4082923aa364aa0c9876232f33f9853f"
 dependencies = [
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "multisig-collector"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "axum",
- "bs58 0.5.1",
- "hex",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "multisig-encoding"
-version = "0.1.2"
-dependencies = [
- "bytecheck",
- "dusk-core",
- "proptest",
- "rand 0.8.7",
- "rkyv",
- "serde",
- "sha2 0.10.9",
- "tiny-keccak",
-]
-
-[[package]]
-name = "multisig-proposals"
-version = "0.3.3"
-dependencies = [
- "bytecheck",
- "dusk-bls12_381",
- "dusk-bytes",
- "dusk-core",
- "dusk-data-driver",
- "dusk-forge",
- "dusk-vm",
- "multisig-encoding",
- "rand 0.8.7",
- "rkyv",
- "serde",
-]
-
-[[package]]
-name = "multisig-registry"
-version = "0.1.6"
-dependencies = [
- "bytecheck",
- "dusk-bls12_381",
- "dusk-bytes",
- "dusk-core",
- "dusk-data-driver",
- "dusk-forge",
- "dusk-vm",
- "multisig-encoding",
- "rand 0.8.7",
- "rkyv",
- "serde",
-]
-
-[[package]]
-name = "multisig-tool"
-version = "0.2.0"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "axum",
- "bs58 0.5.1",
- "bytecheck",
- "clap",
- "dusk-bls12_381",
- "dusk-bytes",
- "dusk-core",
- "dusk-vm",
- "hex",
- "multisig-encoding",
- "nocturne-deployments",
- "pbkdf2",
- "rand 0.8.7",
- "reqwest",
- "rkyv",
- "rpassword",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "subtle",
- "tiny-keccak",
- "tokio",
- "tower",
- "zeroize",
 ]
 
 [[package]]

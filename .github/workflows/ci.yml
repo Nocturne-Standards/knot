@@ -54,9 +54,9 @@ jobs:
       # Contract tests `include_bytes!` release WASM under nest `target/contract/`.
       - name: build contract WASM
         run: |
-          make -C crates/multisig-registry wasm
-          make -C crates/multisig-proposals wasm
-          make -C crates/multisig-proposals/test-target wasm
+          make -C crates/knot-registry wasm
+          make -C crates/knot-proposals wasm
+          make -C crates/knot-proposals/test-target wasm
         timeout-minutes: 30
       - name: cargo test (workspace)
         run: cargo test

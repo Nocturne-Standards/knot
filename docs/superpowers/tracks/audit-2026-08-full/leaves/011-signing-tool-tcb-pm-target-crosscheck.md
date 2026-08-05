@@ -5,8 +5,8 @@ status: superseded
 owner: planner-migrate
 deps: []
 scope:
-  - crates/multisig-tool/src/rpc.rs
-  - crates/multisig-tool/src/main.rs
+  - crates/knot-tool/src/rpc.rs
+  - crates/knot-tool/src/main.rs
 acceptance:
   - Submit rejects blob pm_contract_id that does not match live-resolved PM contract id
   - Test covers stale-target rejection

@@ -5,8 +5,8 @@ status: DONE
 owner: worker-a4
 deps: []
 scope:
-  - crates/multisig-tool/src/rpc.rs
-  - crates/multisig-tool/src/main.rs
+  - crates/knot-tool/src/rpc.rs
+  - crates/knot-tool/src/main.rs
 acceptance:
   - approve/quorum/change_account sign paths fetch live account before sign
   - Document Prove-mode on-chain mitigation remains
@@ -22,7 +22,7 @@ Successor of knot audit #13.
 
 ## Evidence (worker)
 
-- **Gate:** `multisig_tool::membership::ensure_pks_are_members`; RPC
+- **Gate:** `knot_tool::membership::ensure_pks_are_members`; RPC
   `fetch_registry_account` + `ensure_signers_are_members` in `rpc.rs`; CLI
   `ensure_cli_signers_are_members` in `main.rs`. Wired before sign on
   `api_proposal_approve`, `api_quorum_submit` / `_check` / `_agg_*`,
