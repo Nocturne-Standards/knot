@@ -1,8 +1,7 @@
 # Knot — implementation truth
 
-**Written against `46a64b4`** (hygiene gates on `main`; prior verify pass was
-`7e58d4c` / PR #3). Settled-gap pass 2026-08-05 afternoon — deadline, TTL,
-uniquifier, events, collector dusk-core wording, residual audit, deferred ops.
+**Written against `b1d883d`** (residual audit HEAD; settle pass began at `46a64b4`).
+Settled-gap + §10 phasing + §11 residual findings 2026-08-05.
 
 **This file is authoritative.** Where it disagrees with `AUDIT-2026-08-05.md`,
 this file wins — the audit was written against `2fb3c94` and is frozen evidence,
@@ -40,7 +39,7 @@ Verified facts an implementer can rely on (checked at `7e58d4c`):
 | `council_resolve` is fully removed from encoding | `grep -c council_resolve` = 0 |
 | `finalize` has **no** caller/membership check | `crates/multisig-proposals/src/state.rs`, whole fn |
 | Collector SQL is fully parameterized | `store.rs` — all queries are literals with bound params |
-| Lab escapes HTML at every user-data sink | `static/app.js:170` `escapeHtml`, applied at all interpolations |
+| Lab escapes HTML at every user-data sink | **Overstated** — string sinks yes; numeric `innerHTML` holes — §11 R9 |
 | Tool API token compares in constant time | `rpc.rs:158-166`, `ct_eq` |
 | `rusk-wallet` is invoked with argument arrays, no shell | `chain.rs:290-299` |
 
@@ -1304,7 +1303,7 @@ substitute for a real scanner.
 | Proposal uniquifier | Caller-supplied; CSPRNG + `--nonce`; merge identical Open OK; track digests not nonces (§2.6) |
 | Events + decoder | Rich emits; arms in existing `event-decoder`; no pre-v3 fallbacks; extract `nocturne-event-decoder` DEFERRED (§2.13) |
 | Collector `dusk-core` | Accepted for M10/M12 verify; rewrite “no dusk_core” docs (§4.2) |
-| Residual code audit | Full read of unaudited surfaces **before** v3 semantic work (§10) |
+| Residual code audit | Done §11 at `b1d883d` — R1/R2 HIGH (Lab token HTML; multi-key sign sans confirm); see §11 |
 | Human ops (B1 rotate, publish pins, `knot-internal`, org scanning, squash) | Explicit checklist; **deferred** until public launch unless needed for continued private work (§10) |
 
 Still open / deprioritised:
@@ -1440,9 +1439,9 @@ cut only after this section is accepted. Product §9 (signer UI / `call_args`) i
 
 | Phase | What | Depends on | Notes |
 |---|---|---|---|
-| **0** | Spec sync | — | This file; done when §8 matches chat |
-| **1** | Residual audit | 0 | Full read of `rpc.rs`, `main.rs`, `chain.rs`, tool `store`/`dto`/`collector_client`/`mock_ledger`, Lab JS → amend this file only if findings |
-| **2** | Mechanical rename `multisig-*` → `knot-*` | 1 | Zero behaviour change; pin JSON keys stay `multisig-*` until paired `nocturne-deployments` update |
+| **0** | Spec sync | — | Done (`9c4ff8b` / `b1d883d`) |
+| **1** | Residual audit | 0 | Done — findings §11; **human review gate** |
+| **2** | Mechanical rename `multisig-*` → `knot-*` | 1 + review | Zero behaviour change; pin JSON keys stay `multisig-*` until paired pin update |
 | **3a** | Confirm `abi::chain_id()` under `VM::ephemeral()` | 2 | **Hard gate** for contract work; shim if unset |
 | **3b** | Encoding digests v3 | 3a | |
 | **3c** | Registry + proposals contracts v3 | 3b | Rich events; redeploy; burn v2 |
@@ -1468,3 +1467,58 @@ cut only after this section is accepted. Product §9 (signer UI / `call_args`) i
 
 **Out of scope for this track:** bending for pre-v3 private deployment compatibility;
 `blst`; CODE_OF_CONDUCT.
+
+---
+
+## 11. Residual host-surface audit · LOCKED (findings)
+
+**Written against `b1d883d`.** Full read of previously unaudited surfaces
+(2026-08-05). Amendments belong here — not a second frozen audit-as-authority.
+
+**Scope actually read:** `multisig-tool` `rpc.rs`, `main.rs`, `chain.rs`,
+`collector_client.rs`, `membership.rs`, `bls.rs`, `mock_ledger.rs`, `static/`;
+`multisig-collector` `store.rs`, `dto.rs`, `api.rs` (re-verify). Note: tool has
+**no** `store.rs`/`dto.rs` — those live only in the collector (README list was
+imprecise).
+
+Already LOCKED elsewhere (C1, M4–M12, L9–L12, keystore, …) — not re-listed unless
+status changed.
+
+### 11.1 New findings
+
+| ID | Sev | Loc | Problem | Disposition |
+|---|---|---|---|---|
+| **R1** | HIGH | `rpc.rs:173-182`, routes `1580-1581` | `GET /` **unauthenticated** injects bearer token into HTML. Loopback + DNS-rebinding / local malware steals token → full `/api/*` including multi-key sign. | **Fix before public Lab use.** Do not embed token in open HTML; paste-gate / one-shot stderr / auth before HTML. |
+| **R2** | HIGH | `rpc.rs` quorum/change-account submit (~903+); CLI twins | Signs with **all named local SKs** for arbitrary/`change_account` msgs with **no** preview/`confirm` (unlike proposal approve / blob sign). Demo one-store = whole committee. | **Fix:** same confirm+fingerprint UX as proposal approve; prefer one signer per `serve` call. |
+| **R3** | MED | `chain.rs:212-224` | `tx_status_label` maps mere “propagated” / “Preverify success” to **`confirmed`**. False finality in UI. | Relabel `submitted` / `propagated` until block inclusion. |
+| **R4** | MED | `rpc.rs` `SubmitOut.log` / `to_500` | Full `rusk-wallet` stdout/stderr and `e.to_string()` to browser. Paths, explorer URLs. | Generic client errors; raw log stderr-only. |
+| **R5** | MED | `collector_client` + env URL | Basic Auth sent to any `MULTISIG_COLLECTOR_URL` / `--collector` (incl. `http://`). Typo/poison = password exfil. | Allowlist loopback or HTTPS; refuse odd schemes. |
+| **R6** | MED | `mock_ledger` / `DEMO_MODE` | Unset/unknown → **mock** by default. Easy mock↔live confusion; leftover env. | Require explicit `DEMO_MODE`; loud banner; refuse ambiguous. |
+| **R7** | MED | `app.js` + `rpc` token inject | Static `__TOKEN__` left unsubstituted → silent frontend mock ledger. | Fail closed if token missing; banner. |
+| **R8** | MED | `main.rs` `--nonce` on change-account | Bypasses account free-read; signs with operator-supplied nonce. | Extra latch, or refuse when free-read works. |
+| **R9** | LOW | Lab `escapeHtml` | IMPLEMENTATION “every sink” **overstated**. String fields escaped; several numeric `innerHTML` paths raw (`app.js` council/proposal ids). Hard XSS today, claim wrong. | Escape all interpolations; fix claim. |
+| **R10** | LOW | `collector` party `name` | No char cap (note/summary capped). | Cap like `MAX_NOTE_CHARS`. |
+| **R11** | LOW | `collector_client` proposal id | No client hex validate (server has it). | Defense-in-depth validate. |
+| **R12** | LOW | `rpc` bind allowlist | String prefix `localhost:`, not `SocketAddr` (same class as collector L11). | Parse + `is_loopback()`. |
+
+### 11.2 Verified OK (spot-checks)
+
+- `/api/*` behind `require_token` with `ct_eq`; fonts allowlisted; no shell for
+  browser open or `rusk-wallet` (argv arrays); `RUSK_WALLET_PWD` env not argv.
+- Proposal approve + blob sign: confirm + digest recompute gate.
+- Membership fail-closed before quorum/change/approve sign.
+- Collector SQL fully parameterized; create clears caller partials; no CSRF cookie
+  session on Lab (custom header).
+- Locked collector issues C1/M10–M12/L9–L12 **still open** at cited lines — leaf
+  `008-collector-hardening`.
+
+### 11.3 Track impact
+
+| Finding | Feeds leaf |
+|---|---|
+| R1, R2, R3, R4, R6, R7, R8, R9, R12 | New work under tool Lab / RPC — extend **006** or add leaf after review |
+| R5, R11 | **006** / collector client |
+| R10 | **008** |
+| C1/M10–M12/L9–L12 | **008** (unchanged) |
+
+**Stop here for human review** before phase 2 rename.
