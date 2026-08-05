@@ -7,7 +7,7 @@ deps:
   - 3
 scope:
   - crates/knot-tool/src/keystore.rs
-  - crates/multisig-tool/src/keystore.rs
+  - crates/knot-tool/src/keystore.rs
 acceptance:
   - M4 mode at create; M5 atomic+fsync+bak; M6+M7 binary format Argon2id
   - L4/L5/L6 fixed; tests §3.6

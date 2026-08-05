@@ -1,0 +1,34 @@
+[package]
+name = "knot-encoding"
+version = "0.1.2"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+license = "Apache-2.0"
+repository = "https://github.com/aichbindas/knot"
+description = "Canonical §4a proposal preimage + §4b ProposalBlob, plus shared multisig call types (layer E, feature-gated)"
+
+[dependencies]
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+sha2 = { version = "0.10", default-features = false }
+# Layer E only — all optional so §4a consumers stay free of dusk-core / rkyv.
+rkyv = { version = "=0.7.39", default-features = false, features = ["size_32", "alloc"], optional = true }
+bytecheck = { version = "=0.6.12", default-features = false, optional = true }
+dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false, optional = true }
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+
+[features]
+default = []
+# Layer-E ABI structs. Off by default: §4a digest consumers must not inherit dusk-core.
+call-types = ["dep:rkyv", "dep:bytecheck", "dep:dusk-core"]
+# serde derives on the layer-E structs. Named `data-driver` to match the
+# multisig contracts' feature (R4 — wrong name silently drops the derives).
+data-driver = ["call-types", "dep:serde", "dusk-core/serde"]
+
+[dev-dependencies]
+proptest = "1"
+rand = { version = "0.8.6", default-features = false }
+dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", features = ["zk"] }
+
+[lib]
+crate-type = ["rlib"]

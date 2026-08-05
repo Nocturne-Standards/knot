@@ -6,11 +6,11 @@ owner: null
 deps:
   - 1
 scope:
-  - crates/multisig-tool/src/rpc.rs
-  - crates/multisig-tool/src/main.rs
-  - crates/multisig-tool/src/chain.rs
-  - crates/multisig-tool/src/mock_ledger.rs
-  - crates/multisig-tool/static/
+  - crates/knot-tool/src/rpc.rs
+  - crates/knot-tool/src/main.rs
+  - crates/knot-tool/src/chain.rs
+  - crates/knot-tool/src/mock_ledger.rs
+  - crates/knot-tool/static/
   - docs/internal/IMPLEMENTATION.md
 acceptance:
   - "R1: OTP bootstrap → HttpOnly SameSite=Strict cookie; HTML never embeds secret; CLI opens /?code=…"
@@ -43,7 +43,7 @@ Authority: `docs/internal/IMPLEMENTATION.md` §11.
 - **R4:** Classify errors into a small `code` + fixed `message` map at the RPC boundary. Do not sanitize arbitrary strings. Full wallet logs → stderr only.
 - Lab-only — do not copy cookie session model onto the collector.
 
-Prefer landing after `#3 rename` if both in flight (path churn). May start on `multisig-tool` paths if rename not yet done.
+Prefer landing after `#3 rename` if both in flight (path churn). May start on `knot-tool` paths if rename not yet done.
 
 ## Evidence (worker)
 

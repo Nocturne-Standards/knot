@@ -5,8 +5,8 @@ status: superseded
 owner: planner-migrate
 deps: []
 scope:
-  - crates/multisig-tool/src/rpc.rs
-  - crates/multisig-tool/src/main.rs
+  - crates/knot-tool/src/rpc.rs
+  - crates/knot-tool/src/main.rs
 acceptance:
   - approve/quorum/change_account sign paths fetch live account before sign
   - Document Prove-mode on-chain mitigation remains

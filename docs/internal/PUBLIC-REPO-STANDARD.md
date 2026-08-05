@@ -39,7 +39,7 @@ Four tiers. Every document belongs to exactly one, and each has a home.
 | **P3 — Operational secrets** | Credentials, host inventories, deploy runbooks, wallet material | Secret manager — never any git repo |
 
 The most common failure is P2 material sitting in a P0 file (Knot's README "Status"
-section) or P3 material in a P0 file (Knot's `MULTISIG_COLLECTOR_PASSWORD`).
+section) or P3 material in a P0 file (Knot's `KNOT_COLLECTOR_PASSWORD`).
 
 ---
 

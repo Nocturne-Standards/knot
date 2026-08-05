@@ -7,7 +7,7 @@ deps:
   - 4
 scope:
   - crates/knot-collector/
-  - crates/multisig-collector/
+  - crates/knot-collector/
 acceptance:
   - L9–L12 + M11 first
   - C1 digest recompute via knot-encoding

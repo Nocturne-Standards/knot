@@ -5,14 +5,14 @@ status: DONE
 owner: cursor-agent
 deps: []
 scope:
-  - crates/multisig-tool/src/rpc.rs
-  - crates/multisig-tool/src/main.rs
-  - crates/multisig-tool/src/chain.rs
-  - crates/multisig-tool/src/store.rs
-  - crates/multisig-tool/src/dto.rs
-  - crates/multisig-tool/src/collector_client.rs
-  - crates/multisig-tool/src/mock_ledger.rs
-  - crates/multisig-tool/static/
+  - crates/knot-tool/src/rpc.rs
+  - crates/knot-tool/src/main.rs
+  - crates/knot-tool/src/chain.rs
+  - crates/knot-tool/src/store.rs
+  - crates/knot-tool/src/dto.rs
+  - crates/knot-tool/src/collector_client.rs
+  - crates/knot-tool/src/mock_ledger.rs
+  - crates/knot-tool/static/
   - docs/internal/IMPLEMENTATION.md
 acceptance:
   - Full read of listed surfaces at HEAD

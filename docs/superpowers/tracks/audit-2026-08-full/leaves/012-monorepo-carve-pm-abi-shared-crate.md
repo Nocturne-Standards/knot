@@ -5,8 +5,8 @@ status: superseded
 owner: planner-migrate
 deps: []
 scope:
-  - crates/multisig-tool/src/pm_resolve_types.rs
-  - crates/multisig-tool/src/pm_read_types.rs
+  - crates/knot-tool/src/pm_resolve_types.rs
+  - crates/knot-tool/src/pm_read_types.rs
 acceptance:
   - PM ABI types come from shared dep or golden-vector parity test fails on drift
   - Carve docs note the boundary
