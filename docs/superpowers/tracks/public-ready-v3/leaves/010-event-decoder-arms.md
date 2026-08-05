@@ -1,8 +1,8 @@
 ---
 id: 10
 slug: event-decoder-arms
-status: TODO
-owner: null
+status: IN_PROGRESS
+owner: cursor-agent
 deps:
   - 5
 scope:
