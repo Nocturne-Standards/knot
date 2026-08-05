@@ -256,6 +256,9 @@ enum ProposalCmd {
         args_hex: String,
         #[arg(long, default_value_t = 0)]
         deadline: u64,
+        /// Caller uniquifier (§2.12 v3); defaults to 0 for lab/demo.
+        #[arg(long, default_value_t = 0)]
+        nonce: u64,
     },
     /// Approve with one local signing identity (recomputes digest + shows intent).
     Approve {
@@ -821,7 +824,16 @@ async fn main() -> Result<()> {
                     }
                 };
 
-                let msg = bls::change_account_message(account, nonce, &new_member_pks, new_threshold);
+                let registry_self_id =
+                    chain::contract_self_id_bytes(chain::Contract::Registry)?;
+
+                let msg = bls::change_account_message(
+                    &registry_self_id,
+                    account,
+                    nonce,
+                    &new_member_pks,
+                    new_threshold,
+                );
                 ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 print_signing_fingerprint(&msg);
                 if signers.len() > 1 {
@@ -863,6 +875,7 @@ async fn main() -> Result<()> {
                 function,
                 args_hex,
                 deadline,
+                nonce,
             } => {
                 let target_bytes: [u8; 32] = hex::decode(target.trim_start_matches("0x"))?
                     .as_slice()
@@ -884,6 +897,7 @@ async fn main() -> Result<()> {
                     target: ContractId::from_bytes(target_bytes),
                     function_name: function,
                     call_args,
+                    nonce,
                     deadline,
                 };
                 let bytes = chain::encode(&args)?;
@@ -910,16 +924,14 @@ async fn main() -> Result<()> {
                 if view.status != ProposalStatus::Open {
                     bail!("proposal {id} is not Open");
                 }
-                let intent = knot_encoding::ProposalIntent {
-                    chain_id: view.chain_id,
-                    committee_id: view.registry_account_id,
-                    nonce: view.nonce,
-                    target_contract_id: view.target.to_bytes(),
-                    function_name: view.function_name.clone(),
-                    call_args: view.call_args.clone(),
-                    deadline: view.deadline,
-                };
-                let digest = knot_encoding::recompute_and_verify(&intent, &view.signed_digest)
+                let proposals_self_id =
+                    chain::contract_self_id_bytes(chain::Contract::Proposals)?;
+                let intent = bls::proposal_intent_v3_from_view(
+                    &view,
+                    bls::digest_chain_id(),
+                    &proposals_self_id,
+                );
+                let digest = knot_encoding::recompute_and_verify_v3(&intent, &view.signed_digest)
                     .map_err(|_| {
                         anyhow::anyhow!(
                             "REFUSING TO SIGN: on-chain digest does not match recomputed intent"
@@ -933,6 +945,7 @@ async fn main() -> Result<()> {
                 }
                 println!("=== intent (canonical) ===");
                 println!("  chain_id: {}", intent.chain_id);
+                println!("  epoch: {}", intent.epoch);
                 println!("  committee_id: {}", intent.committee_id);
                 println!("  nonce: {}", intent.nonce);
                 println!("  target: 0x{}", hex::encode(intent.target_contract_id));
