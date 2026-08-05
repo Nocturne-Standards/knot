@@ -19,9 +19,22 @@
 
 ## Gaps
 
-- `knot-tool` `collector_client` / RPC party signup still omit `sig` — needs follow-up leaf (out of #8 scope)
-- `collector_roundtrip` integration test will fail until tool sends party `sig`
+- ~~`knot-tool` `collector_client` / RPC party signup still omit `sig` — needs follow-up leaf (out of #8 scope)~~ **Fixed** — see follow-up below
+- ~~`collector_roundtrip` integration test will fail until tool sends party `sig`~~ **Fixed**
 - v3 `ProposalIntentV3` blob relay not on collector wire yet (tool uses v2 §4a for blobs)
+
+## Follow-up (tool party signup sig)
+
+- Moved `party_signup_preimage` to `knot-encoding` (shared M12 domain `nocturne.knot.collector.party.v1`)
+- `knot-tool::bls::party_signup_sig_hex` signs PoP; `collector_client::signup_party` sends `sig`
+- RPC `api_party_signup` + CLI `party signup` sign via keystore identity before POST
+- `collector_roundtrip` updated for M10 valid partial re-post + M12 party signup sig
+
+### Tests (follow-up)
+
+- `cargo test -p knot-collector` — 49 passed
+- `cargo test -p knot-tool --lib` — 28 passed
+- `cargo test -p knot-tool --test collector_roundtrip` — 1 passed
 
 ## Evidence
 

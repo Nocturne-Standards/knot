@@ -179,7 +179,7 @@ async fn party_roster_lifecycle_over_real_http() {
     let pk = BlsPublicKey::from(&sk);
     let pk_hex = format!("0x{}", hex::encode(pk.to_bytes()));
     let name = "Alice";
-    let preimage = party_signup_preimage(name, &pk.to_bytes());
+    let preimage = party_signup_preimage(name, &pk.to_bytes()).expect("name");
     let sig = format!("0x{}", hex::encode(sk.sign(&preimage).to_bytes()));
 
     let signup_resp = client
@@ -191,7 +191,7 @@ async fn party_roster_lifecycle_over_real_http() {
     assert_eq!(signup_resp.status(), reqwest::StatusCode::OK);
 
     let renamed = "Alice Renamed";
-    let rename_preimage = party_signup_preimage(renamed, &pk.to_bytes());
+    let rename_preimage = party_signup_preimage(renamed, &pk.to_bytes()).expect("name");
     let rename_sig = format!("0x{}", hex::encode(sk.sign(&rename_preimage).to_bytes()));
     let update_resp = client
         .post(format!("{base}/v1/party"))

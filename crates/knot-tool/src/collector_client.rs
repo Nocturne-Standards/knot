@@ -57,11 +57,12 @@ fn default_summary_kind() -> String {
 struct PartySignupRequest<'a> {
     name: &'a str,
     pk: &'a str,
+    sig: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     note: Option<&'a str>,
 }
 
-/// Roster row — mirrors `knot_collector::dto::PartyMemberDto`.
+/// Roster row for `GET /v1/party` (collector wire shape).
 #[derive(Debug, Clone, Deserialize)]
 pub struct PartyMember {
     pub name: String,
@@ -183,11 +184,18 @@ impl CollectorClient {
     }
 
     /// `POST /v1/party` — signup, or upsert-by-`pk` if already present.
-    /// Collector has no DELETE roster route; clear the DB to remove a row.
-    pub async fn signup_party(&self, name: &str, pk: &str, note: Option<&str>) -> Result<PartyMember> {
+    /// `sig` must be a BLS signature over [`knot_encoding::party_signup_preimage`]
+    /// for `name` and the normalized pk bytes (M12).
+    pub async fn signup_party(
+        &self,
+        name: &str,
+        pk: &str,
+        sig: &str,
+        note: Option<&str>,
+    ) -> Result<PartyMember> {
         let resp = self
             .auth(self.http.post(format!("{}/v1/party", self.base_url)))
-            .json(&PartySignupRequest { name, pk, note })
+            .json(&PartySignupRequest { name, pk, sig, note })
             .send()
             .await
             .context("POST /v1/party")?;

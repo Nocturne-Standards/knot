@@ -12,6 +12,7 @@
 //! `sign_insecure()`"). Do not "match the tests" here: this tool talks to
 //! the real node.
 
+use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{
     aggregate as aggregate_multisig_pk,
     verify_multisig as dusk_verify_multisig,
@@ -19,7 +20,7 @@ use dusk_core::signatures::bls::{
     SecretKey as BlsSecretKey, Signature as BlsSignature,
 };
 use knot_encoding::call_types::ProposalView;
-use knot_encoding::{ProposalIntentV3, recompute_and_verify_v3};
+use knot_encoding::{party_signup_preimage, ProposalIntentV3, recompute_and_verify_v3};
 
 pub const DIGEST_CHAIN_ID: u64 = 2;
 
@@ -32,6 +33,17 @@ pub fn digest_chain_id() -> u64 {
 
 pub fn sign(sk: &BlsSecretKey, msg: &[u8]) -> BlsSignature {
     sk.sign(msg)
+}
+
+/// BLS proof-of-possession for collector party roster signup (M12).
+pub fn party_signup_sig_hex(
+    sk: &BlsSecretKey,
+    pk: &BlsPublicKey,
+    name: &str,
+) -> Result<String, knot_encoding::EncodingError> {
+    let preimage = party_signup_preimage(name, &pk.to_bytes())?;
+    let sig = sign(sk, &preimage);
+    Ok(format!("0x{}", hex::encode(sig.to_bytes())))
 }
 
 pub fn sign_multisig(sk: &BlsSecretKey, pk: &BlsPublicKey, msg: &[u8]) -> MultisigSignature {

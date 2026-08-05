@@ -20,6 +20,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
+use dusk_bytes::Serializable;
 use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
 use knot_tool::{blob, bls, collector_client, membership, mock_ledger};
@@ -1205,8 +1206,19 @@ async fn main() -> Result<()> {
                 }
             }
             PartyCmd::Signup { name, pk, note, collector } => {
+                let (identities, _) = load_store(&store_path)?;
+                let identity = find_identity(&identities, &name)?;
+                let sk = identity.require_sk()?;
+                let parsed_pk = keystore::parse_pk(&pk)?;
+                if identity.pk.to_bytes() != parsed_pk.to_bytes() {
+                    bail!("--pk does not match identity '{name}'");
+                }
+                let pk_hex = format!("0x{}", hex::encode(identity.pk.to_bytes()));
+                let sig = bls::party_signup_sig_hex(sk, &identity.pk, &name)?;
                 let client = collector_client::CollectorClient::resolve(collector.as_deref())?;
-                let member = client.signup_party(&name, &pk, note.as_deref()).await?;
+                let member = client
+                    .signup_party(&name, &pk_hex, &sig, note.as_deref())
+                    .await?;
                 println!("signed up: {} pk={}", member.name, member.pk);
             }
         },
