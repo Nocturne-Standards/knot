@@ -1,7 +1,7 @@
 ---
 id: 6
 slug: tool-uniquifier-blobs
-status: IN_PROGRESS
+status: DONE
 owner: cursor-agent
 deps:
   - 4
