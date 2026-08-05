@@ -1218,3 +1218,29 @@ textarea {
   .beat-dots .tab { font-size: 0.7rem; padding: 0.28rem 0.5rem; }
   .docs-tab { font-size: 0.7rem; padding: 0.28rem 0.55rem; }
 }
+
+.dev-drawer {
+  margin-top: 1.5rem;
+  border: 1px solid var(--line, #d8e0ea);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.6);
+}
+.dev-drawer summary {
+  cursor: pointer;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.dev-drawer-inner {
+  padding: 0 1rem 1rem;
+  display: grid;
+  gap: 1.25rem;
+}
+.dev-panel .pane-head h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+.dev-panel .pane-head .lede {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}

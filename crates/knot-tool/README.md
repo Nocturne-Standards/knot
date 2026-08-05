@@ -150,12 +150,14 @@ submission goes two ways:
   Knot no longer ships `pm-resolve` CLI/UI/RPC or `council_resolve_*` in
   `knot-encoding`. Collector may still relay `kind=pm_council_resolve` blobs
   for wen wire compatibility — see `knot-collector` README.
-- **Signing preview/confirm (2026-07-24)** — proposal approve and blob sign
-  print the fingerprint first; CLI requires `--confirm`; HTTP sign endpoints
-  require `"confirm": true` (400 otherwise). UI: Preview → show mnemonic →
-  checkbox → Sign. Quorum “type any message” lab panels remain an **unsafe
-  demo** (arbitrary UTF-8, not a canonical intent) — use the five-beat
-  proposals path / PM resolve for real authorizations.
+- **Signing preview/confirm (2026-07-24)** — proposal approve, blob sign,
+  quorum submit, quorum-agg submit, and change-account submit print the
+  fingerprint first; CLI requires `--confirm`; HTTP sign endpoints require
+  `"confirm": true` (400 otherwise). UI: Preview → show mnemonic → confirm →
+  Submit. Prefer one signer identity per `serve` process (soft note when
+  multiple local signers are requested). Quorum “type any message” lab panels
+  remain an **unsafe demo** (arbitrary UTF-8, not a canonical intent) — use
+  the five-beat proposals path for real authorizations.
 - **`init` + first-run script (2026-07-23)** — `knot-tool init [--name
   alice] [--store path]` creates the local identity store if missing
   (prompts for a new password twice, refuses on mismatch), optionally with
@@ -293,14 +295,19 @@ knot-tool account keys 0
 knot-tool account next-id
 
 # Lab-only unsafe demo — arbitrary UTF-8 message, not a structured intent:
-knot-tool quorum submit --account 0 --msg "hello" --signer alice --signer bob
+knot-tool quorum submit --account 0 --msg "hello" --signer alice --signer bob  # preview
+knot-tool quorum submit --account 0 --msg "hello" --signer alice --signer bob --confirm
 knot-tool quorum check --account 0 --msg "hello" --signer alice --signer bob
 knot-tool quorum diagnose --account 0 --msg "hello" --signer alice --signer bob
-knot-tool quorum-agg submit --account 0 --msg "hello" --signer alice --signer bob
+knot-tool quorum-agg submit --account 0 --msg "hello" --signer alice --signer bob  # preview
+knot-tool quorum-agg submit --account 0 --msg "hello" --signer alice --signer bob --confirm
 
 knot-tool change-account submit --account 0 \
   --new-member alice --new-member carol --new-threshold 2 \
-  --signer alice --signer bob   # must be a quorum of the CURRENT members
+  --signer alice --signer bob   # preview fingerprint
+knot-tool change-account submit --account 0 \
+  --new-member alice --new-member carol --new-threshold 2 \
+  --signer alice --signer bob --confirm
 # optional: --nonce N to bypass account free-read when diagnosing
 
 # Multi-person proposals (after deploy + one-time `proposal init-registry` + `init_chain_id`)

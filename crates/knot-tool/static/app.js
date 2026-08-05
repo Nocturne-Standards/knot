@@ -59,6 +59,10 @@ let selectedCouncilId = null;
 let selectedProposalId = null;
 /** Beat 5: single active approve-as signer. */
 let activePropSigner = null;
+/** Developer drawer: quorum verify intent confirmed. */
+let quorumIntentConfirmed = false;
+/** Developer drawer: change_account intent confirmed. */
+let changeAccountIntentConfirmed = false;
 /** Beat 1: who you are (blue header chip). */
 let youIdentity = null;
 let cachedIdentities = [];
@@ -197,6 +201,149 @@ function applyDemoMode(mode) {
   if (badge) {
     badge.dataset.mode = demoMode;
     badge.textContent = demoMode === "testnet" ? "Testnet" : "Mock";
+  }
+  const drawer = el("dev-drawer");
+  if (drawer) drawer.hidden = demoMode !== "testnet";
+}
+
+function parseSignerList(raw) {
+  return String(raw || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function syncQuorumSubmitGate() {
+  const btn = el("btn-quorum-submit");
+  if (btn) btn.disabled = !quorumIntentConfirmed;
+}
+
+function syncChangeSubmitGate() {
+  const btn = el("btn-change-submit");
+  if (btn) btn.disabled = !changeAccountIntentConfirmed;
+}
+
+async function quorumPreview() {
+  quorumIntentConfirmed = false;
+  syncQuorumSubmitGate();
+  const account = Number(el("quorum-account")?.value || 0);
+  const msg = el("quorum-msg")?.value || "";
+  const signers = parseSignerList(el("quorum-signers")?.value);
+  if (!msg || signers.length === 0) {
+    showErrorOutcome("quorum-outcome", "Enter a message and at least one signer.");
+    return;
+  }
+  try {
+    const out = await api("/api/quorum/preview", {
+      method: "POST",
+      body: JSON.stringify({ account, msg, signers }),
+    });
+    const card = el("quorum-preview-card");
+    const fp = el("quorum-fingerprint");
+    if (fp) {
+      fp.innerHTML =
+        `mnemonic: ${escapeHtml(out.digest_mnemonic)} · ` +
+        `digest: ${escapeHtml(String(out.digest_hex).slice(0, 18))}…` +
+        (out.note ? `<br><span class="muted">${escapeHtml(out.note)}</span>` : "");
+    }
+    if (card) card.hidden = false;
+    setOutcome(
+      "quorum-outcome",
+      `<span class="outcome-meta">Preview ready — confirm fingerprint before submit.</span>`,
+      true
+    );
+  } catch (e) {
+    showErrorOutcome("quorum-outcome", e.message);
+  }
+}
+
+function confirmQuorumIntent() {
+  quorumIntentConfirmed = true;
+  syncQuorumSubmitGate();
+  showToast("Quorum intent confirmed - Submit unlocked");
+}
+
+async function quorumSubmit() {
+  if (!quorumIntentConfirmed) {
+    showErrorOutcome("quorum-outcome", "Confirm the fingerprint first.");
+    return;
+  }
+  const account = Number(el("quorum-account")?.value || 0);
+  const msg = el("quorum-msg")?.value || "";
+  const signers = parseSignerList(el("quorum-signers")?.value);
+  try {
+    const out = await api("/api/quorum/submit", {
+      method: "POST",
+      body: JSON.stringify({ account, msg, signers, confirm: true }),
+    });
+    showSubmitOutcome("quorum-outcome", out);
+    quorumIntentConfirmed = false;
+    syncQuorumSubmitGate();
+  } catch (e) {
+    showErrorOutcome("quorum-outcome", e.message);
+  }
+}
+
+async function changeAccountPreview() {
+  changeAccountIntentConfirmed = false;
+  syncChangeSubmitGate();
+  const account = Number(el("change-account-id")?.value || 0);
+  const new_members = parseSignerList(el("change-new-members")?.value);
+  const new_threshold = Number(el("change-new-threshold")?.value || 1);
+  const signers = parseSignerList(el("change-signers")?.value);
+  if (new_members.length === 0 || signers.length === 0) {
+    showErrorOutcome("change-outcome", "Enter new members and signers.");
+    return;
+  }
+  try {
+    const out = await api("/api/change-account/preview", {
+      method: "POST",
+      body: JSON.stringify({ account, new_members, new_threshold, signers }),
+    });
+    const card = el("change-preview-card");
+    const fp = el("change-fingerprint");
+    if (fp) {
+      fp.innerHTML =
+        `mnemonic: ${escapeHtml(out.digest_mnemonic)} · ` +
+        `digest: ${escapeHtml(String(out.digest_hex).slice(0, 18))}…` +
+        (out.note ? `<br><span class="muted">${escapeHtml(out.note)}</span>` : "");
+    }
+    if (card) card.hidden = false;
+    setOutcome(
+      "change-outcome",
+      `<span class="outcome-meta">Preview ready — confirm digest before submit.</span>`,
+      true
+    );
+  } catch (e) {
+    showErrorOutcome("change-outcome", e.message);
+  }
+}
+
+function confirmChangeAccountIntent() {
+  changeAccountIntentConfirmed = true;
+  syncChangeSubmitGate();
+  showToast("Change-account intent confirmed - Submit unlocked");
+}
+
+async function changeAccountSubmit() {
+  if (!changeAccountIntentConfirmed) {
+    showErrorOutcome("change-outcome", "Confirm the digest first.");
+    return;
+  }
+  const account = Number(el("change-account-id")?.value || 0);
+  const new_members = parseSignerList(el("change-new-members")?.value);
+  const new_threshold = Number(el("change-new-threshold")?.value || 1);
+  const signers = parseSignerList(el("change-signers")?.value);
+  try {
+    const out = await api("/api/change-account/submit", {
+      method: "POST",
+      body: JSON.stringify({ account, new_members, new_threshold, signers, confirm: true }),
+    });
+    showSubmitOutcome("change-outcome", out);
+    changeAccountIntentConfirmed = false;
+    syncChangeSubmitGate();
+  } catch (e) {
+    showErrorOutcome("change-outcome", e.message);
   }
 }
 
@@ -1279,3 +1426,9 @@ window.proposalCreate = proposalCreate;
 window.proposalApprove = proposalApprove;
 window.proposalFinalize = proposalFinalize;
 window.confirmIntent = confirmIntent;
+window.quorumPreview = quorumPreview;
+window.confirmQuorumIntent = confirmQuorumIntent;
+window.quorumSubmit = quorumSubmit;
+window.changeAccountPreview = changeAccountPreview;
+window.confirmChangeAccountIntent = confirmChangeAccountIntent;
+window.changeAccountSubmit = changeAccountSubmit;

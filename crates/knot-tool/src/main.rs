@@ -159,6 +159,9 @@ enum QuorumCmd {
         /// Signer identity name (repeatable, must meet the account's threshold).
         #[arg(long = "signer", required = true)]
         signers: Vec<String>,
+        /// Required — show fingerprint first, then re-run with `--confirm`.
+        #[arg(long)]
+        confirm: bool,
     },
     /// Free RUES read of verify_quorum — returns the on-chain bool (diagnostic).
     Check {
@@ -196,6 +199,9 @@ enum QuorumAggCmd {
         hex: bool,
         #[arg(long = "signer", required = true)]
         signers: Vec<String>,
+        /// Required — show fingerprint first, then re-run with `--confirm`.
+        #[arg(long)]
+        confirm: bool,
     },
     /// Free RUES read of verify_quorum_aggregate — returns the on-chain bool.
     Check {
@@ -227,6 +233,9 @@ enum ChangeAccountCmd {
         /// wrong nonce will fail the on-chain quorum/message check.
         #[arg(long)]
         nonce: Option<u64>,
+        /// Required — show fingerprint first, then re-run with `--confirm`.
+        #[arg(long)]
+        confirm: bool,
     },
 }
 
@@ -433,6 +442,17 @@ fn require_cli_confirm(confirm: bool) -> Result<()> {
     bail!(
         "refusing to sign without --confirm (preview the fingerprint first, then re-run with --confirm)"
     );
+}
+
+fn print_signing_fingerprint(msg: &[u8]) {
+    let (digest_hex, mnemonic, safety) = bls::message_fingerprint_display(msg);
+    println!("=== message to sign ===");
+    println!("  msg_len: {}", msg.len());
+    println!("  msg_hex: 0x{}", hex::encode(msg));
+    println!("=== out-of-band fingerprint (compare with co-signers) ===");
+    println!("  hex: {digest_hex}");
+    println!("  mnemonic (24 BIP39 words): {mnemonic}");
+    println!("  safety-number: {safety}");
 }
 
 fn print_identity_summary(identities: &[keystore::Identity]) {
@@ -671,10 +691,17 @@ async fn main() -> Result<()> {
         },
 
         Cmd::Quorum { cmd } => match cmd {
-            QuorumCmd::Submit { account, msg, hex, signers } => {
+            QuorumCmd::Submit { account, msg, hex, signers, confirm } => {
                 let (identities, _) = load_store(&store_path)?;
                 ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
+                print_signing_fingerprint(&msg_bytes);
+                if signers.len() > 1 {
+                    eprintln!(
+                        "note: prefer one signer identity per serve process — use separate machines when possible"
+                    );
+                }
+                require_cli_confirm(confirm)?;
                 let sigs = build_sigs(&identities, &signers, &msg_bytes)?;
                 let local_pks = signer_pk_hexs(&identities, &signers)?;
                 let args = VerifyQuorumArgs {
@@ -720,10 +747,17 @@ async fn main() -> Result<()> {
         },
 
         Cmd::QuorumAgg { cmd } => match cmd {
-            QuorumAggCmd::Submit { account, msg, hex, signers } => {
+            QuorumAggCmd::Submit { account, msg, hex, signers, confirm } => {
                 let (identities, _) = load_store(&store_path)?;
                 ensure_cli_signers_are_members(account, &identities, &signers).await?;
                 let msg_bytes = msg_bytes(&msg, hex)?;
+                print_signing_fingerprint(&msg_bytes);
+                if signers.len() > 1 {
+                    eprintln!(
+                        "note: prefer one signer identity per serve process — use separate machines when possible"
+                    );
+                }
+                require_cli_confirm(confirm)?;
                 let (signer_keys, aggregate_sig) = build_aggregate(&identities, &signers, &msg_bytes)?;
                 let args = VerifyQuorumAggregateArgs {
                     account_id: account,
@@ -759,6 +793,7 @@ async fn main() -> Result<()> {
                 new_threshold,
                 signers,
                 nonce,
+                confirm,
             } => {
                 let (identities, _) = load_store(&store_path)?;
                 let new_member_pks: Vec<BlsPublicKey> = new_members
@@ -788,6 +823,13 @@ async fn main() -> Result<()> {
 
                 let msg = bls::change_account_message(account, nonce, &new_member_pks, new_threshold);
                 ensure_cli_signers_are_members(account, &identities, &signers).await?;
+                print_signing_fingerprint(&msg);
+                if signers.len() > 1 {
+                    eprintln!(
+                        "note: prefer one signer identity per serve process — use separate machines when possible"
+                    );
+                }
+                require_cli_confirm(confirm)?;
                 let sigs = build_sigs(&identities, &signers, &msg)?;
 
                 let args = ChangeAccountArgs {

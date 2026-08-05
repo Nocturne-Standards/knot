@@ -44,3 +44,33 @@ pub fn change_account_message(
     let member_pks: Vec<[u8; 96]> = new_members.iter().map(|pk| pk.to_bytes()).collect();
     knot_encoding::change_account_message(account_id, nonce, &member_pks, new_threshold)
 }
+
+/// 32-byte fingerprint for out-of-band compare before BLS signing.
+///
+/// Canonical 32-byte messages (e.g. `change_account_message`) use the bytes
+/// directly; arbitrary quorum UTF-8/hex payloads are hashed under a lab domain.
+pub fn signing_message_fingerprint(msg: &[u8]) -> [u8; 32] {
+    if msg.len() == 32 {
+        let mut digest = [0u8; 32];
+        digest.copy_from_slice(msg);
+        digest
+    } else {
+        use tiny_keccak::{Hasher, Keccak};
+        let mut hasher = Keccak::v256();
+        hasher.update(b"nocturne.knot.lab.quorum-message-fingerprint.v1");
+        hasher.update(msg);
+        let mut out = [0u8; 32];
+        hasher.finalize(&mut out);
+        out
+    }
+}
+
+/// Hex + BIP39 mnemonic + safety-number for a signing message buffer.
+pub fn message_fingerprint_display(msg: &[u8]) -> (String, String, String) {
+    let digest = signing_message_fingerprint(msg);
+    (
+        knot_encoding::digest_hex(&digest),
+        knot_encoding::digest_mnemonic(&digest),
+        knot_encoding::digest_safety_number(&digest),
+    )
+}
