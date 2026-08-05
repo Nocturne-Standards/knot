@@ -31,7 +31,9 @@ jobs:
       - name: cargo fmt --check
         run: cargo fmt --check
       - name: cargo clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        # Avoid --all-targets: contract integration tests include_bytes! release WASM
+        # built only in the test job.
+        run: cargo clippy --workspace --lib --bins -- -D warnings
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
