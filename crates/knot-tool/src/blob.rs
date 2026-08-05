@@ -5,9 +5,10 @@
 //! with no `kind` load as this).
 //!
 //! The collector is untrusted: every signer recomputes the digest via
-//! `gate_blob_for_signing` before adding a partial. QR deferred.
+//! [`gate_blob`] before adding a partial. QR deferred.
 
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -16,13 +17,137 @@ use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
 };
 use knot_encoding::{
-    gate_blob_for_signing, DecodedIntent, PartialSig, ProposalBlob, ProposalIntent,
+    DecodedIntent, EncodingError, PartialSig, ProposalBlob, ProposalIntent,
 };
+use rand::rngs::OsRng;
+use rand::RngCore;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::bls;
 
-/// Wire version for `kind=proposals` blobs (legacy §4a).
+/// Caller-supplied proposal uniquifier (§2.6). Default CSPRNG `u64`.
+pub fn random_proposal_nonce() -> u64 {
+    let mut buf = [0u8; 8];
+    OsRng.fill_bytes(&mut buf);
+    u64::from_le_bytes(buf)
+}
+
+/// Resolve CLI/RPC nonce: explicit value or CSPRNG default.
+pub fn resolve_proposal_nonce(cli_nonce: Option<u64>) -> u64 {
+    cli_nonce.unwrap_or_else(random_proposal_nonce)
+}
+
+/// Typed gate errors (L14) — distinguish digest mismatch from encoding limits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GateError {
+    DigestMismatch,
+    Encoding(EncodingError),
+}
+
+impl core::fmt::Display for GateError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            GateError::DigestMismatch => {
+                write!(f, "signed_digest does not match recomputed digest")
+            }
+            GateError::Encoding(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for GateError {}
+
+fn gate_error_to_anyhow(err: GateError) -> anyhow::Error {
+    match err {
+        GateError::DigestMismatch => {
+            anyhow::anyhow!("REFUSING: signed_digest does not match recomputed §4a digest")
+        }
+        GateError::Encoding(e) => anyhow::anyhow!("REFUSING: {e}"),
+    }
+}
+
+/// Signer-side anti-blind-signing gate with typed errors (L14).
+pub fn gate_blob(blob: &ProposalBlob) -> Result<[u8; 32], GateError> {
+    let _ = blob.intent.human_summary.as_ref();
+    let got = blob.intent.intent.digest().map_err(GateError::Encoding)?;
+    if &got == &blob.signed_digest {
+        Ok(got)
+    } else {
+        Err(GateError::DigestMismatch)
+    }
+}
+
+/// Threshold source for M8 aggregate guard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThresholdGuard {
+    pub required: u32,
+    /// `true` when fetched from the registry; `false` when using blob-declared value offline.
+    pub verified: bool,
+}
+
+impl ThresholdGuard {
+    pub fn verified(threshold: u32) -> Self {
+        Self {
+            required: threshold,
+            verified: true,
+        }
+    }
+
+    pub fn unverified_blob(threshold: u32) -> Self {
+        Self {
+            required: threshold,
+            verified: false,
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn full_fsync(f: &fs::File) -> std::io::Result<()> {
+    use std::os::unix::io::AsRawFd;
+    let rc = unsafe { libc::fcntl(f.as_raw_fd(), libc::F_FULLFSYNC) };
+    if rc == -1 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn full_fsync(f: &fs::File) -> std::io::Result<()> {
+    f.sync_all()
+}
+
+/// Atomic blob write (L8) — tmp + rename + directory fsync per IMPLEMENTATION §3.2.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    let dir = path
+        .parent()
+        .context("blob path has no parent directory")?;
+    fs::create_dir_all(dir)?;
+    let tmp = path.with_extension("tmp");
+
+    let mut f = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&tmp)
+        .with_context(|| format!("creating {}", tmp.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))?;
+    }
+    f.write_all(bytes)?;
+    f.sync_all()?;
+    full_fsync(&f)?;
+    drop(f);
+
+    fs::rename(&tmp, path).with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()))?;
+
+    let dfd = fs::File::open(dir).with_context(|| format!("opening {}", dir.display()))?;
+    dfd.sync_all()?;
+    full_fsync(&dfd)?;
+    Ok(())
+}
 pub const BLOB_FILE_VERSION: u16 = 1;
 
 /// Outer blob discriminator. Missing `kind` on the wire deserializes as
@@ -210,8 +335,7 @@ pub fn read_file(path: &Path) -> Result<BlobFile> {
 
 pub fn write_file(path: &Path, file: &BlobFile) -> Result<()> {
     let text = serde_json::to_string_pretty(file).context("serializing ProposalBlob JSON")?;
-    fs::write(path, format!("{text}\n")).with_context(|| format!("writing {}", path.display()))?;
-    Ok(())
+    write_atomic(path, format!("{text}\n").as_bytes())
 }
 
 pub fn create_blob(
@@ -249,9 +373,7 @@ pub fn create_blob(
 
 /// Print canonical intent (never trusts `human_summary`) and gate the digest.
 pub fn print_canonical_intent(blob: &ProposalBlob) -> Result<[u8; 32]> {
-    let digest = gate_blob_for_signing(blob).map_err(|_| {
-        anyhow::anyhow!("REFUSING: signed_digest does not match recomputed §4a digest")
-    })?;
+    let digest = gate_blob(blob).map_err(gate_error_to_anyhow)?;
     let i = &blob.intent.intent;
     println!("=== intent (canonical; do not trust human_summary) ===");
     println!("  chain_id: {}", i.chain_id);
@@ -296,39 +418,79 @@ pub fn add_partial(
     Ok(digest)
 }
 
-/// Aggregate all partials into one `MultisigSignature` + ordered signer keys.
+fn check_partial_count(count: usize, guard: ThresholdGuard) -> Result<()> {
+    if (count as u32) < guard.required {
+        if guard.verified {
+            bail!(
+                "REFUSING: partials {count} below registry threshold {}",
+                guard.required
+            );
+        }
+        bail!(
+            "partials {count} below blob-declared threshold {} (unverified locally; the chain enforces the real threshold)",
+            guard.required
+        );
+    }
+    Ok(())
+}
+
+/// Aggregate verified partials into one `MultisigSignature` + ordered signer keys.
+///
+/// `threshold` is the M8 guard: use [`ThresholdGuard::verified`] when fetched from
+/// the registry, or [`ThresholdGuard::unverified_blob`] when offline.
 pub fn aggregate_partials(
     blob: &ProposalBlob,
+    threshold: ThresholdGuard,
 ) -> Result<(Vec<BlsPublicKey>, MultisigSignature, [u8; 32])> {
-    let digest = gate_blob_for_signing(blob).map_err(|_| {
-        anyhow::anyhow!("REFUSING: signed_digest does not match recomputed §4a digest")
-    })?;
+    let digest = gate_blob(blob).map_err(gate_error_to_anyhow)?;
     if blob.partials.is_empty() {
         bail!("no partials to aggregate");
-    }
-    if (blob.partials.len() as u32) < blob.threshold {
-        bail!(
-            "partials {} below threshold {}",
-            blob.partials.len(),
-            blob.threshold
-        );
     }
     let mut keys = Vec::with_capacity(blob.partials.len());
     let mut sigs = Vec::with_capacity(blob.partials.len());
     for p in &blob.partials {
-        let pk = BlsPublicKey::from_bytes(&p.signer_pk)
-            .map_err(|e| anyhow::anyhow!("invalid signer_pk in partial: {e:?}"))?;
-        let sig_bytes: [u8; 48] = p
-            .sig
-            .as_slice()
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("partial sig must be 48 bytes"))?;
-        let sig = MultisigSignature::from_bytes(&sig_bytes)
-            .map_err(|e| anyhow::anyhow!("invalid MultisigSignature bytes: {e:?}"))?;
+        let pk = match BlsPublicKey::from_bytes(&p.signer_pk) {
+            Ok(pk) => pk,
+            Err(e) => {
+                eprintln!("dropping partial with invalid signer_pk: {e:?}");
+                continue;
+            }
+        };
+        let sig_bytes: [u8; 48] = match p.sig.as_slice().try_into() {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                eprintln!(
+                    "dropping partial from signer 0x{}: sig must be 48 bytes",
+                    hex::encode(pk.to_bytes())
+                );
+                continue;
+            }
+        };
+        let sig = match MultisigSignature::from_bytes(&sig_bytes) {
+            Ok(sig) => sig,
+            Err(e) => {
+                eprintln!(
+                    "dropping partial from signer 0x{}: invalid MultisigSignature bytes: {e:?}",
+                    hex::encode(pk.to_bytes())
+                );
+                continue;
+            }
+        };
+        if !bls::verify_multisig(&pk, &digest, &sig) {
+            eprintln!(
+                "dropping invalid partial from signer 0x{}",
+                hex::encode(pk.to_bytes())
+            );
+            continue;
+        }
         keys.push(pk);
         sigs.push(sig);
     }
-    let aggregate_sig = bls::aggregate(&sigs);
+    if sigs.is_empty() {
+        bail!("no valid partials to aggregate after local verification");
+    }
+    check_partial_count(sigs.len(), threshold)?;
+    let aggregate_sig = bls::aggregate(&sigs).map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok((keys, aggregate_sig, digest))
 }
 
@@ -389,7 +551,8 @@ mod tests {
         add_partial(&mut blob, &sk1, &pk1).unwrap();
         add_partial(&mut blob, &sk2, &pk2).unwrap();
         assert_eq!(blob.partials.len(), 2);
-        let (keys, _agg, digest) = aggregate_partials(&blob).unwrap();
+        let (keys, _agg, digest) =
+            aggregate_partials(&blob, ThresholdGuard::unverified_blob(blob.threshold)).unwrap();
         assert_eq!(keys.len(), 2);
         assert_eq!(digest, blob.signed_digest);
         assert!(add_partial(&mut blob, &sk1, &pk1).is_err());
@@ -452,5 +615,62 @@ mod tests {
             msg.contains("unsupported blob kind") || msg.contains("pm_council_resolve"),
             "unexpected error: {msg}"
         );
+    }
+
+    #[test]
+    fn csprng_nonce_differs_from_explicit() {
+        let explicit = resolve_proposal_nonce(Some(42));
+        assert_eq!(explicit, 42);
+        let a = random_proposal_nonce();
+        let b = random_proposal_nonce();
+        assert_ne!(a, b, "CSPRNG nonces should almost always differ");
+    }
+
+    #[test]
+    fn gate_blob_typed_encoding_error() {
+        let mut blob = create_blob(1, 0, 0, [0; 32], "x".into(), Vec::new(), 0, 1, None).unwrap();
+        blob.intent.intent.function_name = "x".repeat((u32::MAX as usize) + 1);
+        assert!(matches!(
+            gate_blob(&blob),
+            Err(GateError::Encoding(EncodingError::FieldTooLarge { .. }))
+        ));
+    }
+
+    #[test]
+    fn aggregate_drops_invalid_partial() {
+        let rng = &mut StdRng::seed_from_u64(99);
+        let (sk1, pk1) = keypair(rng);
+        let (sk2, pk2) = keypair(rng);
+        let mut blob = create_blob(1, 0, 0, [0x22; 32], "noop".into(), Vec::new(), 0, 2, None).unwrap();
+        add_partial(&mut blob, &sk1, &pk1).unwrap();
+        add_partial(&mut blob, &sk2, &pk2).unwrap();
+        blob.partials[0].sig[0] ^= 0xff;
+        let err = aggregate_partials(&blob, ThresholdGuard::unverified_blob(2)).unwrap_err();
+        assert!(
+            err.to_string().contains("below blob-declared threshold"),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn verified_threshold_uses_refusing_label() {
+        let rng = &mut StdRng::seed_from_u64(11);
+        let (sk1, pk1) = keypair(rng);
+        let mut blob = create_blob(1, 0, 0, [0x33; 32], "noop".into(), Vec::new(), 0, 2, None).unwrap();
+        add_partial(&mut blob, &sk1, &pk1).unwrap();
+        let err = aggregate_partials(&blob, ThresholdGuard::verified(2)).unwrap_err();
+        assert!(err.to_string().contains("REFUSING"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn write_atomic_round_trip() {
+        let dir = std::env::temp_dir().join(format!("knot-blob-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("proposal.json");
+        let blob = create_blob(1, 0, 7, [0x44; 32], "noop".into(), Vec::new(), 0, 1, None).unwrap();
+        write_file(&path, &BlobFile::from_proposal_blob(&blob)).unwrap();
+        let loaded = read_file(&path).unwrap();
+        assert_eq!(loaded.intent.nonce, 7);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

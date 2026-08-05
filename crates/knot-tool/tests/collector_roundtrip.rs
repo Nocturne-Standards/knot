@@ -179,7 +179,11 @@ async fn two_of_three_push_sign_sign_pull_aggregate_roundtrip() {
     let proposal = pulled.to_proposal_blob().expect("decode final blob");
     assert_eq!(proposal.partials.len(), 2);
 
-    let (keys, _agg, digest) = blob::aggregate_partials(&proposal).expect("aggregate");
+    let (keys, _agg, digest) = blob::aggregate_partials(
+        &proposal,
+        blob::ThresholdGuard::unverified_blob(proposal.threshold),
+    )
+    .expect("aggregate");
     assert_eq!(keys.len(), 2);
     assert_eq!(digest, proposal.signed_digest);
     let key_bytes: Vec<[u8; 96]> = keys.iter().map(Serializable::to_bytes).collect();

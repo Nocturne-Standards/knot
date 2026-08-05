@@ -12,7 +12,7 @@ use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecr
 use dusk_vm::{ContractData, Session, VM};
 use knot_encoding::PartialSig;
 use knot_tool::blob::{
-    aggregate_partials, create_blob, read_file, write_file, BlobFile,
+    aggregate_partials, create_blob, read_file, write_file, BlobFile, ThresholdGuard,
 };
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -101,7 +101,8 @@ fn file_byo_two_of_three_aggregate_verifies_locally() {
     let reloaded = read_file(&path).unwrap().to_proposal_blob().unwrap();
     assert_eq!(reloaded.partials.len(), 2);
 
-    let (signer_keys, aggregate_sig, digest) = aggregate_partials(&reloaded).unwrap();
+    let (signer_keys, aggregate_sig, digest) =
+        aggregate_partials(&reloaded, ThresholdGuard::unverified_blob(reloaded.threshold)).unwrap();
     let args = VerifyQuorumAggregateArgs {
         account_id,
         msg: digest.to_vec(),

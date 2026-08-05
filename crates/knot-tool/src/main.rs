@@ -256,9 +256,9 @@ enum ProposalCmd {
         args_hex: String,
         #[arg(long, default_value_t = 0)]
         deadline: u64,
-        /// Caller uniquifier (§2.12 v3); defaults to 0 for lab/demo.
-        #[arg(long, default_value_t = 0)]
-        nonce: u64,
+        /// Caller uniquifier (§2.12 v3); CSPRNG default when omitted.
+        #[arg(long)]
+        nonce: Option<u64>,
     },
     /// Approve with one local signing identity (recomputes digest + shows intent).
     Approve {
@@ -297,8 +297,9 @@ enum BlobCmd {
         chain_id: u64,
         #[arg(long)]
         committee_id: u64,
-        #[arg(long, default_value_t = 0)]
-        nonce: u64,
+        /// Caller uniquifier (§2.12 v3); CSPRNG default when omitted.
+        #[arg(long)]
+        nonce: Option<u64>,
         #[arg(long)]
         target: String,
         #[arg(long)]
@@ -886,6 +887,7 @@ async fn main() -> Result<()> {
                 } else {
                     hex::decode(args_hex.trim_start_matches("0x"))?
                 };
+                let nonce = blob::resolve_proposal_nonce(nonce);
                 let before: u64 = chain::query_contract(
                     chain::Contract::Proposals,
                     "next_proposal_id",
@@ -1049,6 +1051,7 @@ async fn main() -> Result<()> {
                 } else {
                     hex::decode(args_hex.trim_start_matches("0x"))?
                 };
+                let nonce = blob::resolve_proposal_nonce(nonce);
                 let proposal = blob::create_blob(
                     chain_id,
                     committee_id,
@@ -1140,7 +1143,8 @@ async fn main() -> Result<()> {
                 use dusk_bytes::Serializable;
                 let file_blob = blob::read_file(&file)?;
                 let proposal = file_blob.to_proposal_blob()?;
-                let (keys, agg, digest) = blob::aggregate_partials(&proposal)?;
+                let threshold = threshold_guard_for_blob(&proposal).await;
+                let (keys, agg, digest) = blob::aggregate_partials(&proposal, threshold)?;
                 println!("digest: 0x{}", hex::encode(digest));
                 println!("signers: {}", keys.len());
                 for (i, pk) in keys.iter().enumerate() {
@@ -1151,7 +1155,9 @@ async fn main() -> Result<()> {
             BlobCmd::SubmitAgg { file, account } => {
                 let file_blob = blob::read_file(&file)?;
                 let proposal = file_blob.to_proposal_blob()?;
-                let (signer_keys, aggregate_sig, digest) = blob::aggregate_partials(&proposal)?;
+                let threshold = threshold_guard_for_blob(&proposal).await;
+                let (signer_keys, aggregate_sig, digest) =
+                    blob::aggregate_partials(&proposal, threshold)?;
                 let args = VerifyQuorumAggregateArgs {
                     account_id: account,
                     msg: digest.to_vec(),
@@ -1277,7 +1283,29 @@ fn build_aggregate(
         let sk = id.require_sk()?;
         per_signer_sigs.push(bls::sign_multisig(sk, &id.pk, msg));
     }
-    let aggregate_sig = bls::aggregate(&per_signer_sigs);
+    let aggregate_sig = bls::aggregate(&per_signer_sigs).map_err(|e| anyhow::anyhow!("{e}"))?;
     let signer_keys: Vec<BlsPublicKey> = ids.iter().map(|i| i.pk).collect();
     Ok((signer_keys, aggregate_sig))
+}
+
+async fn fetch_registry_threshold(committee_id: u64) -> Result<u32> {
+    let bytes = chain::encode(&committee_id)?;
+    let view: Option<MultisigAccountView> = chain::query("account", bytes).await?;
+    view.map(|v| v.threshold)
+        .ok_or_else(|| anyhow::anyhow!("registry account {committee_id} not found"))
+}
+
+async fn threshold_guard_for_blob(proposal: &knot_encoding::ProposalBlob) -> blob::ThresholdGuard {
+    let committee_id = proposal.intent.intent.committee_id;
+    match fetch_registry_threshold(committee_id).await {
+        Ok(t) => blob::ThresholdGuard::verified(t),
+        Err(e) => {
+            eprintln!(
+                "warning: could not fetch registry threshold for committee {committee_id}: {e}; \
+                 using blob-declared threshold {} (unverified)",
+                proposal.threshold
+            );
+            blob::ThresholdGuard::unverified_blob(proposal.threshold)
+        }
+    }
 }
