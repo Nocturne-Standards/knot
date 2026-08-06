@@ -76,6 +76,7 @@ fn sign_all(msg: &[u8], sks: &[(&BlsSecretKey, &BlsPublicKey)]) -> Vec<Signature
     sks.iter()
         .map(|(sk, pk)| SignatureEntry {
             signer: **pk,
+            // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
             signature: sk.sign_insecure(msg),
         })
         .collect()
@@ -332,6 +333,7 @@ fn change_account_requires_quorum_and_bumps_nonce_preventing_replay() {
 fn aggregate_signature(signers: &[(BlsSecretKey, BlsPublicKey)], msg: &[u8]) -> MultisigSignature {
     let sigs: Vec<MultisigSignature> = signers
         .iter()
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         .map(|(sk, pk)| sk.sign_multisig_insecure(pk, msg))
         .collect();
     let (first, rest) = sigs.split_first().expect("at least one signer");

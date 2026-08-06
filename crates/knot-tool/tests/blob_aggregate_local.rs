@@ -85,6 +85,7 @@ fn file_byo_two_of_three_aggregate_verifies_locally() {
     // Simulate two machines: each adds a partial (insecure for PreFork VM).
     for (sk, pk) in [(&sk1, &pk1), (&sk2, &pk2)] {
         let digest = knot_encoding::gate_blob_for_signing(&blob).expect("gate");
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         let sig = sk.sign_multisig_insecure(pk, &digest);
         blob.partials.push(PartialSig {
             signer_pk: pk.to_bytes(),
