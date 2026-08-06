@@ -99,6 +99,7 @@ fn fixed_keys() -> [(BlsSecretKey, BlsPublicKey); 3] {
 fn fixed_signature_entry(sk: &BlsSecretKey, pk: &BlsPublicKey) -> SignatureEntry {
     SignatureEntry {
         signer: *pk,
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         signature: sk.sign_insecure(MSG),
     }
 }
@@ -124,6 +125,7 @@ fn approve_args_golden() {
     let args = ApproveArgs {
         proposal_id: 1,
         signer: keys[0].1,
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         signature: keys[0].0.sign_insecure(MSG),
     };
     assert_eq!(archive_hex(&args), GOLDEN_APPROVE_ARGS_HEX);
@@ -177,6 +179,7 @@ fn proposal_view_golden() {
         deadline: 0,
         signed_digest: SIGNED_DIGEST,
         approvals: vec![keys[0].1],
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         approval_sigs: vec![keys[0].0.sign_insecure(&SIGNED_DIGEST)],
         status: ProposalStatus::Open,
     };

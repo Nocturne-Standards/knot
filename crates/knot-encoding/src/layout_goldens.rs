@@ -117,6 +117,7 @@ mod tests {
     fn fixed_signature_entry(sk: &BlsSecretKey, pk: &BlsPublicKey) -> SignatureEntry {
         SignatureEntry {
             signer: *pk,
+            // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
             signature: sk.sign_insecure(MSG),
         }
     }

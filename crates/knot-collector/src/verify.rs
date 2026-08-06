@@ -62,6 +62,7 @@ fn verify_multisig(pk: &BlsPublicKey, msg: &[u8], sig: &MultisigSignature) -> bo
     for version in [BlsVersion::V2, BlsVersion::V1] {
         let apk = match version {
             BlsVersion::V2 => aggregate_multisig_pk(core::slice::from_ref(pk), version).ok(),
+            // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
             BlsVersion::V1 => MultisigPublicKey::aggregate_insecure(core::slice::from_ref(pk)).ok(),
         };
         let Some(apk) = apk else {
