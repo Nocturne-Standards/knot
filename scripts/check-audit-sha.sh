@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Exit codes: bin/EXIT-CODES.md (0 ok / 1 hard / 2 warn).
 # Stamp gate: AUDIT/DESIGN (and IMPLEMENTATION) docs must cite a resolvable commit SHA.
 # Bash 3.2+ compatible (macOS /bin/bash).
 set -euo pipefail
