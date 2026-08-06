@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Exit codes: bin/EXIT-CODES.md (0 ok / 1 hard / 2 warn).
 # Shared-code ratchet — documented hand-copied mirrors vs .repo-rules-baseline.
 set -euo pipefail
 

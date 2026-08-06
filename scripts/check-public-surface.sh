@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Exit codes: bin/EXIT-CODES.md (0 ok / 1 hard / 2 warn).
 # Public-surface / leak gate. Regex SSOT — MCP must exec this, not reimplement.
 # See PUBLIC-REPO-STANDARD §5 and TOOLING-AUDIT-LESSONS.md
 set -uo pipefail
@@ -11,8 +12,7 @@ fi
 cd "$ROOT"
 
 ALLOWLIST_FILE="${PUBLIC_SURFACE_ALLOWLIST:-.public-surface-allowlist}"
-# Knot is pre-launch: default soft private-tier. Set ALLOW_PRIVATE_TIER=0 before public push.
-ALLOW_PRIVATE_TIER="${ALLOW_PRIVATE_TIER:-1}"
+ALLOW_PRIVATE_TIER="${ALLOW_PRIVATE_TIER:-0}"
 SELF_NAME="scripts/check-public-surface.sh"
 KIT_SELF="bin/check-public-surface.sh"
 
@@ -99,6 +99,7 @@ if ((fail)); then
   exit 1
 fi
 if ((warn)); then
-  echo "check-public-surface: completed with warnings (ALLOW_PRIVATE_TIER=1)"
+  echo "check-public-surface: completed with warnings (ALLOW_PRIVATE_TIER=1)" >&2
+  exit 2
 fi
 exit 0

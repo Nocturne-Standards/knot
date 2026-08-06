@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Exit codes: bin/EXIT-CODES.md (0 ok / 1 hard / 2 warn).
 # Release-readiness: remote-tracking refs are caches — fetch before trusting them.
 set -euo pipefail
 
