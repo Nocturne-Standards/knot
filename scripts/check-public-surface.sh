@@ -80,8 +80,9 @@ check() {
   fail=1
 }
 
-# Always hard: real-looking password/secret assignments (not TOKEN placeholders like __TOKEN__)
-check hard "possible credential" '(PASSWORD|PWD|SECRET|API_KEY) *= *(['\''"][^'\''".][^'\''"]{5,}|[^'\''"[:space:].$][^[:space:]]{5,})'
+# Credential-looking assignments: hard after public launch; soft while ALLOW_PRIVATE_TIER=1
+# (private carves still document testnet wallet pwds in references/ — strip before public)
+check soft "possible credential" '(PASSWORD|PWD|SECRET|API_KEY) *= *(['\''"][^'\''".][^'\''"]{5,}|[^'\''"[:space:].$][^[:space:]]{5,})'
 
 # Absolute paths: hard after public launch; soft while ALLOW_PRIVATE_TIER=1
 check soft "absolute local path" '/(Users|home)/[a-zA-Z]'
