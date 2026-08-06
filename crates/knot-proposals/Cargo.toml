@@ -10,14 +10,14 @@ repository = "https://github.com/aichbindas/knot"
 
 [dependencies]
 dusk-bls12_381 = { version = "=0.14.2", default-features = false }
-rkyv = { version = "=0.7.39", default-features = false, features = ["size_32"] }
-bytecheck = { version = "=0.6.12", default-features = false }
+rkyv = { version = "=0.7.46", default-features = false, features = ["size_32"] }
+bytecheck = { version = "=0.8.2", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 knot-encoding = { path = "../knot-encoding", features = ["call-types"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }
-dusk-data-driver = { version = "0.3", optional = true }
+dusk-data-driver = { version = "1.7", optional = true }
 dusk-forge = "0.3.0"
 dusk-bytes = "=0.1.7"
 
@@ -25,7 +25,7 @@ dusk-bytes = "=0.1.7"
 dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", features = ["zk"] }
 dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
 dusk-bytes = "=0.1.7"
-rand = { version = "0.8.6", default-features = false }
+rand = { version = "0.10.2", default-features = false }
 
 [features]
 contract = ["dusk-core/abi-dlmalloc"]
