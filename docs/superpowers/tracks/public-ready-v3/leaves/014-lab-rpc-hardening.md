@@ -1,8 +1,8 @@
 ---
 id: 14
 slug: lab-rpc-hardening
-status: TODO
-owner: null
+status: DONE
+owner: cursor-agent
 deps:
   - 1
 scope:
@@ -23,15 +23,15 @@ acceptance:
   - "R9: escapeHtml every innerHTML sink; fix IMPLEMENTATION claim"
   - "R12: bind via SocketAddr is_loopback"
 acceptanceDone:
-  - false
-  - false
-  - false
-  - false
-  - false
-  - false
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
+  - true
+  - true
+  - true
+  - true
+  - true
+  - true
 ---
 # Phase 1b: Lab/RPC hardening (R1–R4, R6–R9, R12)
 
@@ -46,5 +46,16 @@ Authority: `docs/internal/IMPLEMENTATION.md` §11.
 Prefer landing after `#3 rename` if both in flight (path churn). May start on `knot-tool` paths if rename not yet done.
 
 ## Evidence (worker)
+
+Wave A commits (`5460355..HEAD` on `feat/public-ready-v3-rename`):
+
+- `edd8524` — R6 explicit `DEMO_MODE`; R8 refuse `--nonce` by default; R12 loopback bind via `SocketAddr::is_loopback()`
+- `b856590` — R6 mode-aware serve banner + README
+- `94ad248` — R1 OTP `/?code=` → HttpOnly `SameSite=Strict` session cookie; R7 fail closed without bootstrap/session
+- `61397bb` — R4 wallet stderr incremental reader (raw logs stderr-only)
+- `8315a2e` — R4 RPC error-code schema + fixed messages at API boundary
+- `0452bb4` — R4 structured 400 on bad proposal hex
+- `0d15f1e` — R2 quorum + change-account preview+confirm (CLI + HTTP)
+- `d6b1f42` — R3 `submitted`/`propagated` vs confirmed; R9 `escapeHtml` on all innerHTML sinks
 
 ## Proposal (worker, if BLOCKED)

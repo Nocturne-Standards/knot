@@ -13,20 +13,19 @@ use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
 };
 use dusk_vm::{ContractData, Session, VM};
-use knot_encoding::change_account_message;
-use rand::rngs::StdRng;
+use knot_encoding::change_account_message_v3;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
 #[path = "../src/call_types.rs"]
 mod call_types;
 use call_types::{
-    AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
-    SignatureEntry, VerifyQuorumArgs, VerifyQuorumAggregateArgs,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
+    VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
 
-const REGISTRY_BYTECODE: &[u8] = include_bytes!(
-    "../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm"
-);
+const REGISTRY_BYTECODE: &[u8] =
+    include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm");
 
 const REGISTRY_ID: ContractId = ContractId::from_bytes([0xa1; 32]);
 const CHAIN_ID: u8 = 0xCA;
@@ -62,7 +61,15 @@ fn change_message(
     new_threshold: u32,
 ) -> Vec<u8> {
     let member_pks: Vec<[u8; 96]> = new_members.iter().map(|pk| pk.to_bytes()).collect();
-    change_account_message(account_id, nonce, &member_pks, new_threshold)
+    change_account_message_v3(
+        u64::from(CHAIN_ID),
+        &REGISTRY_ID.to_bytes(),
+        account_id,
+        nonce,
+        &member_pks,
+        new_threshold,
+    )
+    .expect("test committee within encoding caps")
 }
 
 fn sign_all(msg: &[u8], sks: &[(&BlsSecretKey, &BlsPublicKey)]) -> Vec<SignatureEntry> {
@@ -95,7 +102,10 @@ fn create_account_rejects_out_of_range_threshold() {
     };
     let result =
         session.call::<CreateAccountArgs, u64>(REGISTRY_ID, "create_account", &args, POINT_LIMIT);
-    assert!(result.is_err(), "threshold above member count should be rejected");
+    assert!(
+        result.is_err(),
+        "threshold above member count should be rejected"
+    );
 }
 
 #[test]
@@ -182,7 +192,10 @@ fn verify_quorum_true_only_with_enough_distinct_valid_signers() {
         .call::<VerifyQuorumArgs, bool>(REGISTRY_ID, "verify_quorum", &args, POINT_LIMIT)
         .expect("verify_quorum call should succeed")
         .data;
-    assert!(passed, "two distinct member signers should meet threshold 2");
+    assert!(
+        passed,
+        "two distinct member signers should meet threshold 2"
+    );
 
     // Same signer counted twice: still only counts once, below threshold.
     let mut sigs = sign_all(&msg, &[(&sk1, &pk1)]);
@@ -208,7 +221,10 @@ fn verify_quorum_true_only_with_enough_distinct_valid_signers() {
         .call::<VerifyQuorumArgs, bool>(REGISTRY_ID, "verify_quorum", &args, POINT_LIMIT)
         .expect("verify_quorum call should succeed")
         .data;
-    assert!(!passed, "a non-member signature must not count toward quorum");
+    assert!(
+        !passed,
+        "a non-member signature must not count toward quorum"
+    );
 }
 
 #[test]
@@ -261,7 +277,10 @@ fn change_account_requires_quorum_and_bumps_nonce_preventing_replay() {
         &bad_args,
         POINT_LIMIT,
     );
-    assert!(result.is_err(), "change_account should reject an under-quorum request");
+    assert!(
+        result.is_err(),
+        "change_account should reject an under-quorum request"
+    );
 
     // Valid quorum: succeeds, bumps nonce.
     let good_args = ChangeAccountArgs {
@@ -297,7 +316,10 @@ fn change_account_requires_quorum_and_bumps_nonce_preventing_replay() {
         &replay_args,
         POINT_LIMIT,
     );
-    assert!(result.is_err(), "a replayed stale-nonce quorum signature must be rejected");
+    assert!(
+        result.is_err(),
+        "a replayed stale-nonce quorum signature must be rejected"
+    );
 }
 
 /// Aggregates a multisignature over `msg` from exactly `signers`, the way a
@@ -307,10 +329,7 @@ fn change_account_requires_quorum_and_bumps_nonce_preventing_replay() {
 /// default secure `sign_multisig`) is what `VM::ephemeral()`'s
 /// `verify_bls_multisig` host query actually checks against (documented in
 /// `references/dusk-native/dusk-vm-issue-1-ephemeral-hardfork-policy-unreachable.md`).
-fn aggregate_signature(
-    signers: &[(BlsSecretKey, BlsPublicKey)],
-    msg: &[u8],
-) -> MultisigSignature {
+fn aggregate_signature(signers: &[(BlsSecretKey, BlsPublicKey)], msg: &[u8]) -> MultisigSignature {
     let sigs: Vec<MultisigSignature> = signers
         .iter()
         .map(|(sk, pk)| sk.sign_multisig_insecure(pk, msg))
@@ -450,7 +469,10 @@ fn verify_quorum_aggregate_false_for_non_member_signer() {
         )
         .expect("verify_quorum_aggregate call should succeed")
         .data;
-    assert!(!passed, "an outsider signer must be rejected even at the right count");
+    assert!(
+        !passed,
+        "an outsider signer must be rejected even at the right count"
+    );
 }
 
 #[test]
@@ -492,7 +514,10 @@ fn verify_quorum_aggregate_false_for_wrong_message() {
         )
         .expect("verify_quorum_aggregate call should succeed")
         .data;
-    assert!(!passed, "an aggregate signed over a different message must not verify");
+    assert!(
+        !passed,
+        "an aggregate signed over a different message must not verify"
+    );
 }
 
 #[test]
@@ -570,11 +595,11 @@ fn public_key_rkyv_roundtrip_still_matches_for_contains() {
 }
 
 #[test]
-fn diagnostic_reads_and_diagnose_quorum_roundtrip() {
+fn next_account_id_and_account_roundtrip() {
     let rng = &mut StdRng::seed_from_u64(11);
     let mut session = initialize();
-    let (sk1, pk1) = keypair(rng);
-    let (sk2, pk2) = keypair(rng);
+    let (_sk1, pk1) = keypair(rng);
+    let (_sk2, pk2) = keypair(rng);
 
     assert_eq!(
         session
@@ -605,58 +630,14 @@ fn diagnostic_reads_and_diagnose_quorum_roundtrip() {
         1
     );
 
-    let meta = session
-        .call::<u64, Option<AccountMeta>>(REGISTRY_ID, "account_meta", &id, POINT_LIMIT)
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
         .unwrap()
         .data
-        .expect("meta");
-    assert_eq!(meta.threshold, 2);
-    assert_eq!(meta.nonce, 0);
-    assert_eq!(meta.members_len, 2);
-
-    let keys = session
-        .call::<u64, Option<Vec<Vec<u8>>>>(REGISTRY_ID, "member_key_bytes", &id, POINT_LIMIT)
-        .unwrap()
-        .data
-        .expect("keys");
-    assert_eq!(keys.len(), 2);
-    assert_eq!(keys[0], pk1.to_bytes().to_vec());
-    assert_eq!(keys[1], pk2.to_bytes().to_vec());
-
-    let msg = b"diagnose-me".to_vec();
-    let good = session
-        .call::<VerifyQuorumArgs, DiagnoseQuorumResult>(
-            REGISTRY_ID,
-            "diagnose_quorum",
-            &VerifyQuorumArgs {
-                account_id: id,
-                msg: msg.clone(),
-                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
-            },
-            POINT_LIMIT,
-        )
-        .unwrap()
-        .data;
-    assert!(good.exists);
-    assert_eq!(good.member_matches, 2);
-    assert_eq!(good.sigs_ok, 2);
-    assert_eq!(good.member_pk_bytes, keys);
-
-    // Outsider key: no member match, no sigs_ok.
-    let (outsider_sk, outsider_pk) = keypair(rng);
-    let bad = session
-        .call::<VerifyQuorumArgs, DiagnoseQuorumResult>(
-            REGISTRY_ID,
-            "diagnose_quorum",
-            &VerifyQuorumArgs {
-                account_id: id,
-                msg: msg.clone(),
-                sigs: sign_all(&msg, &[(&outsider_sk, &outsider_pk)]),
-            },
-            POINT_LIMIT,
-        )
-        .unwrap()
-        .data;
-    assert_eq!(bad.member_matches, 0);
-    assert_eq!(bad.sigs_ok, 0);
+        .expect("account");
+    assert_eq!(view.threshold, 2);
+    assert_eq!(view.nonce, 0);
+    assert_eq!(view.members.len(), 2);
+    assert_eq!(view.members[0].to_bytes(), pk1.to_bytes());
+    assert_eq!(view.members[1].to_bytes(), pk2.to_bytes());
 }

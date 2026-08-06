@@ -17,10 +17,10 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::dto::{PartialDto, PartyMemberDto, ProposalDto, ProposalSummary};
-use crate::MAX_PARTIALS;
+use crate::{MAX_PARTIALS, MAX_PARTY_ROWS, MAX_PROPOSAL_ROWS, PROPOSAL_RETENTION_SECS};
 
 /// Wraps a single `rusqlite::Connection` behind a mutex — `Connection` is
 /// `Send` but not `Sync`, and axum handlers need a `Sync` shared state.
@@ -38,10 +38,12 @@ pub enum CreateOutcome {
     /// been appended (create payloads always arrive with `partials: []`).
     AlreadyExists,
     /// A row already exists under this id with a **different** identity.
-    /// Since `id` = hash of `signed_digest`, this can only happen on a hash
-    /// collision or a client bug (e.g. resubmitting with mutated intent
-    /// fields under a stale digest) — never treated as a normal path.
+    /// The id is the lowercase hex of `signed_digest` (content-addressed, not
+    /// a hash collision) — a different intent under the same digest is an
+    /// attack or client bug, never a normal path.
     Conflict,
+    /// Table row cap reached (M11).
+    RowCapReached,
 }
 
 /// Result of `Store::append_partial`.
@@ -67,8 +69,12 @@ impl Store {
         }
         let conn = Connection::open(path)
             .with_context(|| format!("open sqlite database {}", path.display()))?;
-        conn.execute_batch("PRAGMA journal_mode = WAL;")
-            .context("set WAL journal mode")?;
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = FULL;
+             PRAGMA fullfsync = ON;",
+        )
+        .context("set sqlite durability pragmas")?;
         let store = Self {
             conn: Mutex::new(conn),
         };
@@ -79,6 +85,12 @@ impl Store {
     /// In-memory store for tests — no file on disk.
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory().context("open in-memory sqlite database")?;
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = FULL;
+             PRAGMA fullfsync = ON;",
+        )
+        .context("set sqlite durability pragmas")?;
         let store = Self {
             conn: Mutex::new(conn),
         };
@@ -117,8 +129,20 @@ impl Store {
     /// id, see `dto::digest_to_id`). `digest` is the normalized
     /// `"0x"+lowercase-hex` digest string, stored redundantly for cheap
     /// `SELECT digest` listing without a full JSON parse.
-    pub fn create_proposal(&self, id: &str, digest: &str, dto: &ProposalDto) -> Result<CreateOutcome> {
+    pub fn create_proposal(
+        &self,
+        id: &str,
+        digest: &str,
+        dto: &ProposalDto,
+    ) -> Result<CreateOutcome> {
+        self.sweep_expired()?;
         let conn = self.conn.lock().expect("db mutex poisoned");
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM proposals", [], |row| row.get(0))
+            .context("count proposals")?;
+        if count as usize >= MAX_PROPOSAL_ROWS {
+            return Ok(CreateOutcome::RowCapReached);
+        }
         let existing: Option<String> = conn
             .query_row(
                 "SELECT body_json FROM proposals WHERE id = ?1",
@@ -136,6 +160,14 @@ impl Store {
             return Ok(if proposal_identity_eq(&existing_dto, dto) {
                 CreateOutcome::AlreadyExists
             } else {
+                tracing::warn!(
+                    id = id,
+                    existing_version = existing_dto.version,
+                    new_version = dto.version,
+                    existing_kind = ?existing_dto.kind,
+                    new_kind = ?dto.kind,
+                    "content-addressed id conflict: different intent under same digest"
+                );
                 CreateOutcome::Conflict
             });
         }
@@ -164,13 +196,19 @@ impl Store {
             .transpose()
     }
 
-    /// Summaries for `GET /v1/proposals`, most recently created first.
-    pub fn list_proposals(&self) -> Result<Vec<ProposalSummary>> {
+    /// Summaries for `GET /v1/proposals`, most recently created first (M11 pagination).
+    pub fn list_proposals(&self, limit: u32, offset: u32) -> Result<Vec<ProposalSummary>> {
+        self.sweep_expired()?;
         let conn = self.conn.lock().expect("db mutex poisoned");
         let mut stmt = conn
-            .prepare("SELECT id, digest, body_json, created_at FROM proposals ORDER BY created_at DESC, id ASC")
+            .prepare(
+                "SELECT id, digest, body_json, created_at FROM proposals \
+                 ORDER BY created_at DESC, id ASC LIMIT ?1 OFFSET ?2",
+            )
             .context("prepare list query")?;
-        let mut rows = stmt.query([]).context("run list query")?;
+        let mut rows = stmt
+            .query(params![limit, offset])
+            .context("run list query")?;
         let mut out = Vec::new();
         while let Some(row) = rows.next().context("step list query")? {
             let id: String = row.get(0)?;
@@ -211,12 +249,17 @@ impl Store {
         let mut dto: ProposalDto =
             serde_json::from_str(&body_json).context("parse stored proposal body")?;
 
-        let new_pk_norm = partial.signer_pk.trim_start_matches("0x").to_ascii_lowercase();
+        let new_pk_norm = partial
+            .signer_pk
+            .trim_start_matches("0x")
+            .to_ascii_lowercase();
         let digest_before = dto.signed_digest.clone();
 
-        if let Some(existing) = dto.partials.iter_mut().find(|p| {
-            p.signer_pk.trim_start_matches("0x").to_ascii_lowercase() == new_pk_norm
-        }) {
+        if let Some(existing) = dto
+            .partials
+            .iter_mut()
+            .find(|p| p.signer_pk.trim_start_matches("0x").to_ascii_lowercase() == new_pk_norm)
+        {
             existing.sig = partial.sig;
             // Keep stored signer_pk as already-normalized from the first insert.
         } else {
@@ -231,7 +274,8 @@ impl Store {
             "append_partial must never touch signed_digest"
         );
 
-        let new_body_json = serde_json::to_string(&dto).context("serialize updated proposal body")?;
+        let new_body_json =
+            serde_json::to_string(&dto).context("serialize updated proposal body")?;
         conn.execute(
             "UPDATE proposals SET body_json = ?1 WHERE id = ?2",
             params![new_body_json, id],
@@ -250,6 +294,7 @@ impl Store {
         name: &str,
         note: Option<&str>,
     ) -> Result<PartyMemberDto> {
+        self.sweep_expired()?;
         let conn = self.conn.lock().expect("db mutex poisoned");
         let existing_joined_at: Option<i64> = conn
             .query_row(
@@ -259,6 +304,14 @@ impl Store {
             )
             .optional()
             .context("query existing party member")?;
+        if existing_joined_at.is_none() {
+            let count: i64 = conn
+                .query_row("SELECT COUNT(*) FROM party", [], |row| row.get(0))
+                .context("count party rows")?;
+            if count as usize >= MAX_PARTY_ROWS {
+                anyhow::bail!("party roster row cap reached");
+            }
+        }
         let joined_at = existing_joined_at.unwrap_or_else(now_unix);
         conn.execute(
             "INSERT INTO party (pk, name, note, joined_at) VALUES (?1, ?2, ?3, ?4)
@@ -274,13 +327,19 @@ impl Store {
         })
     }
 
-    /// Roster for `GET /v1/party`, earliest signup first.
-    pub fn list_party(&self) -> Result<Vec<PartyMemberDto>> {
+    /// Roster for `GET /v1/party`, earliest signup first (M11 pagination).
+    pub fn list_party(&self, limit: u32, offset: u32) -> Result<Vec<PartyMemberDto>> {
+        self.sweep_expired()?;
         let conn = self.conn.lock().expect("db mutex poisoned");
         let mut stmt = conn
-            .prepare("SELECT pk, name, note, joined_at FROM party ORDER BY joined_at ASC, pk ASC")
+            .prepare(
+                "SELECT pk, name, note, joined_at FROM party \
+                 ORDER BY joined_at ASC, pk ASC LIMIT ?1 OFFSET ?2",
+            )
             .context("prepare party list query")?;
-        let mut rows = stmt.query([]).context("run party list query")?;
+        let mut rows = stmt
+            .query(params![limit, offset])
+            .context("run party list query")?;
         let mut out = Vec::new();
         while let Some(row) = rows.next().context("step party list query")? {
             out.push(PartyMemberDto {
@@ -293,6 +352,17 @@ impl Store {
         Ok(out)
     }
 
+    /// Deletes proposal rows older than [`PROPOSAL_RETENTION_SECS`] (M11 TTL).
+    fn sweep_expired(&self) -> Result<()> {
+        let cutoff = now_unix() - PROPOSAL_RETENTION_SECS;
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute(
+            "DELETE FROM proposals WHERE created_at < ?1",
+            params![cutoff],
+        )
+        .context("sweep expired proposals")?;
+        Ok(())
+    }
 }
 
 fn now_unix() -> i64 {
@@ -397,7 +467,7 @@ mod tests {
             _ => panic!("expected Appended (last-write-wins replace)"),
         }
 
-        let summaries = store.list_proposals().unwrap();
+        let summaries = store.list_proposals(50, 0).unwrap();
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].partials_count, 1);
         assert_eq!(summaries[0].id, id);
@@ -415,13 +485,7 @@ mod tests {
             let pk = format!("0x{}", hex::encode(vec![i as u8; 96]));
             let sig = format!("0x{}", hex::encode(vec![0x22u8; 48]));
             match store
-                .append_partial(
-                    &id,
-                    PartialDto {
-                        signer_pk: pk,
-                        sig,
-                    },
-                )
+                .append_partial(&id, PartialDto { signer_pk: pk, sig })
                 .unwrap()
             {
                 AppendOutcome::Appended(_) => {}
@@ -513,13 +577,7 @@ mod tests {
         let pk = "0x".to_string() + &"11".repeat(96);
         let sig = "0x".to_string() + &"22".repeat(48);
         match store
-            .append_partial(
-                &id,
-                PartialDto {
-                    signer_pk: pk,
-                    sig,
-                },
-            )
+            .append_partial(&id, PartialDto { signer_pk: pk, sig })
             .unwrap()
         {
             AppendOutcome::Appended(dto) => {
@@ -636,11 +694,11 @@ mod tests {
         store
             .upsert_party_member(&pk, "Alice", Some("first signup"))
             .expect("upsert");
-        let first_list = store.list_party().expect("list");
+        let first_list = store.list_party(50, 0).expect("list");
         assert_eq!(first_list.len(), 1);
         assert_eq!(first_list[0].name, "Alice");
 
-        let second_list = store.list_party().expect("list again");
+        let second_list = store.list_party(50, 0).expect("list again");
         assert_eq!(second_list.len(), 1);
         assert_eq!(second_list[0].pk, pk);
     }
@@ -661,7 +719,7 @@ mod tests {
         assert_eq!(second.note.as_deref(), Some("now with a note"));
         assert_eq!(second.joined_at, first.joined_at);
 
-        let list = store.list_party().expect("list");
+        let list = store.list_party(50, 0).expect("list");
         assert_eq!(list.len(), 1, "upsert must not create a duplicate row");
         assert_eq!(list[0].name, "Alice Renamed");
     }

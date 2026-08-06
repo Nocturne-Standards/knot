@@ -1,12 +1,9 @@
-// Plain JS, no build step. Token from index.html.
-// When TOKEN is still "__TOKEN__" (static Lab / Cloudflare), use in-browser MockLedger.
-// When knot-tool serve injects a real token, call the live /api/* mock or testnet backend.
+// Plain JS, no build step. Local `knot-tool serve` uses HttpOnly session cookies
+// (bootstrap via `/?code=…` printed by the CLI). Static Cloudflare Lab sets
+// `window.KNOT_FRONTEND_MOCK === true` explicitly — never inferred from a
+// missing token placeholder.
 
-const TOKEN = window.KNOT_TOOL_TOKEN;
-const USE_FRONTEND_MOCK =
-  window.KNOT_FRONTEND_MOCK === true ||
-  !TOKEN ||
-  TOKEN === "__TOKEN__";
+const USE_FRONTEND_MOCK = window.KNOT_FRONTEND_MOCK === true;
 
 const STORY = {
   cast: ["alice", "bob", "carol"],
@@ -62,6 +59,10 @@ let selectedCouncilId = null;
 let selectedProposalId = null;
 /** Beat 5: single active approve-as signer. */
 let activePropSigner = null;
+/** Developer drawer: quorum verify intent confirmed. */
+let quorumIntentConfirmed = false;
+/** Developer drawer: change_account intent confirmed. */
+let changeAccountIntentConfirmed = false;
 /** Beat 1: who you are (blue header chip). */
 let youIdentity = null;
 let cachedIdentities = [];
@@ -75,9 +76,9 @@ async function api(path, opts = {}) {
   }
   const res = await fetch(path, {
     ...opts,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      "X-Knot-Token": TOKEN,
       ...(opts.headers || {}),
     },
   });
@@ -85,7 +86,12 @@ async function api(path, opts = {}) {
   let body;
   try { body = JSON.parse(text); } catch { body = text; }
   if (!res.ok) {
-    const msg = typeof body === "string" ? body : (body.error || JSON.stringify(body));
+    const msg =
+      typeof body === "object" && body !== null && typeof body.message === "string"
+        ? body.message
+        : typeof body === "string"
+          ? body
+          : JSON.stringify(body);
     throw new Error(`${res.status}: ${msg}`);
   }
   return body;
@@ -195,6 +201,149 @@ function applyDemoMode(mode) {
   if (badge) {
     badge.dataset.mode = demoMode;
     badge.textContent = demoMode === "testnet" ? "Testnet" : "Mock";
+  }
+  const drawer = el("dev-drawer");
+  if (drawer) drawer.hidden = demoMode !== "testnet";
+}
+
+function parseSignerList(raw) {
+  return String(raw || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function syncQuorumSubmitGate() {
+  const btn = el("btn-quorum-submit");
+  if (btn) btn.disabled = !quorumIntentConfirmed;
+}
+
+function syncChangeSubmitGate() {
+  const btn = el("btn-change-submit");
+  if (btn) btn.disabled = !changeAccountIntentConfirmed;
+}
+
+async function quorumPreview() {
+  quorumIntentConfirmed = false;
+  syncQuorumSubmitGate();
+  const account = Number(el("quorum-account")?.value || 0);
+  const msg = el("quorum-msg")?.value || "";
+  const signers = parseSignerList(el("quorum-signers")?.value);
+  if (!msg || signers.length === 0) {
+    showErrorOutcome("quorum-outcome", "Enter a message and at least one signer.");
+    return;
+  }
+  try {
+    const out = await api("/api/quorum/preview", {
+      method: "POST",
+      body: JSON.stringify({ account, msg, signers }),
+    });
+    const card = el("quorum-preview-card");
+    const fp = el("quorum-fingerprint");
+    if (fp) {
+      fp.innerHTML =
+        `mnemonic: ${escapeHtml(out.digest_mnemonic)} · ` +
+        `digest: ${escapeHtml(String(out.digest_hex).slice(0, 18))}…` +
+        (out.note ? `<br><span class="muted">${escapeHtml(out.note)}</span>` : "");
+    }
+    if (card) card.hidden = false;
+    setOutcome(
+      "quorum-outcome",
+      `<span class="outcome-meta">Preview ready — confirm fingerprint before submit.</span>`,
+      true
+    );
+  } catch (e) {
+    showErrorOutcome("quorum-outcome", e.message);
+  }
+}
+
+function confirmQuorumIntent() {
+  quorumIntentConfirmed = true;
+  syncQuorumSubmitGate();
+  showToast("Quorum intent confirmed - Submit unlocked");
+}
+
+async function quorumSubmit() {
+  if (!quorumIntentConfirmed) {
+    showErrorOutcome("quorum-outcome", "Confirm the fingerprint first.");
+    return;
+  }
+  const account = Number(el("quorum-account")?.value || 0);
+  const msg = el("quorum-msg")?.value || "";
+  const signers = parseSignerList(el("quorum-signers")?.value);
+  try {
+    const out = await api("/api/quorum/submit", {
+      method: "POST",
+      body: JSON.stringify({ account, msg, signers, confirm: true }),
+    });
+    showSubmitOutcome("quorum-outcome", out);
+    quorumIntentConfirmed = false;
+    syncQuorumSubmitGate();
+  } catch (e) {
+    showErrorOutcome("quorum-outcome", e.message);
+  }
+}
+
+async function changeAccountPreview() {
+  changeAccountIntentConfirmed = false;
+  syncChangeSubmitGate();
+  const account = Number(el("change-account-id")?.value || 0);
+  const new_members = parseSignerList(el("change-new-members")?.value);
+  const new_threshold = Number(el("change-new-threshold")?.value || 1);
+  const signers = parseSignerList(el("change-signers")?.value);
+  if (new_members.length === 0 || signers.length === 0) {
+    showErrorOutcome("change-outcome", "Enter new members and signers.");
+    return;
+  }
+  try {
+    const out = await api("/api/change-account/preview", {
+      method: "POST",
+      body: JSON.stringify({ account, new_members, new_threshold, signers }),
+    });
+    const card = el("change-preview-card");
+    const fp = el("change-fingerprint");
+    if (fp) {
+      fp.innerHTML =
+        `mnemonic: ${escapeHtml(out.digest_mnemonic)} · ` +
+        `digest: ${escapeHtml(String(out.digest_hex).slice(0, 18))}…` +
+        (out.note ? `<br><span class="muted">${escapeHtml(out.note)}</span>` : "");
+    }
+    if (card) card.hidden = false;
+    setOutcome(
+      "change-outcome",
+      `<span class="outcome-meta">Preview ready — confirm digest before submit.</span>`,
+      true
+    );
+  } catch (e) {
+    showErrorOutcome("change-outcome", e.message);
+  }
+}
+
+function confirmChangeAccountIntent() {
+  changeAccountIntentConfirmed = true;
+  syncChangeSubmitGate();
+  showToast("Change-account intent confirmed - Submit unlocked");
+}
+
+async function changeAccountSubmit() {
+  if (!changeAccountIntentConfirmed) {
+    showErrorOutcome("change-outcome", "Confirm the digest first.");
+    return;
+  }
+  const account = Number(el("change-account-id")?.value || 0);
+  const new_members = parseSignerList(el("change-new-members")?.value);
+  const new_threshold = Number(el("change-new-threshold")?.value || 1);
+  const signers = parseSignerList(el("change-signers")?.value);
+  try {
+    const out = await api("/api/change-account/submit", {
+      method: "POST",
+      body: JSON.stringify({ account, new_members, new_threshold, signers, confirm: true }),
+    });
+    showSubmitOutcome("change-outcome", out);
+    changeAccountIntentConfirmed = false;
+    syncChangeSubmitGate();
+  } catch (e) {
+    showErrorOutcome("change-outcome", e.message);
   }
 }
 
@@ -508,8 +657,8 @@ function renderCouncilCard(c, { onSelect, showDetail } = {}) {
   card.innerHTML =
     detailBtn +
     `<span class="council-card-icon">${COUNCIL_ICON_SVG}</span>` +
-    `<span class="council-card-id">Council #${c.id}</span>` +
-    `<span class="council-card-meta">Threshold ${c.threshold}-of-${c.members.length || "?"}</span>`;
+    `<span class="council-card-id">Council #${escapeHtml(String(c.id))}</span>` +
+    `<span class="council-card-meta">Threshold ${escapeHtml(String(c.threshold))}-of-${escapeHtml(String(c.members.length || "?"))}</span>`;
   card.addEventListener("click", (ev) => {
     if (ev.target.closest("[data-detail]")) return;
     if (onSelect) onSelect(c);
@@ -680,7 +829,7 @@ function closeCouncilDetail() {
 }
 
 async function fetchCouncilOutcome(id) {
-  setOutcome("query-outcome", `<span class="outcome-meta">Looking up council #${id}…</span>`, true);
+  setOutcome("query-outcome", `<span class="outcome-meta">Looking up council #${escapeHtml(String(id))}…</span>`, true);
   try {
     const out = await api(`/api/account/${id}`);
     if (!out) {
@@ -708,7 +857,7 @@ async function fetchCouncilOutcome(id) {
     });
     setOutcome(
       "query-outcome",
-      `${outcomeChip(true)}<span class="outcome-title">Council #${id}</span>` +
+      `${outcomeChip(true)}<span class="outcome-title">Council #${escapeHtml(String(id))}</span>` +
         `<span class="outcome-meta"><strong>Threshold:</strong> ${out.threshold}-of-${memberNames.length || "?"}</span>` +
         `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(memberNames.length ? memberNames.join(", ") : "(see keys)")}</span>`,
       true
@@ -775,7 +924,7 @@ async function submitCreateAccount() {
       updateHeaderCouncil({ animate: true });
       setOutcome(
         "create-outcome",
-        `${outcomeChip(true)}<span class="outcome-title">Council #${createdId} formed</span>` +
+        `${outcomeChip(true)}<span class="outcome-title">Council #${escapeHtml(String(createdId))} formed</span>` +
           `<span class="outcome-meta"><strong>Threshold:</strong> ${threshold}-of-${members.length}</span>` +
           `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(members.join(", "))}</span>`,
         true
@@ -860,7 +1009,7 @@ async function proposalCreate() {
     if (submitOk(submit)) {
       setOutcome(
         "prop-outcome",
-        `${outcomeChip(true)}<span class="outcome-title">Proposal #${id}</span>` +
+        `${outcomeChip(true)}<span class="outcome-title">Proposal #${escapeHtml(String(id))}</span>` +
           `<span class="outcome-meta">${escapeHtml(purpose)} · ${escapeHtml(description)}</span>`,
         true
       );
@@ -969,7 +1118,7 @@ async function proposalFinalize() {
     if (submitOk(out)) {
       setOutcome(
         "finalize-outcome",
-        `${outcomeChip(true)}<span class="outcome-title">Proposal #${id} finalized</span>`,
+        `${outcomeChip(true)}<span class="outcome-title">Proposal #${escapeHtml(String(id))} finalized</span>`,
         true
       );
     } else {
@@ -1241,7 +1390,16 @@ on("btn-close-council-detail", "click", () => closeCouncilDetail());
   try {
     const status = await api("/api/setup/status");
     if (status && status.demo_mode) applyDemoMode(status.demo_mode);
-  } catch (_) {}
+  } catch (e) {
+    if (!USE_FRONTEND_MOCK) {
+      showLabBanner(
+        "<strong>Session required.</strong> Open the bootstrap URL printed by " +
+          "<code>knot-tool serve</code> (one-shot <code>?code=</code>).",
+        false
+      );
+      return;
+    }
+  }
   try {
     await ensureStoryCast();
   } catch (e) {
@@ -1268,3 +1426,9 @@ window.proposalCreate = proposalCreate;
 window.proposalApprove = proposalApprove;
 window.proposalFinalize = proposalFinalize;
 window.confirmIntent = confirmIntent;
+window.quorumPreview = quorumPreview;
+window.confirmQuorumIntent = confirmQuorumIntent;
+window.quorumSubmit = quorumSubmit;
+window.changeAccountPreview = changeAccountPreview;
+window.confirmChangeAccountIntent = confirmChangeAccountIntent;
+window.changeAccountSubmit = changeAccountSubmit;

@@ -11,11 +11,9 @@
 //! parity" section for the exact field-for-field mapping to
 //! `knot-tool/src/blob.rs`'s `BlobFile`/`IntentFile`/`PartialFile`.
 //!
-//! The collector never decodes intent fields semantically — those pass
-//! through as opaque strings/numbers. Only `signed_digest` (drives the
-//! content-addressed `id`) and `signer_pk` (drives partial de-duplication)
-//! are hex-validated and normalized here. Digest recomputation stays in
-//! `knot-tool` (kind-gated: §4a or council-resolve).
+//! The collector recomputes §4a digests via `knot-encoding` (C1) and verifies
+//! BLS signatures on partials and party signup (M10/M12). Hex parsing for
+//! intent fields follows the same single-`0x` strip as `knot-tool` hex helpers.
 
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -133,13 +131,14 @@ pub struct ProposalSummary {
 
 /// `POST /v1/party` request body — sign up (or refresh) on the party-finder
 /// roster. `pk` accepts either hex (with or without `0x`) or base58, mirroring
-/// `knot-tool::keystore::parse_pk`'s accepted formats; this crate never
-/// constructs a `BlsPublicKey` from it (no `dusk_core` dependency — see the
-/// module doc in `lib.rs`), it only validates the decoded length is 96 bytes.
+/// `knot-tool::keystore::parse_pk`'s accepted formats. `sig` must be a valid
+/// BLS signature over [`crate::verify::party_signup_preimage`] for `name` and
+/// the normalized pk bytes (M12).
 #[derive(Debug, Clone, Deserialize)]
 pub struct PartySignupDto {
     pub name: String,
     pub pk: String,
+    pub sig: String,
     #[serde(default)]
     pub note: Option<String>,
 }
@@ -184,7 +183,10 @@ pub fn normalize_pk(s: &str) -> Result<String, String> {
 /// `signed_digest` (32 bytes) and `signer_pk` (96 bytes) — the two fields
 /// the collector actually inspects.
 pub fn normalize_hex(s: &str, expected_bytes: usize) -> Result<String, String> {
-    let stripped = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    let stripped = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s);
     let bytes = hex::decode(stripped).map_err(|e| format!("invalid hex: {e}"))?;
     if bytes.len() != expected_bytes {
         return Err(format!(

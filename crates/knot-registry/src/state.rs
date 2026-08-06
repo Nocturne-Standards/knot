@@ -6,11 +6,11 @@ mod knot_registry {
     use dusk_bytes::Serializable;
     use dusk_core::abi;
     use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-    use knot_encoding::change_account_message;
+    use knot_encoding::change_account_message_v3;
 
     use knot_registry::call_types::{
-        AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult,
-        MultisigAccountView, SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+        ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
+        VerifyQuorumAggregateArgs, VerifyQuorumArgs,
     };
 
     /// Soft cap on committee size — enough for operator councils; bounds
@@ -50,10 +50,7 @@ mod knot_registry {
             validate_committee(&args.members, args.threshold);
 
             let id = self.next_id;
-            self.next_id = self
-                .next_id
-                .checked_add(1)
-                .expect("next_id overflow");
+            self.next_id = self.next_id.checked_add(1).expect("next_id overflow");
             self.accounts.insert(
                 id,
                 MultisigAccount {
@@ -74,67 +71,9 @@ mod knot_registry {
             })
         }
 
-        /// Same lookup as `account`, but returns only scalars — no
-        /// `BlsPublicKey` values on the wire. Diagnostic for the testnet
-        /// free-read path that always returns `None` from `account`.
-        pub fn account_meta(&self, id: u64) -> Option<AccountMeta> {
-            self.accounts.get(&id).map(|a| AccountMeta {
-                threshold: a.threshold,
-                nonce: a.nonce,
-                members_len: a.members.len() as u32,
-            })
-        }
-
-        /// Raw compressed member public keys (96 bytes each). Diagnostic for
-        /// comparing on-chain membership against an off-chain keystore.
-        pub fn member_key_bytes(&self, id: u64) -> Option<Vec<Vec<u8>>> {
-            self.accounts.get(&id).map(|a| {
-                a.members
-                    .iter()
-                    .map(|pk| pk.to_bytes().to_vec())
-                    .collect()
-            })
-        }
-
-        /// Next account id that `create_account` will hand out. Free-read
-        /// probe for whether *any* of this contract's state is visible to
-        /// RUES queries (should be >0 after successful creates).
+        /// Next account id that `create_account` will hand out.
         pub fn next_account_id(&self) -> u64 {
             self.next_id
-        }
-
-        /// Breaks `quorum_met` into observable counters + dumps member key
-        /// bytes. Thin wrapper over [`quorum_counts`] plus a member-pk dump.
-        /// Used on testnet where free-read `verify_quorum` returns HTTP 500
-        /// and `change_account` only surfaces a single panic string.
-        pub fn diagnose_quorum(&self, args: VerifyQuorumArgs) -> DiagnoseQuorumResult {
-            let Some(account) = self.accounts.get(&args.account_id) else {
-                return DiagnoseQuorumResult {
-                    exists: false,
-                    threshold: 0,
-                    members_len: 0,
-                    member_matches: 0,
-                    sigs_ok: 0,
-                    member_pk_bytes: Vec::new(),
-                };
-            };
-
-            let member_pk_bytes: Vec<Vec<u8>> = account
-                .members
-                .iter()
-                .map(|pk| pk.to_bytes().to_vec())
-                .collect();
-            let (member_matches, sigs_ok) =
-                quorum_counts(&account.members, &args.msg, &args.sigs);
-
-            DiagnoseQuorumResult {
-                exists: true,
-                threshold: account.threshold,
-                members_len: account.members.len() as u32,
-                member_matches,
-                sigs_ok,
-                member_pk_bytes,
-            }
         }
 
         /// Pure verification primitive — see `VerifyQuorumArgs`'s doc for
@@ -158,7 +97,7 @@ mod knot_registry {
         /// Returns `false` (never panics) for an unknown account, a
         /// `signer_keys` set smaller than the threshold, a set containing a
         /// duplicate or non-member key, or an aggregate signature that
-        /// doesn't verify — mirrors `verify_quorum`'s bool convention.
+        /// doesn't verify — same bool convention as `verify_quorum`.
         pub fn verify_quorum_aggregate(&self, args: VerifyQuorumAggregateArgs) -> bool {
             let Some(account) = self.accounts.get(&args.account_id) else {
                 return false;
@@ -195,19 +134,18 @@ mod knot_registry {
                 .get(&args.account_id)
                 .unwrap_or_else(|| panic!("no such multisig account"));
 
-            let member_pks: Vec<[u8; 96]> = args
-                .new_members
-                .iter()
-                .map(|pk| pk.to_bytes())
-                .collect();
-            let msg = change_account_message(
+            let member_pks: Vec<[u8; 96]> =
+                args.new_members.iter().map(|pk| pk.to_bytes()).collect();
+            let msg = change_account_message_v3(
+                u64::from(abi::chain_id()),
+                &abi::self_id().to_bytes(),
                 args.account_id,
                 account.nonce,
                 &member_pks,
                 args.new_threshold,
-            );
-            let (matched, verified) =
-                quorum_counts(&account.members, &msg, &args.sigs);
+            )
+            .expect("change_account member set within encoding caps");
+            let (matched, verified) = quorum_counts(&account.members, &msg, &args.sigs);
             if verified < account.threshold {
                 panic!(
                     "change_account: quorum not met by current members \
@@ -222,10 +160,7 @@ mod knot_registry {
             let account = self.accounts.get_mut(&args.account_id).unwrap();
             account.members = args.new_members;
             account.threshold = args.new_threshold;
-            account.nonce = account
-                .nonce
-                .checked_add(1)
-                .expect("nonce overflow");
+            account.nonce = account.nonce.checked_add(1).expect("nonce overflow");
             abi::emit("account_changed", args.account_id);
         }
     }
@@ -274,11 +209,7 @@ mod knot_registry {
     /// Returns `(member_matches, sigs_ok)` — how many sig entries named a
     /// real member, and how many distinct members passed `verify_bls`.
     /// Early-rejects when `sigs.len() > members.len()` (audit I6).
-    fn quorum_counts(
-        members: &[BlsPublicKey],
-        msg: &[u8],
-        sigs: &[SignatureEntry],
-    ) -> (u32, u32) {
+    fn quorum_counts(members: &[BlsPublicKey], msg: &[u8], sigs: &[SignatureEntry]) -> (u32, u32) {
         if sigs.len() > members.len() {
             return (0, 0);
         }

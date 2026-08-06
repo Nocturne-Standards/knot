@@ -4,7 +4,8 @@
 //! This module re-exports them so existing `#[path]` includes and contract
 //! `use` paths keep working.
 
+#[allow(unused_imports)]
 pub use knot_encoding::call_types::{
-    AccountMeta, ChangeAccountArgs, CreateAccountArgs, DiagnoseQuorumResult, MultisigAccountView,
-    SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
+    VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };

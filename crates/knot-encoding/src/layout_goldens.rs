@@ -80,17 +80,14 @@ mod tests {
     use alloc::string::String;
     use alloc::vec;
 
-    use dusk_core::signatures::bls::{
-        PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
-    };
-    use rand::rngs::StdRng;
+    use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
     use rand::SeedableRng;
-    use rkyv::ser::serializers::AllocSerializer;
+    use rand::rngs::StdRng;
     use rkyv::Serialize;
+    use rkyv::ser::serializers::AllocSerializer;
 
     use super::{
-        GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX, GOLDEN_SIGNATURE_ENTRY_HEX,
-        GOLDEN_VERIFY_QUORUM_ARGS_HEX,
+        GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX, GOLDEN_SIGNATURE_ENTRY_HEX, GOLDEN_VERIFY_QUORUM_ARGS_HEX,
     };
     use crate::call_types::{MultisigAccountView, SignatureEntry, VerifyQuorumArgs};
 

@@ -4,7 +4,7 @@
 //!
 //! Axum oneshot coverage lives in `rpc::generic_rpc_smoke` (binary unit tests).
 
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::net::TcpListener;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -12,6 +12,7 @@ use std::time::Duration;
 
 struct ServeProcess {
     child: Child,
+    stderr_buf: std::sync::Arc<std::sync::Mutex<String>>,
 }
 
 impl Drop for ServeProcess {
@@ -45,7 +46,9 @@ fn run_identity_new(store: &Path, name: &str, pwd: &str) {
 }
 
 fn spawn_serve(store: &Path, bind: &str, pwd: &str) -> ServeProcess {
-    let child = Command::new(env!("CARGO_BIN_EXE_knot-tool"))
+    let stderr_buf = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let buf_clone = stderr_buf.clone();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_knot-tool"))
         .args([
             "--store",
             store.to_str().expect("store path utf8"),
@@ -60,10 +63,43 @@ fn spawn_serve(store: &Path, bind: &str, pwd: &str) -> ServeProcess {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn serve");
-    ServeProcess { child }
+    if let Some(stderr) = child.stderr.take() {
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                match line {
+                    Ok(line) => {
+                        if let Ok(mut guard) = buf_clone.lock() {
+                            guard.push_str(&line);
+                            guard.push('\n');
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+    }
+    ServeProcess { child, stderr_buf }
 }
 
-async fn wait_for_serve(serve: &mut ServeProcess, client: &reqwest::Client, base: &str) {
+fn serve_stderr(serve: &ServeProcess) -> String {
+    serve.stderr_buf.lock().expect("stderr lock").clone()
+}
+
+fn extract_bootstrap_code(stderr: &str) -> String {
+    let marker = "code=";
+    let start = stderr
+        .find(marker)
+        .expect("bootstrap code= in serve stderr")
+        + marker.len();
+    let rest = &stderr[start..];
+    let end = rest
+        .find(|c: char| !c.is_ascii_hexdigit())
+        .unwrap_or(rest.len());
+    rest[..end].to_string()
+}
+
+async fn wait_for_serve(serve: &mut ServeProcess, client: &reqwest::Client, base: &str) -> String {
     for _ in 0..120 {
         match serve.child.try_wait() {
             Ok(Some(status)) => {
@@ -71,35 +107,44 @@ async fn wait_for_serve(serve: &mut ServeProcess, client: &reqwest::Client, base
                 if let Some(mut stdout) = serve.child.stdout.take() {
                     stdout.read_to_string(&mut out).ok();
                 }
-                let mut err = String::new();
-                if let Some(mut stderr) = serve.child.stderr.take() {
-                    stderr.read_to_string(&mut err).ok();
-                }
-                panic!(
-                    "serve exited early ({status}): stdout={out} stderr={err}"
-                );
+                let err = serve_stderr(serve);
+                panic!("serve exited early ({status}): stdout={out} stderr={err}");
             }
             Ok(None) => {}
             Err(e) => panic!("try_wait failed: {e}"),
         }
-        if let Ok(resp) = client.get(format!("{base}/")).send().await {
-            if resp.status().is_success() {
-                return;
+        if let Ok(resp) = client.get(format!("{base}/")).send().await
+            && resp.status().is_success()
+        {
+            for _ in 0..40 {
+                let stderr = serve_stderr(serve);
+                if stderr.contains("code=") {
+                    return extract_bootstrap_code(&stderr);
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
+            panic!(
+                "bootstrap code missing from serve stderr: {}",
+                serve_stderr(serve)
+            );
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    panic!("serve never answered at {base}/ within 12s");
+    let err = serve_stderr(serve);
+    panic!("serve never answered at {base}/ within 12s; stderr={err}");
 }
 
-fn extract_token(html: &str) -> String {
-    const PREFIX: &str = "window.KNOT_TOOL_TOKEN = \"";
-    let start = html
-        .find(PREFIX)
-        .expect("KNOT_TOOL_TOKEN in index html")
-        + PREFIX.len();
-    let end = start + html[start..].find('"').expect("token closing quote");
-    html[start..end].to_string()
+async fn bootstrap_session(client: &reqwest::Client, base: &str, code: &str) {
+    let resp = client
+        .get(format!("{base}/?code={code}"))
+        .send()
+        .await
+        .expect("bootstrap");
+    assert!(
+        resp.status().is_success(),
+        "bootstrap final status {}",
+        resp.status()
+    );
 }
 
 #[tokio::test]
@@ -125,8 +170,12 @@ async fn serve_mock_generic_proposal_flow_smoke() {
     let base = format!("http://{bind}");
     let mut serve = spawn_serve(&store, &bind, pwd);
 
-    let client = reqwest::Client::new();
-    wait_for_serve(&mut serve, &client, &base).await;
+    let client = reqwest::Client::builder()
+        .cookie_store(true)
+        .redirect(reqwest::redirect::Policy::limited(4))
+        .build()
+        .expect("http client");
+    let code = wait_for_serve(&mut serve, &client, &base).await;
 
     let html = client
         .get(format!("{base}/"))
@@ -136,18 +185,28 @@ async fn serve_mock_generic_proposal_flow_smoke() {
         .text()
         .await
         .expect("index html");
-    let token = extract_token(&html);
+    assert!(!html.contains("KNOT_TOOL_TOKEN"));
+    assert!(!html.contains("__TOKEN__"));
+    assert!(!html.contains(&code));
 
     let unauthorized = client
         .get(format!("{base}/api/setup/status"))
         .send()
         .await
-        .expect("setup without token");
+        .expect("setup without session");
     assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+    bootstrap_session(&client, &base, &code).await;
+
+    let reuse = client
+        .get(format!("{base}/?code={code}"))
+        .send()
+        .await
+        .expect("reuse otp");
+    assert_eq!(reuse.status(), reqwest::StatusCode::UNAUTHORIZED);
 
     let setup = client
         .get(format!("{base}/api/setup/status"))
-        .header("X-Knot-Token", &token)
         .send()
         .await
         .expect("setup status");
@@ -158,7 +217,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let pm_resolve = client
         .get(format!("{base}/api/pm-resolve/status"))
-        .header("X-Knot-Token", &token)
         .send()
         .await
         .expect("pm-resolve probe");
@@ -166,7 +224,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let create_account = client
         .post(format!("{base}/api/account/create"))
-        .header("X-Knot-Token", &token)
         .json(&serde_json::json!({
             "members": ["alice", "bob", "carol"],
             "threshold": 2
@@ -180,7 +237,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let next_id = client
         .get(format!("{base}/api/proposal/next-id"))
-        .header("X-Knot-Token", &token)
         .send()
         .await
         .expect("next id");
@@ -189,7 +245,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
     let target = format!("0x{}", "ab".repeat(32));
     let create_proposal = client
         .post(format!("{base}/api/proposal/create"))
-        .header("X-Knot-Token", &token)
         .json(&serde_json::json!({
             "account": 0,
             "target": target,
@@ -204,7 +259,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let preview = client
         .get(format!("{base}/api/proposal/0/preview"))
-        .header("X-Knot-Token", &token)
         .send()
         .await
         .expect("preview");
@@ -214,7 +268,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let approve = client
         .post(format!("{base}/api/proposal/0/approve"))
-        .header("X-Knot-Token", &token)
         .json(&serde_json::json!({ "signer": "alice", "confirm": true }))
         .send()
         .await
@@ -223,7 +276,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let status = client
         .get(format!("{base}/api/proposal/0"))
-        .header("X-Knot-Token", &token)
         .send()
         .await
         .expect("status");
@@ -233,7 +285,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let approve_bob = client
         .post(format!("{base}/api/proposal/0/approve"))
-        .header("X-Knot-Token", &token)
         .json(&serde_json::json!({ "signer": "bob", "confirm": true }))
         .send()
         .await
@@ -242,7 +293,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let finalize = client
         .post(format!("{base}/api/proposal/0/finalize"))
-        .header("X-Knot-Token", &token)
         .send()
         .await
         .expect("finalize");
@@ -252,7 +302,6 @@ async fn serve_mock_generic_proposal_flow_smoke() {
 
     let final_status = client
         .get(format!("{base}/api/proposal/0"))
-        .header("X-Knot-Token", &token)
         .send()
         .await
         .expect("final status");
@@ -285,22 +334,16 @@ async fn approve_rejects_non_member_identity() {
     let base = format!("http://{bind}");
     let mut serve = spawn_serve(&store, &bind, pwd);
 
-    let client = reqwest::Client::new();
-    wait_for_serve(&mut serve, &client, &base).await;
-
-    let html = client
-        .get(format!("{base}/"))
-        .send()
-        .await
-        .expect("index")
-        .text()
-        .await
-        .expect("index html");
-    let token = extract_token(&html);
+    let client = reqwest::Client::builder()
+        .cookie_store(true)
+        .redirect(reqwest::redirect::Policy::limited(4))
+        .build()
+        .expect("http client");
+    let code = wait_for_serve(&mut serve, &client, &base).await;
+    bootstrap_session(&client, &base, &code).await;
 
     let create_account = client
         .post(format!("{base}/api/account/create"))
-        .header("X-Knot-Token", &token)
         .json(&serde_json::json!({
             "members": ["alice", "bob"],
             "threshold": 2
@@ -313,7 +356,6 @@ async fn approve_rejects_non_member_identity() {
     let target = format!("0x{}", "cd".repeat(32));
     let create_proposal = client
         .post(format!("{base}/api/proposal/create"))
-        .header("X-Knot-Token", &token)
         .json(&serde_json::json!({
             "account": 0,
             "target": target,
@@ -328,18 +370,19 @@ async fn approve_rejects_non_member_identity() {
 
     let non_member = client
         .post(format!("{base}/api/proposal/0/approve"))
-        .header("X-Knot-Token", &token)
         .json(&serde_json::json!({ "signer": "carol", "confirm": true }))
         .send()
         .await
         .expect("approve carol");
     assert_eq!(non_member.status(), reqwest::StatusCode::FORBIDDEN);
     let err_body = non_member.text().await.expect("error body");
-    assert!(err_body.contains("not a member"));
+    let err: serde_json::Value = serde_json::from_str(&err_body).expect("error json");
+    assert_eq!(err["code"], "not_a_member");
+    assert_eq!(err["message"], "Signer is not a committee member.");
+    assert!(!err_body.contains("registry account"));
 
     let member = client
         .post(format!("{base}/api/proposal/0/approve"))
-        .header("X-Knot-Token", &token)
         .json(&serde_json::json!({ "signer": "alice", "confirm": true }))
         .send()
         .await
