@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Exit codes: bin/EXIT-CODES.md (0 ok / 1 hard / 2 warn).
 # Fail when README (or VERSION_TABLE_FILE) crate versions drift from Cargo.toml.
 set -euo pipefail
 

@@ -1,19 +1,14 @@
-crates/knot-collector/README.md:71:byte-for-byte through this API. They are not shared via `knot-encoding`
+FIELD_GUIDE/rules.md:135:title: Hand-copied mirrors need a repo-rules baseline
 crates/knot-collector/src/store.rs:27:/// Mirrors `chain-gateway-core::db::EventDb`'s pattern.
-crates/knot-registry/src/state.rs:161:        /// doesn't verify — mirrors `verify_quorum`'s bool convention.
 crates/knot-tool/Cargo.toml:22:# format must match byte-for-byte for the contract to accept our args.
-crates/knot-tool/README.md:193:  mirrors the same gate.
 crates/knot-tool/src/chain.rs:20:/// Accepted by current testnet (1.7.x); mirrors `agent-pay-lp`.
 crates/knot-tool/src/collector_client.rs:39:/// One row of `GET /v1/proposals` — mirrors `knot_collector::dto::ProposalSummary`.
 crates/knot-tool/src/collector_client.rs:55:/// `POST /v1/party` request body — mirrors `knot_collector::dto::PartySignupDto`.
-crates/knot-tool/src/collector_client.rs:64:/// Roster row — mirrors `knot_collector::dto::PartyMemberDto`.
-crates/knot-tool/src/mock_ledger.rs:480:    /// Mirrors the mock RPC approve/finalize path: real BLS sign of digest,
 crates/knot-tool/src/registry_types.rs:7://! — see README.md), the wire format must match byte-for-byte; including the
-crates/knot-tool/src/rpc.rs:360:    /// `"mock"` | `"testnet"` — mirrors `DEMO_MODE` (default mock).
 crates/knot-tool/static/mock-ledger.js:558:  /** Lightweight self-check of ledger rules (mirrors Rust unit tests). */
-docs/internal/IMPLEMENTATION.md:1081:disposes of B1/B2 in history. Push the real history to a private mirror first if
 docs/internal/PUBLIC-REPO-STANDARD.md:196:     private mirror (`git remote add private ...; git push private --mirror`) if you
 docs/internal/redeploy-2026-08-domains.md:22:   and dual-write primary + local mirror pins:
 docs/internal/redeploy-2026-08-domains.md:30:   Primary pin lands in `nocturne-deployments/testnet.json`; mirror in
 docs/security-audit-2026-08-04.md:136:write a local copy documented as 'mirrors X byte-for-byte'" and, for
 docs/security-audit-2026-08-04.md:173:copied from a matching test in `prediction-market`) so drift fails CI on
+scripts/check-gate-coverage.sh:49:#   check-repo-rules.sh: no hand-copied mirrors in this repo (reviewed 2026-08-05)

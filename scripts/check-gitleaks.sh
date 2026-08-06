@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Optional: run gitleaks if installed. Missing binary = skip (CI installs it).
+# Optional: run gitleaks if installed. Exit codes: bin/EXIT-CODES.md
+# Missing binary = 2 (warn). Scan finding = 1. Clean / not a git tree misuse = 0/1.
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
@@ -10,8 +11,8 @@ fi
 cd "$ROOT"
 
 if ! command -v gitleaks >/dev/null; then
-  echo "check-gitleaks: gitleaks not on PATH — skip (install for local secret scan)"
-  exit 0
+  echo "check-gitleaks: gitleaks not on PATH — warn (install for local secret scan)" >&2
+  exit 2
 fi
 
 echo "check-gitleaks: gitleaks detect --source ."
