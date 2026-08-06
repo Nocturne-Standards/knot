@@ -106,9 +106,10 @@ if [[ -n "$missing" ]]; then
 fi
 
 # A repo can carry the scripts and still not run them in CI.
-if [[ -f .github/workflows/ci.yml ]]; then
-  if ! grep -q 'scripts/check-' .github/workflows/ci.yml; then
-    echo "BLOCKED: no scripts/check-* invoked in .github/workflows/ci.yml" >&2
+# Accept any workflow under .github/workflows/ (ci.yml, hygiene.yml, …).
+if [[ -d .github/workflows ]]; then
+  if ! grep -Rq 'scripts/check-' .github/workflows --include='*.yml' --include='*.yaml' 2>/dev/null; then
+    echo "BLOCKED: no scripts/check-* invoked in .github/workflows/*.yml" >&2
     echo "  Hooks are bypassable with --no-verify; CI is the backstop that is not." >&2
     fail=1
   fi
