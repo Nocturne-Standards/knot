@@ -7,5 +7,8 @@
 pub mod blob;
 pub mod bls;
 pub mod collector_client;
+pub mod deployments;
+pub mod diagnose;
+pub mod hex_util;
 pub mod membership;
 pub mod mock_ledger;

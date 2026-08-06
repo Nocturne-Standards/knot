@@ -13,7 +13,7 @@
 //! here. Only the party-roster shapes (which `knot-tool` has no local
 //! equivalent of) get their own small structs below.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -57,11 +57,12 @@ fn default_summary_kind() -> String {
 struct PartySignupRequest<'a> {
     name: &'a str,
     pk: &'a str,
+    sig: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     note: Option<&'a str>,
 }
 
-/// Roster row — mirrors `knot_collector::dto::PartyMemberDto`.
+/// Roster row for `GET /v1/party` (collector wire shape).
 #[derive(Debug, Clone, Deserialize)]
 pub struct PartyMember {
     pub name: String,
@@ -92,6 +93,7 @@ impl CollectorClient {
             .ok_or_else(|| {
                 anyhow::anyhow!("no collector URL: pass --collector or set {URL_ENV}")
             })?;
+        validate_collector_url(&base_url)?;
         let user = std::env::var(USER_ENV).ok().filter(|s| !s.is_empty());
         let password = std::env::var(PASSWORD_ENV).ok();
         Ok(Self {
@@ -133,17 +135,29 @@ impl CollectorClient {
             .send()
             .await
             .context("POST /v1/proposals")?;
-        Self::into_ok(resp).await?.json().await.context("parse push response")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse push response")
     }
 
     /// `GET /v1/proposals/:id` — full blob, including all partials so far.
     pub async fn pull(&self, id: &str) -> Result<BlobFile> {
+        let id = validate_proposal_id(id)?;
         let resp = self
-            .auth(self.http.get(format!("{}/v1/proposals/{id}", self.base_url)))
+            .auth(
+                self.http
+                    .get(format!("{}/v1/proposals/{id}", self.base_url)),
+            )
             .send()
             .await
             .context("GET /v1/proposals/:id")?;
-        Self::into_ok(resp).await?.json().await.context("parse proposal body")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse proposal body")
     }
 
     /// `GET /v1/proposals` — summary list (no partial bodies).
@@ -153,20 +167,32 @@ impl CollectorClient {
             .send()
             .await
             .context("GET /v1/proposals")?;
-        Self::into_ok(resp).await?.json().await.context("parse proposal list")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse proposal list")
     }
 
     /// `POST /v1/proposals/:id/partials` — appends or **replaces** the partial
     /// for `signer_pk` (collector last-write-wins; never 409 on duplicate pk).
     /// Returns the full updated blob (digest unchanged).
     pub async fn append_partial(&self, id: &str, partial: &PartialFile) -> Result<BlobFile> {
+        let id = validate_proposal_id(id)?;
         let resp = self
-            .auth(self.http.post(format!("{}/v1/proposals/{id}/partials", self.base_url)))
+            .auth(
+                self.http
+                    .post(format!("{}/v1/proposals/{id}/partials", self.base_url)),
+            )
             .json(partial)
             .send()
             .await
             .context("POST /v1/proposals/:id/partials")?;
-        Self::into_ok(resp).await?.json().await.context("parse appended proposal")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse appended proposal")
     }
 
     /// `GET /v1/party` — full roster.
@@ -176,18 +202,93 @@ impl CollectorClient {
             .send()
             .await
             .context("GET /v1/party")?;
-        Self::into_ok(resp).await?.json().await.context("parse party list")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse party list")
     }
 
     /// `POST /v1/party` — signup, or upsert-by-`pk` if already present.
-    /// Collector has no DELETE roster route; clear the DB to remove a row.
-    pub async fn signup_party(&self, name: &str, pk: &str, note: Option<&str>) -> Result<PartyMember> {
+    /// `sig` must be a BLS signature over [`knot_encoding::party_signup_preimage`]
+    /// for `name` and the normalized pk bytes (M12).
+    pub async fn signup_party(
+        &self,
+        name: &str,
+        pk: &str,
+        sig: &str,
+        note: Option<&str>,
+    ) -> Result<PartyMember> {
         let resp = self
             .auth(self.http.post(format!("{}/v1/party", self.base_url)))
-            .json(&PartySignupRequest { name, pk, note })
+            .json(&PartySignupRequest {
+                name,
+                pk,
+                sig,
+                note,
+            })
             .send()
             .await
             .context("POST /v1/party")?;
-        Self::into_ok(resp).await?.json().await.context("parse party signup response")
+        Self::into_ok(resp)
+            .await?
+            .json()
+            .await
+            .context("parse party signup response")
+    }
+}
+
+/// R5: collector URL must be `https://` or HTTP loopback before Basic Auth.
+pub fn validate_collector_url(raw: &str) -> Result<()> {
+    let parsed = reqwest::Url::parse(raw.trim()).context("invalid collector URL")?;
+    match parsed.scheme() {
+        "https" => Ok(()),
+        "http" => match parsed.host() {
+            Some(url::Host::Domain("localhost")) => Ok(()),
+            Some(url::Host::Ipv4(ip)) if ip.is_loopback() => Ok(()),
+            Some(url::Host::Ipv6(ip)) if ip.is_loopback() => Ok(()),
+            _ => bail!(
+                "refusing collector URL '{raw}': HTTP is allowed only on loopback; use https:// elsewhere (R5)"
+            ),
+        },
+        other => bail!(
+            "refusing collector URL scheme '{other}': only https:// or http://loopback are allowed (R5)"
+        ),
+    }
+}
+
+/// R11: content-addressed proposal ids are exactly 64 hex chars.
+pub fn validate_proposal_id(id: &str) -> Result<String> {
+    let id = id.to_ascii_lowercase();
+    if id.len() != 64 || !id.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!("proposal id must be exactly 64 hex characters");
+    }
+    Ok(id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn r5_accepts_https_and_loopback_http() {
+        assert!(validate_collector_url("https://collector.example.com").is_ok());
+        assert!(validate_collector_url("http://127.0.0.1:8899").is_ok());
+        assert!(validate_collector_url("http://localhost:8899").is_ok());
+        assert!(validate_collector_url("http://[::1]:8899").is_ok());
+    }
+
+    #[test]
+    fn r5_rejects_plain_http_remote() {
+        let err = validate_collector_url("http://evil.example.com:8899").unwrap_err();
+        assert!(err.to_string().contains("R5"), "{err}");
+    }
+
+    #[test]
+    fn r11_validates_proposal_id() {
+        let good = "a".repeat(64);
+        assert_eq!(validate_proposal_id(&good).unwrap(), good);
+        assert!(validate_proposal_id("abc").is_err());
+        assert!(validate_proposal_id(&"g".repeat(64)).is_err());
     }
 }

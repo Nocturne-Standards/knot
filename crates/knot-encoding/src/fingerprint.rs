@@ -97,10 +97,9 @@ mod tests {
     fn bip39_golden_vector_ent256_all_zero() {
         let entropy = [0u8; 32];
         let expected = [
-            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
-            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
-            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
-            "abandon", "abandon", "abandon", "abandon", "abandon", "art",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "art",
         ]
         .join(" ");
         assert_eq!(digest_mnemonic(&entropy), expected);

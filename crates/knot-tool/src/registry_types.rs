@@ -8,5 +8,6 @@
 //! real source file guarantees that far more robustly than keeping a copy in
 //! sync by hand.
 
+#[allow(unused_imports)]
 #[path = "../../knot-registry/src/call_types.rs"]
 pub mod call_types;

@@ -28,9 +28,9 @@ authorization on top of that answer.
   it if replay matters for their use case.
 - `change_account(ChangeAccountArgs)` — replaces an account's member set /
   threshold, gated by a quorum of the account's *current* members signing
-  over `knot_encoding::change_account_message` (domain + account_id +
-  on-chain nonce + new member pks + new threshold → Keccak-256). Nonce is
-  not an args field — it is folded from state into the digest. This path
+  over `knot_encoding::change_account_message_v3` (v3 domain binds
+  `chain_id`, registry `self_id`, account id, on-chain nonce, member count,
+  new member pks, new threshold → Keccak-256). Nonce is not an args field — it is folded from state into the digest. This path
   *does* have built-in replay protection, since the registry controls that
   message's format itself. On failure, the panic string includes
   `members`/`threshold`/`member_matches`/`sigs_ok` counters.
@@ -47,25 +47,22 @@ authorization on top of that answer.
   cost (N pairing checks) into O(1) (one), natively, no precompile
   workaround needed — BLS aggregation is native on Dusk.
 
-### Diagnostic helpers (ops / investigation)
+### Ops helper
 
-- `account_meta(u64) -> Option<AccountMeta>` — threshold, nonce, members_len
-  (no BLS keys on the wire).
-- `member_key_bytes(u64) -> Option<Vec<Vec<u8>>>` — raw 96-byte compressed
-  member PKs (each inner vec length 96).
 - `next_account_id() -> u64` — next id `create_account` will allocate.
-- `diagnose_quorum(VerifyQuorumArgs) -> DiagnoseQuorumResult` — membership /
-  verify counters plus member key dump. Free-read over RUES may HTTP 500
-  when `abi::verify_bls` runs (same as `verify_quorum` free-read); useful
-  under `VM::ephemeral()` and when the node path works.
+
+`account_meta`, `member_key_bytes`, and `diagnose_quorum` were removed from
+the on-chain ABI. Diagnostics are off-chain only — a WASM contract cannot be
+feature-flagged at runtime without shipping two different bytecodes. Use
+[`knot-tool`](../knot-tool/README.md) instead; it derives the same ops data
+from `account()` plus local BLS verify (no gas, no RUES verify free-read
+pitfalls). See [`docs/design-notes.md`](../../docs/design-notes.md).
 
 ## Status
 
-**v0.1.5** on testnet (2026-08-03 — Spec 23b Phase B `repr(C)` pin; measured
-**DIFFERENT**). Contract id `3e3c5be563e8b085d4e66b048b4794457382cf3f578699a55e5c4a9fe9c94045`
-(see operator deploy notes). Prior live
-pin: **v0.1.4** (2026-07-28 audit #6 `checked_add`). Status:
-**PINNED-DIFFERENT-REDEPLOYED**.
+**v3** on next deploy — `change_account` digest binds `chain_id` and
+registry instance. Deploy **registry before proposals**; burn all v2
+`change_account` signatures. Prior testnet pins (v0.1.x) obsolete after cutover.
 
 `make wasm` + `make wasm-dd` + `cargo test --release`. Same dusk-forge-template
 pattern (wasm32-unknown-unknown, Rust 1.94.0, `#[dusk_forge::contract]`).
@@ -74,16 +71,15 @@ host query under `VM::ephemeral()` (not mocked) — signing uses
 `sign_multisig_insecure`, not the default secure `sign_multisig`, because
 `VM::ephemeral()` unit tests cannot reach post-hardfork signing policy in
 dusk-vm (PreFork default). **Live testnet clients must use secure
-`sign`/`sign_multisig`** — see
-[`../knot-tool/README.md`](../knot-tool/README.md).
+`sign`/`sign_multisig`** — see [`../knot-tool/README.md`](../knot-tool/README.md).
 
-**23b Phase B (2026-08-03):** `#[archive_attr(repr(C))]` on shared
+**Layout pin (2026-08-03):** `#[archive_attr(repr(C))]` on shared
 `knot-encoding` call types (this crate re-exports). Layout goldens in
-`tests/layout_goldens.rs` (post-pin hex). DIFFERENT types include
-`MultisigAccountView` / `ChangeAccountArgs` / `AccountMeta` /
-`DiagnoseQuorumResult`. Spec 26 source-carry paragraph cleared by this
-redeploy (R7). Operator ceremony re-wire of downstream callers (e.g. PM
-council) may stay deferred/unwired — OK per Phase B lessons.
+`tests/layout_goldens.rs` (post-pin hex). On-chain ABI types that changed:
+`MultisigAccountView` / `ChangeAccountArgs`. `AccountMeta` /
+`DiagnoseQuorumResult` live only in `knot-encoding` for off-chain
+[`knot-tool`](../knot-tool/README.md) diagnose — not registry contract
+methods.
 
 ## Next steps
 

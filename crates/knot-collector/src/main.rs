@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use knot_collector::{
-    assert_bind_allowed, store::Store, AppState, BIND_ENV, DB_ENV, DEFAULT_BIND, DEFAULT_DB_PATH,
+    AppState, BIND_ENV, DB_ENV, DEFAULT_BIND, DEFAULT_DB_PATH, assert_bind_allowed, store::Store,
 };
 use tracing::info;
 
@@ -36,6 +36,12 @@ async fn main() -> Result<()> {
     info!(%bind, "knot-collector listening");
 
     axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("failed to listen for ctrl-c");
+            info!("shutting down gracefully");
+        })
         .await
         .context("axum serve failed")?;
 

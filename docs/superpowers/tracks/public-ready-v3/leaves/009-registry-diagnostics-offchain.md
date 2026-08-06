@@ -1,8 +1,8 @@
 ---
 id: 9
 slug: registry-diagnostics-offchain
-status: TODO
-owner: null
+status: DONE
+owner: cursor-agent
 deps:
   - 5
 scope:
@@ -13,9 +13,9 @@ acceptance:
   - Reimplement diagnose in knot-tool
   - CHANGELOG notes why
 acceptanceDone:
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
 ---
 # Phase 6: registry diagnostics off-chain
 

@@ -6,7 +6,36 @@
 //! connection (not a `tower::Service::oneshot` in-process call) — proves the
 //! binary's actual listener + JSON wiring, not just handler logic.
 
-use knot_collector::{store::Store, AppState};
+use dusk_bytes::Serializable;
+use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
+use knot_collector::verify::party_signup_preimage;
+use knot_collector::{AppState, store::Store};
+use knot_encoding::{ProposalIntent, proposal_digest};
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+
+fn sample_digest() -> (String, [u8; 32]) {
+    let intent = ProposalIntent {
+        chain_id: 1,
+        committee_id: 7,
+        nonce: 3,
+        target_contract_id: [0x11; 32],
+        function_name: "set_service".to_string(),
+        call_args: vec![0x00, 0x01],
+        deadline: 1000,
+    };
+    let digest_bytes = proposal_digest(
+        intent.chain_id,
+        intent.committee_id,
+        intent.nonce,
+        &intent.target_contract_id,
+        intent.function_name.as_bytes(),
+        &intent.call_args,
+        intent.deadline,
+    )
+    .expect("digest");
+    (format!("0x{}", hex::encode(digest_bytes)), digest_bytes)
+}
 
 #[tokio::test]
 async fn health_endpoint_returns_ok_true() {
@@ -53,15 +82,15 @@ async fn proposal_lifecycle_over_real_http() {
 
     let base = format!("http://{addr}");
     let client = reqwest::Client::new();
+    let (digest, digest_bytes) = sample_digest();
 
-    let digest = format!("0x{}", "ab".repeat(32));
     let create_body = serde_json::json!({
         "version": 1,
         "intent": {
             "chain_id": 1,
             "committee_id": 7,
             "nonce": 3,
-            "target_contract_id": "0x11",
+            "target_contract_id": format!("0x{}", hex::encode([0x11u8; 32])),
             "function_name": "set_service",
             "call_args": "0x0001",
             "deadline": 1000,
@@ -93,18 +122,26 @@ async fn proposal_lifecycle_over_real_http() {
     assert_eq!(fetched["signed_digest"], digest);
     assert_eq!(fetched["partials"].as_array().unwrap().len(), 0);
 
-    let pk = format!("0x{}", "11".repeat(96));
-    let sig = format!("0x{}", "22".repeat(48));
+    let mut rng = StdRng::seed_from_u64(1);
+    let sk = BlsSecretKey::random(&mut rng);
+    let pk = BlsPublicKey::from(&sk);
+    let pk_hex = format!("0x{}", hex::encode(pk.to_bytes()));
+    let sig = sk.sign_multisig(&pk, &digest_bytes);
+    let sig_hex = format!("0x{}", hex::encode(sig.to_bytes()));
+
     let append_resp = client
         .post(format!("{base}/v1/proposals/{id}/partials"))
-        .json(&serde_json::json!({ "signer_pk": pk, "sig": sig }))
+        .json(&serde_json::json!({ "signer_pk": pk_hex, "sig": sig_hex }))
         .send()
         .await
         .expect("POST /v1/proposals/:id/partials");
     assert_eq!(append_resp.status(), reqwest::StatusCode::OK);
     let appended: serde_json::Value = append_resp.json().await.expect("parse append body");
     assert_eq!(appended["partials"].as_array().unwrap().len(), 1);
-    assert_eq!(appended["signed_digest"], digest, "append must not mutate digest");
+    assert_eq!(
+        appended["signed_digest"], digest,
+        "append must not mutate digest"
+    );
 
     let list_resp = client
         .get(format!("{base}/v1/proposals"))
@@ -138,19 +175,28 @@ async fn party_roster_lifecycle_over_real_http() {
 
     let base = format!("http://{addr}");
     let client = reqwest::Client::new();
-    let pk = format!("0x{}", "55".repeat(96));
+    let mut rng = StdRng::seed_from_u64(55);
+    let sk = BlsSecretKey::random(&mut rng);
+    let pk = BlsPublicKey::from(&sk);
+    let pk_hex = format!("0x{}", hex::encode(pk.to_bytes()));
+    let name = "Alice";
+    let preimage = party_signup_preimage(name, &pk.to_bytes()).expect("name");
+    let sig = format!("0x{}", hex::encode(sk.sign(&preimage).to_bytes()));
 
     let signup_resp = client
         .post(format!("{base}/v1/party"))
-        .json(&serde_json::json!({ "name": "Alice", "pk": pk, "note": "demo" }))
+        .json(&serde_json::json!({ "name": name, "pk": pk_hex, "sig": sig, "note": "demo" }))
         .send()
         .await
         .expect("POST /v1/party");
     assert_eq!(signup_resp.status(), reqwest::StatusCode::OK);
 
+    let renamed = "Alice Renamed";
+    let rename_preimage = party_signup_preimage(renamed, &pk.to_bytes()).expect("name");
+    let rename_sig = format!("0x{}", hex::encode(sk.sign(&rename_preimage).to_bytes()));
     let update_resp = client
         .post(format!("{base}/v1/party"))
-        .json(&serde_json::json!({ "name": "Alice Renamed", "pk": pk }))
+        .json(&serde_json::json!({ "name": renamed, "pk": pk_hex, "sig": rename_sig }))
         .send()
         .await
         .expect("POST /v1/party (upsert)");
@@ -165,11 +211,11 @@ async fn party_roster_lifecycle_over_real_http() {
     let list: serde_json::Value = list_resp.json().await.expect("parse party list body");
     let arr = list.as_array().expect("party list is an array");
     assert_eq!(arr.len(), 1, "upsert must not duplicate the roster row");
-    assert_eq!(arr[0]["name"], "Alice Renamed");
-    assert_eq!(arr[0]["pk"], pk);
+    assert_eq!(arr[0]["name"], renamed);
+    assert_eq!(arr[0]["pk"], pk_hex);
 
     let delete_resp = client
-        .delete(format!("{base}/v1/party/{pk}"))
+        .delete(format!("{base}/v1/party/{pk_hex}"))
         .send()
         .await
         .expect("DELETE /v1/party/:pk");

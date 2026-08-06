@@ -170,7 +170,7 @@ pub struct ApproveArgs {
     pub signature: BlsSignature,
 }
 
-/// Structured propose input — §4a fields. Digest is recomputed on-chain.
+/// Structured propose input — §2.12 v3 fields. Digest is recomputed on-chain.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[archive_attr(repr(C))]
@@ -180,7 +180,9 @@ pub struct ProposeArgs {
     pub target: ContractId,
     pub function_name: String,
     pub call_args: Vec<u8>,
-    /// Block height TTL; 0 = none (discouraged).
+    /// Caller-supplied uniquifier (not the registry account nonce).
+    pub nonce: u64,
+    /// Block height deadline; must be in `(block_height(), block_height() + ttl]`.
     pub deadline: u64,
 }
 
@@ -190,7 +192,7 @@ pub struct ProposeArgs {
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProposalView {
     pub registry_account_id: u64,
-    pub chain_id: u64,
+    pub epoch: u64,
     pub nonce: u64,
     pub target: ContractId,
     pub function_name: String,

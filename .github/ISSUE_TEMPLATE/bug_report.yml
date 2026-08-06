@@ -1,0 +1,50 @@
+---
+name: Bug report
+description: Report incorrect behaviour in Knot crates or tooling
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Do not** include secret keys, keystore passwords,
+        or production credentials.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      placeholder: What did you expect vs what actually happened?
+    validations:
+      required: true
+
+  - type: input
+    id: crate
+    attributes:
+      label: Crate / component
+      placeholder: e.g. knot-tool, knot-collector, knot-proposals
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or git commit
+      placeholder: e.g. 0.2.0 or abc1234
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: Commands, env vars (redact secrets), minimal input
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+    validations:
+      required: false
