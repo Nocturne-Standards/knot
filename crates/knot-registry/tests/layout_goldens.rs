@@ -114,6 +114,7 @@ fn fixed_keys() -> [(BlsSecretKey, BlsPublicKey); 3] {
 fn fixed_signature_entry(sk: &BlsSecretKey, pk: &BlsPublicKey) -> SignatureEntry {
     SignatureEntry {
         signer: *pk,
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         signature: sk.sign_insecure(MSG),
     }
 }
@@ -121,6 +122,7 @@ fn fixed_signature_entry(sk: &BlsSecretKey, pk: &BlsPublicKey) -> SignatureEntry
 fn fixed_aggregate(signers: &[(&BlsSecretKey, &BlsPublicKey)]) -> MultisigSignature {
     let sigs: Vec<MultisigSignature> = signers
         .iter()
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         .map(|(sk, pk)| sk.sign_multisig_insecure(pk, MSG))
         .collect();
     let (first, rest) = sigs.split_first().expect("at least one signer");
