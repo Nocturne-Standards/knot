@@ -186,6 +186,7 @@ fn approve(
     let args = ApproveArgs {
         proposal_id,
         signer: *pk,
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         signature: sk.sign_insecure(digest),
     };
     session
@@ -447,6 +448,7 @@ fn epoch_bump_invalidates_old_proposals() {
     let approve_args = ApproveArgs {
         proposal_id,
         signer: pk1,
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         signature: sk1.sign_insecure(&digest),
     };
     assert!(
@@ -638,6 +640,7 @@ fn approve_rejects_non_member_and_bad_signature() {
     let bad = ApproveArgs {
         proposal_id,
         signer: outsider_pk,
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         signature: outsider_sk.sign_insecure(&digest),
     };
     assert!(
@@ -650,6 +653,7 @@ fn approve_rejects_non_member_and_bad_signature() {
     let bad = ApproveArgs {
         proposal_id,
         signer: pk1,
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
         signature: sk1.sign_insecure(&wrong),
     };
     assert!(
