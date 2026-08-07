@@ -40,7 +40,8 @@ fi
 REQUIRED="check-public-surface.sh
 check-audit-sha.sh
 check-repo-rules.sh
-check-gitleaks.sh"
+check-gitleaks.sh
+check-bls-insecure.sh"
 
 # Gates required only when the repo ships Rust contracts.
 REQUIRED_IF_CONTRACTS="check-contract-authz.sh"
