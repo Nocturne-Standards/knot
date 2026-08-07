@@ -41,9 +41,7 @@ itself re-verify quorum on-chain the way `knot-registry`/
 `knot-proposals` do. If a *new* integrator's target trusts a
 tool-assembled decision without its own on-chain re-check (pure Coord), that
 target is taking on the tool's entire TCB — call this out explicitly in that
-target's own docs; do not assume this suite's docs cover it. See
-`docs/superpowers/tracks/audit-2026-08-full/DECISIONS.md` for the full
-writeup.
+target's own docs; do not assume this suite's docs cover it.
 
 ## Topology
 
