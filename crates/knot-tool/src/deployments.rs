@@ -139,7 +139,7 @@ mod tests {
         fs::write(
             &path,
             r#"{
-              "multisig-registry": {
+              "knot-registry": {
                 "current": { "contract_id": "abc123" },
                 "history": []
               }
@@ -147,7 +147,7 @@ mod tests {
         )
         .unwrap();
         let file = load(&path).unwrap();
-        assert_eq!(file.contract_id("multisig-registry").unwrap(), "abc123");
+        assert_eq!(file.contract_id("knot-registry").unwrap(), "abc123");
         assert!(file.contract_id("missing").is_err());
     }
 

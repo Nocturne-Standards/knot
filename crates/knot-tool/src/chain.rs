@@ -29,8 +29,8 @@ pub enum Contract {
 impl Contract {
     fn json_key(self) -> &'static str {
         match self {
-            Contract::Registry => "multisig-registry",
-            Contract::Proposals => "multisig-proposals",
+            Contract::Registry => "knot-registry",
+            Contract::Proposals => "knot-proposals",
         }
     }
 }

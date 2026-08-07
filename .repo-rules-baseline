@@ -1,4 +1,4 @@
-FIELD_GUIDE/rules.md:135:title: Hand-copied mirrors need a repo-rules baseline
+FIELD_GUIDE/rules.md:140:title: Hand-copied mirrors need a repo-rules baseline
 crates/knot-collector/src/store.rs:27:/// Mirrors `chain-gateway-core::db::EventDb`'s pattern.
 crates/knot-tool/Cargo.toml:22:# format must match byte-for-byte for the contract to accept our args.
 crates/knot-tool/src/chain.rs:20:/// Accepted by current testnet (1.7.x); mirrors `agent-pay-lp`.
@@ -11,4 +11,4 @@ docs/internal/redeploy-2026-08-domains.md:22:   and dual-write primary + local m
 docs/internal/redeploy-2026-08-domains.md:30:   Primary pin lands in `nocturne-deployments/testnet.json`; mirror in
 docs/security-audit-2026-08-04.md:136:write a local copy documented as 'mirrors X byte-for-byte'" and, for
 docs/security-audit-2026-08-04.md:173:copied from a matching test in `prediction-market`) so drift fails CI on
-scripts/check-gate-coverage.sh:49:#   check-repo-rules.sh: no hand-copied mirrors in this repo (reviewed 2026-08-05)
+scripts/check-gate-coverage.sh:50:#   check-repo-rules.sh: no hand-copied mirrors in this repo (reviewed 2026-08-05)
