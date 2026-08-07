@@ -1,0 +1,15 @@
+# F-001 / R-006 — paths where *_insecure BLS may appear.
+# One glob per line (repo-root relative). Blank / # comments ignored.
+# Hits still require PreforkHostQuery in-file (or F-001: in *_tests.rs / tests/).
+**/tests/**
+**/*_tests.rs
+**/tests.rs
+**/layout_goldens.rs
+**/layout_mirrors.rs
+**/rusk-experiments/**
+**/pm-trader-wasm/src/lib.rs
+**/pm-trader-tool/src/main.rs
+**/rfq-quote-tool/src/main.rs
+**/gas-profiler/src/main.rs
+**/knot-tool/src/bls.rs
+**/knot-collector/src/verify.rs
