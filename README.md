@@ -50,8 +50,10 @@ how crate semvers relate to git tags.
 ├── Cargo.toml
 ├── LICENSE-APACHE / LICENSE-AGPL
 ├── docs/
+│   ├── README.md
 │   ├── security-model.md
-│   └── versioning.md
+│   ├── versioning.md
+│   └── design-notes.md
 ├── crates/knot-encoding/
 ├── crates/knot-registry/
 ├── crates/knot-proposals/
@@ -82,5 +84,3 @@ cargo test -p knot-encoding
 Cold-start the Lab: `cargo run -p knot-tool -- init` then
 `cargo run -p knot-tool -- serve --bind 127.0.0.1:8877`.
 See each crate's `README.md` for API surface and usage detail.
-
-Maintainer deploy timeline: [`docs/internal/deploy-history.md`](docs/internal/deploy-history.md).

@@ -24,5 +24,6 @@ scripts/check-public-surface.sh
 .public-surface-allowlist
 
 # Spec / design docs that discuss the patterns (private tier until launch)
+# (paths removed from this repo — soft check still flags leftover mentions)
 docs/internal/
 docs/superpowers/
