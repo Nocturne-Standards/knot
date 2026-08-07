@@ -4,19 +4,15 @@
 //! Canonical multisig proposal encoding, plus shared layer-E call types.
 //!
 //! Three surfaces (do not conflate):
-//! - **§4a signing preimage** — malleability-free byte concatenation → Keccak256 digest.
-//!   This is what members sign. Never use rkyv for these bytes.
-//! - **§4b ProposalBlob** — in-memory shape for intent + partials (never itself signed).
+//! - **Proposal signing preimage** — malleability-free byte concatenation → Keccak256
+//!   digest. This is what members sign. Never use rkyv for these bytes.
+//! - **ProposalBlob** — in-memory shape for intent + partials (never itself signed).
 //!   JSON+hex transport for blobs lives in `knot-tool` / `knot-collector`;
-//!   this crate does not serialize §4b with rkyv.
+//!   this crate does not serialize the blob with rkyv.
 //! - **Layer E (`call-types` feature)** — rkyv ABI structs shared by
-//!   `knot-registry` and `knot-proposals` (and host tools after Wave 7).
-//!   Includes quorum types plus registry/proposals call args (`CreateAccountArgs`,
-//!   `ProposeArgs`, …). Off by default so §4a consumers never inherit
-//!   `dusk-core` / `rkyv`. Spec 26.
-//!
-//! Spec: `docs/multisig/multisig-suite-and-atlas-implementation-plan.md` §4;
-//! call types: `docs/superpowers/specs/2026-07-31-shared-code/26-multisig-shared-call-types.md`.
+//!   `knot-registry` and `knot-proposals` (and host tools). Includes quorum types
+//!   plus registry/proposals call args (`CreateAccountArgs`, `ProposeArgs`, …).
+//!   Off by default so preimage-only consumers never inherit `dusk-core` / `rkyv`.
 
 #![cfg_attr(not(test), no_std)]
 
