@@ -47,12 +47,17 @@ id: R-006
 tier: T1
 title: Do not use legacy *_insecure BLS paths for new signatures
 rule: >
-  Grep for *_insecure, *_unchecked, from_raw_*, _unsafe. Each hit carries a
-  justifying comment or is replaced. After every dependency bump that adds a
-  secure variant beside a legacy one, re-grep — existing code silently keeps
-  the legacy path.
+  Production crypto uses sign / verify / sign_multisig / aggregate only.
+  *_insecure is allowed only in allowlisted test/lab paths that exercise host
+  verify_bls* under VM::ephemeral PreFork, and each call carries a PreforkHostQuery
+  justifying comment (or an F-001: rejection-test note in *_tests.rs). Live tools
+  and application-layer verifiers never call or accept the insecure path as
+  default. Corollary: fixtures adapt to production verify — production verify is
+  never chosen to match a fixture helper. After every dependency bump that adds a
+  secure variant beside a legacy one, re-grep — existing code silently keeps the
+  legacy path.
 evidence: [F-001]
-enforcement: review:contract-checklist-crypto
+enforcement: gate:check-bls-insecure.sh
 verified-against: bls12_381-bls (insecure-v1-signing feature)
 links:
   - instance-of: C6
@@ -410,7 +415,7 @@ For every exported method, in order:
 | R-003 | review:contract-checklist |
 | R-004 | review:contract-checklist |
 | R-005 | review:contract-checklist |
-| R-006 | review:contract-checklist-crypto |
+| R-006 | gate:check-bls-insecure.sh |
 | R-007 | review:security-model |
 | R-010 | review:host-checklist |
 | R-011 | review:host-checklist |
