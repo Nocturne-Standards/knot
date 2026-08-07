@@ -1213,8 +1213,9 @@ Scope — wider than crate names:
 | Docs | root `README.md` crate table, all crate READMEs, `docs/versioning.md` | |
 
 **Not renamed:** signing domain tags stay `nocturne.knot.multisig.*` — crypto domains.
-Pin JSON keys (`"multisig-registry"`, `"multisig-proposals"` in `chain.rs` json_key)
-are external deployment data; rename only with a paired pin-repo update.
+Pin JSON keys are `"knot-registry"` / `"knot-proposals"` (`chain.rs` `json_key`);
+paired with the public `nocturne-deployments` pin file. No dual-read of legacy
+`multisig-*` keys.
 
 Migration details:
 
