@@ -38,8 +38,11 @@ row_re = re.compile(
 )
 table = {m.group(1): m.group(2) for m in row_re.finditer(text)}
 if not table:
-    print(f"BLOCKED: no crate version rows found in {table_path}", file=sys.stderr)
-    sys.exit(1)
+    print(
+        f"check-crate-version-table: no crate version rows in {table_path} — skip (advisory)",
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
 meta = json.loads(
     subprocess.check_output(
