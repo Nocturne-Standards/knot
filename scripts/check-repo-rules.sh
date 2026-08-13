@@ -3,9 +3,20 @@
 # Shared-code ratchet — documented hand-copied mirrors vs .repo-rules-baseline.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$ROOT" ]]; then
+  echo "check-repo-rules: not inside a git work tree" >&2
+  exit 1
+fi
 BASELINE="$ROOT/.repo-rules-baseline"
 cd "$ROOT"
+
+# Kit is the SSOT — this ratchet is for adopters (compose kit-first would
+# otherwise HARD kit commits on a missing .repo-rules-baseline).
+if [[ -f "$ROOT/FIELD_GUIDE/SPEC.md" && -x "$ROOT/bin/check-kit-sync.sh" ]]; then
+  echo "ok: check-repo-rules — kit repo (adopter ratchet)"
+  exit 0
+fi
 
 # Avoid backticks inside single quotes (bash string terminator).
 PATTERN='byte-for-byte|byte for byte|[Dd]uplicated rather than|[Ll]ifted from|[Cc]opied (and pared|from)|[Mm]irrors?( +(of|the|from))? '
@@ -27,6 +38,11 @@ git grep -nIE "$PATTERN" -- \
   ':!Cargo.lock' \
   ':!.repo-rules-baseline' \
   ':!scripts/check-repo-rules.sh' \
+  ':!scripts/check-*.sh' \
+  ':!bin/check-repo-rules.sh' \
+  ':!bin/check-*.sh' \
+  ':!FIELD_GUIDE' \
+  ':!**/FIELD_GUIDE/**' \
   2>/dev/null | sort >"$tmp" || true
 
 if [[ "$UPDATE" -eq 1 ]]; then
