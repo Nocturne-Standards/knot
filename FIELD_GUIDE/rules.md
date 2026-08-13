@@ -157,6 +157,32 @@ evidence: []
 enforcement: gate:check-claims.sh
 ```
 
+### R-028
+```yaml
+id: R-028
+tier: T2
+title: Staged paths must be in the session touch ledger
+rule: >
+  On kit-adopted repos, staged paths for a commit must be a subset of this
+  session's touch ledger unless NOCTURNE_SESSION_STAGE_ALLOW=1 or an
+  allow-stage sidecar is present. Enforced by pre-commit check-session-staged.
+evidence: []
+enforcement: gate:check-session-staged.sh
+```
+
+### R-029
+```yaml
+id: R-029
+tier: T2
+title: Adopted commits require a fresh estate start stamp
+rule: >
+  On kit-adopted repos, pre-commit requires a fresh nocturne-estate start stamp
+  (session ledger preflight_at within TTL). DEV_WORKFLOW_SKIP_SESSION does not
+  waive this check. Enforced by pre-commit check-session-stamp.
+evidence: []
+enforcement: gate:check-session-stamp.sh
+```
+
 ### R-020
 ```yaml
 id: R-020
@@ -426,6 +452,8 @@ For every exported method, in order:
 | R-016 | gate:check-main-guard.sh |
 | R-017 | gate:check-repo-rules.sh |
 | R-018 | gate:check-claims.sh |
+| R-028 | gate:check-session-staged.sh |
+| R-029 | gate:check-session-stamp.sh |
 | R-019 | review:contract-checklist |
 | R-020 | gate:check-crate-version-table.sh |
 | R-021 | gate:check-gitleaks.sh |
