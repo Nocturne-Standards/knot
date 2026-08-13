@@ -11,3 +11,5 @@
 # Pituitary local index (commit curated .toml)
 .pituitary/*.db
 .pituitary/*.db-*
+
+.worktrees/
