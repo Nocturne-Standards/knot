@@ -64,9 +64,11 @@ resolve). Knot knot-tool covers registry, proposals, and generic Lab only.
 
 ## Contract pins (testnet)
 
-`knot-tool` loads `deployments/testnet.json` via `NOCTURNE_DEPLOYMENTS` or by
-walking up from the crate directory (`deployments/` or `nocturne-deployments/`
-sibling). No private git dependency.
+`knot-tool` loads `deployments/testnet.json` via the
+[`nocturne-deployments`](https://github.com/aichbindas/nocturne-deployments)
+crate (`NOCTURNE_DEPLOYMENTS` or walk-up discovery). Clone that repo **next to**
+`knot` (`../nocturne-deployments`) — a standalone checkout without the sibling
+cannot compile `knot-tool`.
 
 ## Scope
 
