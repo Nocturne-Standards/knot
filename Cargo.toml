@@ -8,8 +8,9 @@ members = [
     "crates/knot-collector",
 ]
 
-# Contract pins: knot-tool loads `deployments/testnet.json` via NOCTURNE_DEPLOYMENTS
-# or walk-up discovery — no private git dependency.
+# Contract pins: knot-tool loads pins via the sibling `nocturne-deployments` crate
+# (path dep — clone that repo next to `knot`; public CI without the sibling
+# cannot compile knot-tool).
 
 [workspace.package]
 edition = "2024"
