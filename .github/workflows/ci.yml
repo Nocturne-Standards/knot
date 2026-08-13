@@ -23,7 +23,8 @@ jobs:
       - name: Gate coverage
         run: scripts/check-gate-coverage.sh
       - name: Field guide kit-sync
-        run: scripts/ci-accept-warn.sh scripts/check-kit-sync.sh
+        # HARD — lag/divergence fails the job (EXIT-CODES.md). No ci-accept-warn.
+        run: scripts/check-kit-sync.sh
       - name: Audit/design SHA stamps
         run: scripts/check-audit-sha.sh
       - name: Public-surface leak gate

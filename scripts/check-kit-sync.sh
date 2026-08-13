@@ -11,10 +11,25 @@
 # Bash 3.2+ compatible.
 set -euo pipefail
 
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/estate-fail-contract.sh"
+
+kit_sync_fail() {
+  estate_gate_line kit-sync fail hard
+  estate_hint "$1"
+  exit 1
+}
+
+kit_sync_lag() {
+  estate_gate_line kit-sync warn soft
+  estate_hint "$1"
+  exit 2
+}
+
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -z "$ROOT" ]]; then
   echo "check-kit-sync: not inside a git work tree" >&2
-  exit 1
+  kit_sync_fail "run check-kit-sync.sh from inside a git work tree"
 fi
 cd "$ROOT"
 
@@ -61,7 +76,7 @@ cmd_update() {
   if ! is_kit_repo; then
     if [[ ! -f "$KIT/FIELD_GUIDE/rules.md" ]]; then
       echo "check-kit-sync: --update needs kit FIELD_GUIDE/rules.md at $KIT" >&2
-      exit 1
+      kit_sync_fail "set NOCTURNE_AGENT_KIT to kit checkout with FIELD_GUIDE/rules.md"
     fi
     mkdir -p "$ROOT/FIELD_GUIDE"
     cp "$KIT/FIELD_GUIDE/rules.md" "$ROOT/$FG_RULES"
@@ -82,7 +97,7 @@ fi
 
 if [[ ! -f "$FG_RULES" ]]; then
   echo "BLOCKED: missing $FG_RULES — run check-kit-sync.sh --update" >&2
-  exit 1
+  kit_sync_fail "missing FIELD_GUIDE/rules.md — run check-kit-sync.sh --update"
 fi
 
 if [[ ! -f "$FG_VERSION" ]]; then
@@ -185,13 +200,13 @@ if ! is_kit_repo && [[ -f "$KIT/FIELD_GUIDE/.rules-version" && -f "$FG_VERSION" 
     # Advisory only when hash/pointer checks passed (EXIT-CODES.md).
     if [[ "$sync_fail" -eq 0 ]]; then
       echo "check-kit-sync: lag only (exit 2)"
-      exit 2
+      kit_sync_lag "rules pin behind kit — run check-kit-sync.sh --update (use .worktrees/kit-sync-<tag> when product tree is dirty)"
     fi
   fi
 fi
 
 if [[ "$sync_fail" -ne 0 ]]; then
-  exit 1
+  kit_sync_fail "fix kit-sync — see BLOCKED messages above (run check-kit-sync.sh --update when pin/hash diverges)"
 fi
 echo "check-kit-sync: ok (version $(tr -d '[:space:]' <"$FG_VERSION" 2>/dev/null || echo unknown))"
 exit 0

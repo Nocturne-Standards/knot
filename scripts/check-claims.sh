@@ -10,6 +10,13 @@ if [[ "${DEV_WORKFLOW_SKIP_CLAIM:-}" == "1" ]]; then
   exit 0
 fi
 if [[ ! -f "$CLAIM_PY" ]]; then
+  if [[ -f "$ROOT/.nocturne-agent-kit-adopted" ]]; then
+    # shellcheck source=lib/estate-fail-contract.sh
+    source "$KIT/bin/lib/estate-fail-contract.sh"
+    estate_gate_line claims fail hard
+    estate_hint "install cursor-process-hygiene claim.py"
+    exit 1
+  fi
   echo "nocturne-agent-kit: claim.py missing — warn (install process-hygiene)" >&2
   exit 2
 fi

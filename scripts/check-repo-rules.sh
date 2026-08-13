@@ -27,6 +27,9 @@ git grep -nIE "$PATTERN" -- \
   ':!Cargo.lock' \
   ':!.repo-rules-baseline' \
   ':!scripts/check-repo-rules.sh' \
+  ':!scripts/check-*.sh' \
+  ':!FIELD_GUIDE' \
+  ':!**/FIELD_GUIDE/**' \
   2>/dev/null | sort >"$tmp" || true
 
 if [[ "$UPDATE" -eq 1 ]]; then
