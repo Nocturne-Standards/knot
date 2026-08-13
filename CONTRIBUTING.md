@@ -12,6 +12,11 @@ multisig on Dusk — not production wallet software.
 
 ## Development setup
 
+`knot-tool` depends on the sibling [`nocturne-deployments`](https://github.com/aichbindas/nocturne-deployments)
+crate via a path dependency. Clone that repo **next to** this one so
+`../nocturne-deployments` exists — a standalone `knot` checkout without the
+sibling cannot compile `knot-tool`.
+
 ```bash
 rustc --version   # 1.94+ required
 cargo build -p knot-tool

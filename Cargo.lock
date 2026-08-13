@@ -2155,6 +2155,7 @@ dependencies = [
  "hex",
  "knot-encoding",
  "libc",
+ "nocturne-deployments",
  "pbkdf2",
  "rand 0.8.7",
  "reqwest",
@@ -2352,6 +2353,15 @@ checksum = "c334ab77a6d4f29c5c2e41149c0f03af4082923aa364aa0c9876232f33f9853f"
 dependencies = [
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "nocturne-deployments"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
 ]
 
 [[package]]

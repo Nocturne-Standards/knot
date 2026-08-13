@@ -11,7 +11,6 @@
 extern crate alloc;
 
 mod chain;
-mod deployments;
 mod keystore;
 mod proposals_types;
 mod registry_types;

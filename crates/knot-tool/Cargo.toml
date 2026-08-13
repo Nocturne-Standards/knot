@@ -48,6 +48,7 @@ subtle = "2"
 libc = "0.2"
 argon2 = "0.5"
 directories = "5"
+nocturne-deployments = { path = "../../../nocturne-deployments/crates/nocturne-deployments" }
 
 [dev-dependencies]
 dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
