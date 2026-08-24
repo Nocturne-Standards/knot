@@ -93,7 +93,7 @@ fn full_fsync(f: &fs::File) -> std::io::Result<()> {
     f.sync_all()
 }
 
-/// Atomic blob write (L8) — tmp + rename + directory fsync per IMPLEMENTATION §3.2.
+/// Atomic blob write: tmp + rename + directory fsync.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let dir = path.parent().context("blob path has no parent directory")?;
     fs::create_dir_all(dir)?;
