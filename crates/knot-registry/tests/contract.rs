@@ -325,11 +325,10 @@ fn change_account_requires_quorum_and_bumps_nonce_preventing_replay() {
 
 /// Aggregates a multisignature over `msg` from exactly `signers`, the way a
 /// real coordinator would off-chain: each signs, then the signatures are
-/// summed. Same pattern as `rusk-experiments/multisig-approval`'s tests —
-/// see that crate's README for why `sign_multisig_insecure` (not the
-/// default secure `sign_multisig`) is what `VM::ephemeral()`'s
-/// `verify_bls_multisig` host query actually checks against (documented in
-/// `references/dusk-native/dusk-vm-issue-1-ephemeral-hardfork-policy-unreachable.md`).
+/// summed. `sign_multisig_insecure` (not the default secure `sign_multisig`)
+/// is used here because `VM::ephemeral()`'s `verify_bls_multisig` host query
+/// checks against the insecure aggregate during the ephemeral pre-fork
+/// window (dusk-vm-issue-1); live clients use `sign()`/`sign_multisig()`.
 fn aggregate_signature(signers: &[(BlsSecretKey, BlsPublicKey)], msg: &[u8]) -> MultisigSignature {
     let sigs: Vec<MultisigSignature> = signers
         .iter()

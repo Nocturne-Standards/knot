@@ -1,7 +1,7 @@
 //! Encrypted local store of named BLS "member" identities — **test tooling only**.
 //! Not production key custody: in production each identity holds its own wallet key.
 //!
-//! v2 file layout (§3.3):
+//! v2 file layout:
 //! `[magic:8][version:1][kdf_id:1][kdf_p1:4][kdf_p2:4][kdf_p3:1][salt_len:1][salt:N][nonce:12][AES-256-GCM ct]`
 //! Header bytes are AES-GCM associated data. Plaintext is fixed-layout binary (no JSON).
 //!

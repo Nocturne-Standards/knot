@@ -6,7 +6,6 @@
 **/tests.rs
 **/layout_goldens.rs
 **/layout_mirrors.rs
-**/rusk-experiments/**
 **/pm-trader-wasm/src/lib.rs
 **/pm-trader-tool/src/main.rs
 **/rfq-quote-tool/src/main.rs

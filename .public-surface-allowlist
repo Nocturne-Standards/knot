@@ -26,4 +26,10 @@ scripts/check-public-surface.sh
 # Spec / design docs that discuss the patterns (private tier until launch)
 # (paths removed from this repo — soft check still flags leftover mentions)
 docs/internal/
+docs/internal
 docs/superpowers/
+
+# Public, out-of-repo sibling: aichbindas/nocturne-deployments (public GitHub repo).
+# The pin filename/env var are real documented behavior, not a private path.
+deployments/testnet.json
+NOCTURNE_DEPLOYMENTS
