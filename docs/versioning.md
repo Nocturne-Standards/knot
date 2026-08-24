@@ -16,7 +16,7 @@ field print the same semver as their crate `Cargo.toml`.
 
 ## Git tags vs crate versions
 
-Public consumers pin via **git tag or rev** on `https://github.com/aichbindas/knot`,
+Public consumers pin via **git tag or rev** on `https://github.com/Nocturne-Standards/knot`,
 not crates.io (not published here). A repo tag (e.g. `v0.2.0`) is an
 **operator-chosen bundle** of crate versions at a point in time — it is not
 required to equal every inner crate's semver. Check the tag's `Cargo.toml`
