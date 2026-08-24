@@ -6,7 +6,7 @@ rust-version = "1.94"
 publish = false
 license = "Apache-2.0"
 description = "BLS M-of-N quorum verification registry for committee membership."
-repository = "https://github.com/aichbindas/knot"
+repository = "https://github.com/Nocturne-Standards/knot"
 
 # -----------------------------------------------------------------------------
 # Regular dependencies — BLS types (BlsPublicKey/BlsSignature) need

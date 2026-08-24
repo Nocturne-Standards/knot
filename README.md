@@ -14,7 +14,7 @@ authority. Detail: [`docs/security-model.md`](docs/security-model.md).
 
 Architecture and long-form docs:
 [docs.nocturne-standards.org — Knot](https://docs.nocturne-standards.org/v1/knot/)
-· [GitHub — aichbindas/knot](https://github.com/aichbindas/knot)
+· [GitHub — Nocturne-Standards/knot](https://github.com/Nocturne-Standards/knot)
 
 `atlas/` (per-project service registry) stays **outside** this repo — it
 consumes `knot-proposals` / `knot-registry` as a client.
@@ -37,7 +37,7 @@ in `knot-tool`; the collector never holds secret keys.
 **Consumer dep (encoding):**
 
 ```toml
-knot-encoding = { git = "https://github.com/aichbindas/knot", tag = "v0.2.0", package = "knot-encoding", features = ["call-types"] }
+knot-encoding = { git = "https://github.com/Nocturne-Standards/knot", tag = "v0.2.0", package = "knot-encoding", features = ["call-types"] }
 ```
 
 Pin a release tag or rev — see [`docs/versioning.md`](docs/versioning.md) for

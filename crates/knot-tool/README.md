@@ -16,7 +16,7 @@ docs name: **Knot**.
 
 Architecture and crate interaction diagram:
 [docs.nocturne-standards.org — Knot](https://docs.nocturne-standards.org/v1/knot/)
-· [source on GitHub](https://github.com/aichbindas/knot)
+· [source on GitHub](https://github.com/Nocturne-Standards/knot)
 
 Cold-start: `cargo run -p knot-tool -- serve --bind 127.0.0.1:8877` from repo root.
 
