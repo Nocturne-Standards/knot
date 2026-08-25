@@ -19,6 +19,16 @@ KIT_SELF="bin/check-public-surface.sh"
 fail=0
 warn=0
 
+# Word-boundary patterns below use \\b. POSIX ERE (git grep -E) does not define
+# \\b, so those checks are silent no-ops on common Mac/Linux builds. PCRE (-P)
+# does. Fail loud if this git lacks PCRE rather than ship a dead gate.
+_pcre_probe="$(git ls-files | head -n1 || true)"
+if [[ -n "$_pcre_probe" ]] && ! git grep -qP '^' -- "$_pcre_probe" 2>/dev/null; then
+  echo "check-public-surface: git grep -P (PCRE) required; \\b checks are no-ops under -E" >&2
+  exit 1
+fi
+unset _pcre_probe
+
 is_allowlisted() {
   local line="$1"
   [[ -f "$ALLOWLIST_FILE" ]] || return 1
@@ -40,7 +50,7 @@ filter_hits() {
     fi
     # Always ignore the gate script itself and allowlist file
     case "$line" in
-      "$SELF_NAME":*|"$KIT_SELF":*|*"/$SELF_NAME":*|*"/$KIT_SELF":*|.public-surface-allowlist:*|docs/internal/PUBLIC-REPO-STANDARD.md:*|docs/internal/TOOLING-AUDIT-LESSONS.md:*)
+      "$SELF_NAME":*|"$KIT_SELF":*|*"/$SELF_NAME":*|*"/$KIT_SELF":*|.public-surface-allowlist:*|docs/internal/PUBLIC-REPO-STANDARD.md:*|docs/internal/TOOLING-AUDIT-LESSONS.md:*|FIELD_GUIDE/workflow/context-lifecycle.md:*|*FIELD_GUIDE/workflow/context-lifecycle.md:*)
         continue
         ;;
     esac
@@ -53,7 +63,7 @@ check() {
   # severity: hard | soft  (soft becomes warn when ALLOW_PRIVATE_TIER=1)
   local severity="$1" label="$2" regex="$3"
   local hits
-  hits="$(git grep -nIE "$regex" -- \
+  hits="$(git grep -nIP "$regex" -- \
     ':!.git' \
     ':!target' \
     ':!node_modules' \
@@ -95,6 +105,19 @@ check soft "private doc path" '(docs/superpowers|docs/internal|references/|rusk-
 check soft "internal repo name" '(nocturne-agent-kit|nocturne-mcp-|pituitary)'
 check soft "escaping relative link" '\]\(\.\./\.\./\.\./'
 check soft "unresolved marker" '\b(TODO|FIXME|XXX|HACK)\b'
+
+# Encrypted provider thinking / CoT envelopes. Hard even with ALLOW_PRIVATE_TIER=1:
+# blobs are unreadably secret-bearing (arXiv 2608.09867). Keep the pattern tied
+# to a long payload so prose about "thinking" does not trip.
+check hard "encrypted thinking envelope" '"(thought_signature|encrypted_content|thinking_blocks|reasoning_details)"[[:space:]]*:[[:space:]]*"[A-Za-z0-9+/=_-]{80,}"'
+
+# Session dumps do not belong in product git even when JSON is clean.
+path_hits="$(git ls-files | grep -E '(^|/)agent-transcripts/|(^|/)\.dsh/' || true)"
+if [[ -n "$path_hits" ]]; then
+  echo "BLOCKED: committed agent transcript dump"
+  printf '%s\n' "$path_hits"
+  fail=1
+fi
 
 if ((fail)); then
   exit 1
