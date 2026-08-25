@@ -174,5 +174,6 @@ via `abi::caller() == proposals` (checklist item 4).
 
 - Suite overview: [`../README.md`](../README.md)
 - Per-crate detail: each crate’s `README.md`
-- Public launch form: [`launch-form-knot.md`](launch-form-knot.md)
-- Domain redeploy: [`internal/redeploy-2026-08-domains.md`](internal/redeploy-2026-08-domains.md)
+- Domain redeploy history: `knot-registry` and `knot-proposals`
+  `CHANGELOG.md` entries; redeploy semantics: [`versioning.md`](versioning.md)
+  (`PINNED-DIFFERENT-REDEPLOYED`)

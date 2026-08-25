@@ -1,5 +1,6 @@
 //! Off-chain quorum diagnostics — same counters as the removed on-chain
-//! `diagnose_quorum` using `account()` + local BLS verify (IMPLEMENTATION §4.3 L3).
+//! `diagnose_quorum`, derived from `account()` + local BLS verify instead of
+//! a contract call (no gas, no RUES free-read pitfalls).
 
 use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, Signature as BlsSignature};

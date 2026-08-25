@@ -27,7 +27,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::bls;
 use crate::hex_util::{decode_hex, strip_single_0x};
 
-/// Caller-supplied proposal uniquifier (§2.6). Default CSPRNG `u64`.
+/// Caller-supplied proposal uniquifier. Default CSPRNG `u64`.
 pub fn random_proposal_nonce() -> u64 {
     let mut buf = [0u8; 8];
     OsRng.fill_bytes(&mut buf);

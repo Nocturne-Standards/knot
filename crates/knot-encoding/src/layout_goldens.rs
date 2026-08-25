@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Nocturne Standards
 
-//! Archived-layout golden pins for shared multisig layer-E call types (spec 26).
+//! Archived-layout golden pins for shared multisig layer-E call types.
 //!
 //! Owner-crate `pub mod` — consumers (`knot-registry`, `knot-proposals`)
-//! import these consts and still call `rkyv::to_bytes` at runtime (W4-11 /
-//! plan 23a §4.1). Do **not** re-paste hex in consumer crates.
+//! import these consts and still call `rkyv::to_bytes` at runtime (accepted
+//! trade-off: no second independent recording). Do **not** re-paste hex in
+//! consumer crates.
 //!
 //! **rkyv camp:** this crate pins `rkyv = "=0.7.39"` (same as the multisig
 //! contracts). Resolved patch: `(cd crates/knot-encoding && cargo tree -p rkyv)`.
 //!
-//! **Layer E + `repr(C)` (spec 23b Phase B, 2026-08-03):** structs carry
+//! **Layer E + `repr(C)` (2026-08-03):** structs carry
 //! `#[archive_attr(repr(C))]`. Measured **DIFFERENT** on `MultisigAccountView`
 //! (IDENTICAL on `SignatureEntry` / `VerifyQuorumArgs`). Constants below are
 //! after-pin bytes where they moved.
@@ -56,7 +57,8 @@ pub const GOLDEN_VERIFY_QUORUM_ARGS_HEX: &str = concat!(
 
 /// `MultisigAccountView { members: [pk0, pk1], threshold: 2, nonce: 3 }`.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
-/// After-pin hex (spec 23b `repr(C)` DIFFERENT 2026-08-03).
+/// After-pin hex (`repr(C)` pin, measured DIFFERENT from the prior layout,
+/// 2026-08-03).
 pub const GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX: &str = concat!(
     "e3a945bd7dbd51365c255b3a7851432419f20ddb7bc948f5b60d677c5b02ff9e",
     "6255228ee75c9dd8a3bd4a86751e9b14cf501c89e69b4b2a2169c189accff3af",

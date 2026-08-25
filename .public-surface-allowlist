@@ -6,9 +6,8 @@ sme-platform
 nocturne.knot
 
 # Public protocol section labels (§4a / §4b) and common doc section refs
-§4
-§2
-§7
+§4a
+§4b
 
 # Internal tooling names still present until public carve
 nocturne-agent-kit

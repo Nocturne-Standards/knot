@@ -192,7 +192,7 @@ impl MockLedger {
     }
 
     /// `target`: 32-byte contract id; `function_name` + `call_args` as on proposals API.
-    /// `nonce` is the caller uniquifier (§2.12 v3), not the registry account nonce.
+    /// `nonce` is the caller uniquifier (v3), not the registry account nonce.
     pub fn create_proposal(
         &mut self,
         registry_account_id: u64,

@@ -1558,7 +1558,7 @@ struct ProposalCreateReq {
     args_hex: String,
     #[serde(default)]
     deadline: u64,
-    /// Caller uniquifier (§2.12 v3); CSPRNG default when omitted.
+    /// Caller uniquifier (v3); CSPRNG default when omitted.
     #[serde(default)]
     nonce: Option<u64>,
 }
