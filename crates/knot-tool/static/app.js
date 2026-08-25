@@ -419,13 +419,14 @@ function updateHeaderApprovals(p) {
     return;
   }
   const finalized = p.status === "finalized" || p.finalized === true;
-  state.hidden = false;
-  state.textContent = finalized ? "Finalized" : "Open";
-  state.className = "approvals-state " + (finalized ? "finalized" : "open");
   const count = p.approvals != null ? p.approvals : n;
   statusApprovals = count;
   const council = demoCouncils.find((c) => c.id === p.accountId);
   const t = thr != null ? thr : (council && council.threshold);
+  const ready = !finalized && t != null && count >= t;
+  state.hidden = false;
+  state.textContent = finalized ? "Finalized" : ready ? "Ready" : "Open";
+  state.className = "approvals-state " + (finalized ? "finalized" : ready ? "ready" : "open");
   if (text) {
     text.textContent = t != null ? `Approvals ${count}/${t}` : `Approvals ${count}`;
   }
@@ -721,8 +722,18 @@ function renderProposalsList() {
       + (selected ? " selected" : "")
       + (confirmed ? " confirmed" : "");
     card.dataset.id = String(p.id);
+    const finalized = p.status === "finalized" || p.finalized === true;
+    const cardCouncil = demoCouncils.find((c) => c.id === p.accountId);
+    const cardThreshold = cardCouncil && cardCouncil.threshold;
+    const cardApprovals = p.approvals != null ? p.approvals : 0;
+    const ready = !finalized && cardThreshold != null && cardApprovals >= cardThreshold;
+    const cardStatusClass = finalized ? "finalized" : ready ? "ready" : "open";
+    const cardStatusLabel = finalized ? "Executed" : ready ? "Ready" : "Open";
     let html =
+      `<div class="proposal-card-head">` +
       `<span class="proposal-card-council">Council #${escapeHtml(String(p.accountId))}</span>` +
+      `<span class="status-chip ${cardStatusClass}">${cardStatusLabel}</span>` +
+      `</div>` +
       `<span class="proposal-card-id">Proposal #${escapeHtml(String(p.id))}</span>` +
       `<span class="proposal-card-purpose">${escapeHtml(p.purpose || "Intent")}</span>`;
     if (confirmed && p.description) {
@@ -791,7 +802,8 @@ function updateApproveSection() {
 }
 
 function updateStatusCard(p) {
-  // Status lives in the header Approvals pill (Open / Finalized).
+  // Header Approvals pill (Open / Finalized) plus the persistent status chip
+  // on each card in the Proposals list.
   if (!p) {
     updateHeaderApprovals(null);
     return;
@@ -800,6 +812,7 @@ function updateStatusCard(p) {
   const council = demoCouncils.find((c) => c.id === p.accountId);
   if (council && council.threshold != null) statusThreshold = council.threshold;
   updateHeaderApprovals(p);
+  renderProposalsList();
 }
 
 function openCouncilDetail(c) {
