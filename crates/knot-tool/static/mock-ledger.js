@@ -149,6 +149,38 @@
     ]);
   }
 
+  /** Fingerprint of an arbitrary message — same output shape as the Rust
+   * tool's quorum-preview response (digest_hex/mnemonic/safety_number), not
+   * its bytes. UI stand-in only, see file header. */
+  function messageFingerprintOut(msg) {
+    const digest = mockDigest32(["msg", bytesToHex(msg)]);
+    return {
+      msg_hex: `0x${bytesToHex(msg)}`,
+      digest_hex: `0x${bytesToHex(digest)}`,
+      digest_mnemonic: digestMnemonic(digest),
+      digest_safety_number: digestSafetyNumber(digest),
+    };
+  }
+
+  /** Digest over a proposed change_account call — same output shape as the
+   * Rust tool's change-account-preview response, not its bytes. UI stand-in
+   * only, see file header. */
+  function changeAccountDigest({ accountId, nonce, newMembers, newThreshold }) {
+    return mockDigest32([
+      "change_account",
+      String(accountId),
+      String(nonce),
+      newMembers.map(bytesToHex).join(","),
+      String(newThreshold),
+    ]);
+  }
+
+  function multiSignerServeNote(signers) {
+    return signers.length > 1
+      ? "Prefer one signer identity per serve process — run separate serve instances per member when possible."
+      : null;
+  }
+
   class MockLedger {
     constructor() {
       this.accounts = new Map();
@@ -338,6 +370,25 @@
     err.status = status;
     err.body = message;
     throw err;
+  }
+
+  function resolveSignerPks(names) {
+    return names.map((name) => {
+      const id = store.findIdentity(name);
+      if (!id) httpError(400, `no identity named '${name}'`);
+      return id.pk_bytes;
+    });
+  }
+
+  function ensureSignersAreMembers(accountId, signerPks) {
+    const account = store.ledger.account(accountId);
+    if (!account) httpError(400, `unknown registry account ${accountId}`);
+    for (const pk of signerPks) {
+      if (!account.members.some((m) => samePk(m, pk))) {
+        httpError(403, "Signer is not a committee member.");
+      }
+    }
+    return account;
   }
 
   function parseBody(opts) {
@@ -552,10 +603,144 @@
       };
     }
 
+    if (q === "/api/quorum/preview" && method === "POST") {
+      const body = parseBody(opts);
+      const accountId = Number(body.account);
+      const signers = body.signers || [];
+      const signerPks = resolveSignerPks(signers);
+      ensureSignersAreMembers(accountId, signerPks);
+      const msg = new TextEncoder().encode(String(body.msg || ""));
+      return {
+        account_id: accountId,
+        signers,
+        note: multiSignerServeNote(signers),
+        ...messageFingerprintOut(msg),
+      };
+    }
+
+    if (q === "/api/quorum/submit" && method === "POST") {
+      const body = parseBody(opts);
+      if (!body.confirm) {
+        httpError(400, "Confirm required — call preview first, then POST with confirm:true.");
+      }
+      // Matches the real DEMO_MODE=mock server: verify_quorum submits a real
+      // chain call, so it is rejected in mock mode too (nothing to port here).
+      httpError(501, "This action requires live testnet mode (DEMO_MODE=testnet).");
+    }
+
+    if (q === "/api/change-account/preview" && method === "POST") {
+      const body = parseBody(opts);
+      const accountId = Number(body.account);
+      const account = store.ledger.account(accountId);
+      if (!account) httpError(400, `unknown registry account ${accountId}`);
+      const newMemberNames = body.new_members || [];
+      const newMembers = resolveSignerPks(newMemberNames);
+      const newThreshold = Number(body.new_threshold);
+      const signers = body.signers || [];
+      const digest = changeAccountDigest({
+        accountId,
+        nonce: account.nonce,
+        newMembers,
+        newThreshold,
+      });
+      return {
+        account_id: accountId,
+        nonce: account.nonce,
+        new_members: newMemberNames,
+        new_threshold: newThreshold,
+        signers,
+        digest_hex: `0x${bytesToHex(digest)}`,
+        digest_mnemonic: digestMnemonic(digest),
+        digest_safety_number: digestSafetyNumber(digest),
+        note: multiSignerServeNote(signers),
+      };
+    }
+
+    if (q === "/api/change-account/submit" && method === "POST") {
+      const body = parseBody(opts);
+      if (!body.confirm) {
+        httpError(400, "Confirm required — call preview first, then POST with confirm:true.");
+      }
+      // Matches the real DEMO_MODE=mock server: change_account submits a real
+      // chain call, so it is rejected in mock mode too (nothing to port here).
+      httpError(501, "This action requires live testnet mode (DEMO_MODE=testnet).");
+    }
+
     httpError(404, `frontend mock: unsupported ${method} ${q}`);
   }
 
-  /** Lightweight self-check of ledger rules (mirrors Rust unit tests). */
+  /** Lightweight self-check of the quorum/change-account router paths.
+   * Swaps store.identities/ledger out for isolated fixtures and restores
+   * them in `finally` — this runs during live app boot, so it must never
+   * touch the real demo's identities/councils, even on failure. */
+  async function selfTestRouter() {
+    const savedIdentities = store.identities;
+    const savedLedger = store.ledger;
+    store.identities = [];
+    store.ledger = new MockLedger();
+    try {
+      return await selfTestRouterBody();
+    } finally {
+      store.identities = savedIdentities;
+      store.ledger = savedLedger;
+    }
+  }
+
+  async function selfTestRouterBody() {
+    store.createIdentity("selftest-a");
+    store.createIdentity("selftest-b");
+    const acct = await mockApi("/api/account/create", {
+      method: "POST",
+      body: JSON.stringify({ members: ["selftest-a", "selftest-b"], threshold: 2 }),
+    });
+    const accountId = Number(acct.log.match(/id=(\d+)/)[1]);
+
+    const qp = await mockApi("/api/quorum/preview", {
+      method: "POST",
+      body: JSON.stringify({ account: accountId, msg: "hello", signers: ["selftest-a"] }),
+    });
+    if (!qp.digest_hex || !qp.digest_mnemonic) throw new Error("quorum preview shape");
+    try {
+      await mockApi("/api/quorum/submit", {
+        method: "POST",
+        body: JSON.stringify({ account: accountId, msg: "hello", signers: ["selftest-a"], confirm: true }),
+      });
+      throw new Error("quorum submit should be rejected in mock mode");
+    } catch (e) {
+      if (!/live testnet mode/i.test(e.message)) throw e;
+    }
+
+    const cap = await mockApi("/api/change-account/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        account: accountId,
+        new_members: ["selftest-a"],
+        new_threshold: 1,
+        signers: ["selftest-a", "selftest-b"],
+      }),
+    });
+    if (!cap.digest_hex || !cap.digest_mnemonic) throw new Error("change-account preview shape");
+    if (!cap.note) throw new Error("change-account preview multi-signer note");
+    try {
+      await mockApi("/api/change-account/submit", {
+        method: "POST",
+        body: JSON.stringify({
+          account: accountId,
+          new_members: ["selftest-a"],
+          new_threshold: 1,
+          signers: ["selftest-a"],
+          confirm: true,
+        }),
+      });
+      throw new Error("change-account submit should be rejected in mock mode");
+    } catch (e) {
+      if (!/live testnet mode/i.test(e.message)) throw e;
+    }
+
+    return true;
+  }
+
+  /** Lightweight self-check of ledger rules, same cases as the Rust unit tests. */
   function selfTest() {
     const led = new MockLedger();
     const m = (b) => {
@@ -592,6 +777,7 @@
     store,
     mockApi,
     selfTest,
+    selfTestRouter,
     MOCK_CHAIN_ID,
     pkBytesForName,
   };

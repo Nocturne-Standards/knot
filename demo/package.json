@@ -1,0 +1,13 @@
+{
+  "name": "knot-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bash build.sh",
+    "serve": "npm run build && npx --yes serve dist -p 8892",
+    "deploy": "npm run build && CLOUDFLARE_API_TOKEN=$(security find-generic-password -a \"$USER\" -s cloudflare-nocturne-pages -w | tr -d '\\n\\r') CLOUDFLARE_ACCOUNT_ID=97a7e08f5732716f69a9165cdc1d7a38 wrangler pages deploy dist --project-name=knot-demo"
+  },
+  "devDependencies": {
+    "wrangler": "^4.112.0"
+  }
+}

@@ -1395,6 +1395,7 @@ on("btn-close-council-detail", "click", () => closeCouncilDetail());
   if (USE_FRONTEND_MOCK) {
     try {
       if (window.MockLab && window.MockLab.selfTest) window.MockLab.selfTest();
+      if (window.MockLab && window.MockLab.selfTestRouter) await window.MockLab.selfTestRouter();
       console.info("Lab: frontend MockLedger active (static demo)");
     } catch (e) {
       console.error("MockLedger selfTest failed", e);
