@@ -1,6 +1,6 @@
 //! Call argument / return types for `knot-registry`.
 //!
-//! Canonical definitions live in `knot-encoding` (spec 26 + Wave 7).
+//! Canonical definitions live in `knot-encoding`.
 //! This module re-exports them so existing `#[path]` includes and contract
 //! `use` paths keep working.
 

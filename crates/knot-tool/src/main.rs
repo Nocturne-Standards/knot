@@ -265,7 +265,7 @@ enum ProposalCmd {
         args_hex: String,
         #[arg(long, default_value_t = 0)]
         deadline: u64,
-        /// Caller uniquifier (§2.12 v3); CSPRNG default when omitted.
+        /// Caller uniquifier (v3); CSPRNG default when omitted.
         #[arg(long)]
         nonce: Option<u64>,
     },
@@ -306,7 +306,7 @@ enum BlobCmd {
         chain_id: u64,
         #[arg(long)]
         committee_id: u64,
-        /// Caller uniquifier (§2.12 v3); CSPRNG default when omitted.
+        /// Caller uniquifier (v3); CSPRNG default when omitted.
         #[arg(long)]
         nonce: Option<u64>,
         #[arg(long)]

@@ -1,5 +1,5 @@
 //! Layer-E multisig ABI types shared across `knot-registry` and
-//! `knot-proposals` (spec 26 + Wave 7 host carve). Spec 23b pins
+//! `knot-proposals`, carved out into a dedicated host-side feature. Pins
 //! `#[archive_attr(repr(C))]` on struct Archive types (not fieldless
 //! `#[repr(u8)]` enums — see `ProposalStatus`). Gated behind the
 //! `call-types` feature so §4a digest consumers do not pull in `dusk-core`.
@@ -170,7 +170,7 @@ pub struct ApproveArgs {
     pub signature: BlsSignature,
 }
 
-/// Structured propose input — §2.12 v3 fields. Digest is recomputed on-chain.
+/// Structured propose input — v3 fields. Digest is recomputed on-chain.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[archive_attr(repr(C))]

@@ -1,5 +1,5 @@
-//! Consumer-local archived-layout goldens for `knot-proposals` call types
-//! (Wave 5 / spec 23a + 23b Phase B). Shared layer-E types (`SignatureEntry`,
+//! Consumer-local archived-layout goldens for `knot-proposals` call types.
+//! Shared layer-E types (`SignatureEntry`,
 //! `VerifyQuorumArgs`, `MultisigAccountView`) assert against
 //! `knot_encoding::layout_goldens` — do **not** re-paste those hex values
 //! here; still call `rkyv::to_bytes` at runtime.

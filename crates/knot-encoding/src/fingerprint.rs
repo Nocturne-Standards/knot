@@ -2,7 +2,9 @@
 //!
 //! Signers compare the **full** 32-byte §4a digest via a BIP39-style 24-word
 //! mnemonic (256-bit entropy + SHA-256 checksum). Never truncate the digest
-//! for human comparison — short truncations are grindable (deep-dive §7b).
+//! for human comparison — an attacker can grind a short truncation to find a
+//! colliding prefix cheaply enough to matter; the full digest cannot be
+//! grinded in any practical time.
 
 use alloc::string::String;
 use alloc::vec::Vec;

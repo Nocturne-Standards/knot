@@ -109,7 +109,7 @@ mod knot_proposals {
             self.proposal_ttl
         }
 
-        /// Open a structured proposal. Digest = §2.12 v3 Keccak; `nonce` is a
+        /// Open a structured proposal. Digest = v3 Keccak; `nonce` is a
         /// caller-supplied uniquifier (not a monotonic counter).
         pub fn propose(&mut self, args: ProposeArgs) -> u64 {
             let _registry = self.require_registry();

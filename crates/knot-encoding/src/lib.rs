@@ -30,7 +30,7 @@ pub use fingerprint::{digest_hex, digest_mnemonic, digest_safety_number};
 pub mod call_types;
 
 // Goldens are a `pub mod`, not `#[cfg(test)]` — consumers assert against these
-// consts rather than hand-copying hex (spec 26 Task 7 / Wave 4 pattern).
+// consts rather than hand-copying hex.
 #[cfg(feature = "call-types")]
 pub mod layout_goldens;
 
@@ -88,11 +88,11 @@ pub const DOMAIN_PROPOSAL_V2: &[u8] = b"nocturne.knot.multisig.proposal.v2";
 pub const DOMAIN_CHANGE_ACCOUNT_V2: &[u8] = b"nocturne.knot.multisig-registry.change_account.v2";
 
 /// v3 proposal signing domain — binds `chain_id`, `self_id`, and `epoch`
-/// (IMPLEMENTATION.md §2.12).
+///
 pub const DOMAIN_PROPOSAL_V3: &[u8] = b"nocturne.knot.multisig.proposal.v3";
 
 /// v3 registry `change_account` quorum domain — binds `chain_id`, `self_id`,
-/// and explicit `member_count` (IMPLEMENTATION.md §2.12).
+/// and explicit `member_count`.
 pub const DOMAIN_CHANGE_ACCOUNT_V3: &[u8] = b"nocturne.knot.multisig-registry.change_account.v3";
 
 /// M12 party roster signup domain — collector relay proof-of-possession.
@@ -146,7 +146,7 @@ pub fn change_account_message(
     change_account_digest(account_id, nonce, member_pks, new_threshold).to_vec()
 }
 
-/// §2.12 v3 `change_account` preimage — binds registry instance and chain.
+/// v3 `change_account` preimage — binds registry instance and chain.
 pub fn change_account_preimage_v3(
     chain_id: u64,
     self_id: &[u8; 32],
@@ -184,7 +184,7 @@ pub fn change_account_preimage_v3(
     Ok(out)
 }
 
-/// Keccak256 of the §2.12 v3 `change_account` preimage.
+/// Keccak256 of the v3 `change_account` preimage.
 pub fn change_account_digest_v3(
     chain_id: u64,
     self_id: &[u8; 32],
@@ -240,7 +240,7 @@ pub struct ProposalIntent {
     pub deadline: u64,
 }
 
-/// Fields that fully determine the §2.12 v3 proposal preimage / digest.
+/// Fields that fully determine the v3 proposal preimage / digest.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProposalIntentV3 {
     pub chain_id: u64,
@@ -280,7 +280,7 @@ pub struct ProposalBlob {
 }
 
 impl ProposalIntentV3 {
-    /// Stream the §2.12 v3 preimage into Keccak-256 and return the full digest.
+    /// Stream the v3 preimage into Keccak-256 and return the full digest.
     pub fn digest(&self) -> Result<[u8; 32], EncodingError> {
         proposal_digest_v3(
             self.chain_id,
@@ -295,7 +295,7 @@ impl ProposalIntentV3 {
         )
     }
 
-    /// Build the raw §2.12 v3 preimage bytes (without hashing).
+    /// Build the raw v3 preimage bytes (without hashing).
     pub fn preimage_bytes(&self) -> Result<Vec<u8>, EncodingError> {
         proposal_preimage_v3(
             self.chain_id,
@@ -495,7 +495,7 @@ pub fn recompute_and_verify(
     }
 }
 
-/// Recompute §2.12 v3 digest from intent fields and assert it matches `claimed`.
+/// Recompute v3 digest from intent fields and assert it matches `claimed`.
 pub fn recompute_and_verify_v3(
     intent: &ProposalIntentV3,
     claimed: &[u8; 32],
