@@ -1,1 +1,0 @@
-/Users/leonidas/dev/aichbindas/nocturne-agent-kit/cursor/agents/reviewer.md

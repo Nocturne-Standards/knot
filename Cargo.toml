@@ -8,9 +8,9 @@ members = [
     "crates/knot-collector",
 ]
 
-# Contract pins: knot-tool loads pins via the sibling `nocturne-deployments` crate
-# (path dep — clone that repo next to `knot`; public CI without the sibling
-# cannot compile knot-tool).
+# Contract pins: knot-tool default build reads deployments/testnet.json via a
+# local loader (NOCTURNE_DEPLOYMENTS / walk-up). Optional feature
+# `deployments-crate` uses the public Nocturne-Standards/nocturne-deployments crate.
 
 [workspace.package]
 edition = "2024"

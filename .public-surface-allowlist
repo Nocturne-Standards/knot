@@ -1,34 +1,26 @@
 # Substrings that neutralize a leak-gate hit (line contains any of these → ignored).
-# Tune before public launch; unset ALLOW_PRIVATE_TIER in CI when ready to fail-closed.
+# Credentials / absolute paths still hard-fail even when listed here.
 
 # Historical domain tags that cannot change (on-chain)
 sme-platform
 nocturne.knot
 
-# Public protocol section labels (§4a / §4b) and common doc section refs
+# Public protocol section labels (§4a / §4b)
 §4a
 §4b
 
-# Internal tooling names still present until public carve
-nocturne-agent-kit
-nocturne-mcp-
-pituitary
-.nocturne-agent-kit-adopted
-.cursor/mcp.json
-AGENTS.md
+# Public pin repo + env (documented behavior)
+deployments/testnet.json
+NOCTURNE_DEPLOYMENTS
+
+# Ignore entries that name private-tier paths so they stay untracked
 .pituitary/
+.nocturne-agent-kit-adopted
+.nocturne-product-root
+AGENTS.md
+FIELD_GUIDE/
 
 # Scripts and this allowlist
 scripts/check-public-surface.sh
 .public-surface-allowlist
-
-# Spec / design docs that discuss the patterns (private tier until launch)
-# (paths removed from this repo — soft check still flags leftover mentions)
-docs/internal/
-docs/internal
-docs/superpowers/
-
-# Public, out-of-repo sibling: aichbindas/nocturne-deployments (public GitHub repo).
-# The pin filename/env var are real documented behavior, not a private path.
-deployments/testnet.json
-NOCTURNE_DEPLOYMENTS
+.gitignore

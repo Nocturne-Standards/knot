@@ -22,16 +22,11 @@ jobs:
           components: rustfmt, clippy
       - name: Gate coverage
         run: scripts/check-gate-coverage.sh
-      - name: Field guide kit-sync
-        # HARD — lag/divergence fails the job. No ci-accept-warn.
-        run: scripts/check-kit-sync.sh
       - name: Audit/design SHA stamps
         run: scripts/check-audit-sha.sh
       - name: Public-surface leak gate
-        env:
-          # Soften private-tier patterns until launch squash; credentials still hard-fail.
-          ALLOW_PRIVATE_TIER: "1"
-        run: scripts/ci-accept-warn.sh scripts/check-public-surface.sh
+        # Hard-fail private-tier vocab + credentials (ALLOW_PRIVATE_TIER unset/0).
+        run: scripts/check-public-surface.sh
       - name: Crate version table vs Cargo.toml
         run: scripts/check-crate-version-table.sh
       - name: Shared-code ratchet

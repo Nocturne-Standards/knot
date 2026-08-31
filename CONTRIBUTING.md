@@ -12,16 +12,22 @@ multisig on Dusk — not production wallet software.
 
 ## Development setup
 
-`knot-tool` depends on the sibling [`nocturne-deployments`](https://github.com/aichbindas/nocturne-deployments)
-crate via a path dependency. Clone that repo **next to** this one so
-`../nocturne-deployments` exists — a standalone `knot` checkout without the
-sibling cannot compile `knot-tool`.
-
 ```bash
 rustc --version   # 1.94+ required
 cargo build -p knot-tool
 cargo test -p knot-encoding
 ```
+
+A fresh clone builds `knot-tool` without a sibling repo. Contract **pins**
+(testnet IDs) are optional for compile: set `NOCTURNE_DEPLOYMENTS` to a
+`testnet.json` file or directory, place `deployments/testnet.json` in the
+tree (gitignored symlink is fine), or clone
+[`Nocturne-Standards/nocturne-deployments`](https://github.com/Nocturne-Standards/nocturne-deployments)
+next to this repo. Without pins, chain-integration paths that need live
+contract IDs fail — expected for a pin-less checkout.
+
+Optional: `cargo build -p knot-tool --features deployments-crate` uses the
+public `nocturne-deployments` git dependency instead of the in-tree JSON loader.
 
 Contract crates build WASM via per-crate Makefiles (cwd-sensitive):
 
@@ -29,12 +35,6 @@ Contract crates build WASM via per-crate Makefiles (cwd-sensitive):
 (cd crates/knot-registry && make wasm && make test)
 (cd crates/knot-proposals && make wasm && make test)
 ```
-
-### Contract pins (testnet)
-
-`knot-tool` reads `deployments/testnet.json` from `NOCTURNE_DEPLOYMENTS` or
-by walking up from the crate directory. Without pins, chain-integration tests
-that need live contract IDs will fail — that is expected for a fresh checkout.
 
 ## Pull requests
 

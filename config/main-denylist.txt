@@ -1,4 +1,0 @@
-Cargo.toml
-Cargo.lock
-deployments/
-.pituitary/pituitary.toml

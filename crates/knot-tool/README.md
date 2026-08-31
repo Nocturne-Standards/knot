@@ -64,12 +64,15 @@ resolve). Knot knot-tool covers registry, proposals, and generic Lab only.
 
 ## Contract pins (testnet)
 
-`knot-tool` loads `deployments/testnet.json` via the
-[`nocturne-deployments`](https://github.com/aichbindas/nocturne-deployments)
-crate (`NOCTURNE_DEPLOYMENTS` or walk-up discovery). Clone that repo **next to**
-`knot` (`../nocturne-deployments`) — a standalone checkout without the sibling
-cannot compile `knot-tool`.
+Default build reads `deployments/testnet.json` via an in-tree loader
+(`NOCTURNE_DEPLOYMENTS` or walk-up / sibling discovery). A fresh clone
+**compiles** without pins; chain calls that need live contract IDs need a pin
+file — clone
+[`Nocturne-Standards/nocturne-deployments`](https://github.com/Nocturne-Standards/nocturne-deployments)
+next to this repo, or point `NOCTURNE_DEPLOYMENTS` at `testnet.json`.
 
+Optional: `--features deployments-crate` uses the public `nocturne-deployments`
+crate instead of the local loader.
 ## Scope
 
 This tool owns both ends of the wire — the contract's own source

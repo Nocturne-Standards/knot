@@ -5,11 +5,15 @@
 *.swp
 *~
 
-# Local symlink to aichbindas/nocturne-deployments pin home (see that repo README).
+# Local symlink / checkout of Nocturne-Standards/nocturne-deployments pin home.
 /deployments
 
-# Pituitary local index (commit curated .toml)
-.pituitary/*.db
-.pituitary/*.db-*
-
+# Agent / private-tier tooling (lives outside the public carve)
+.cursor/
 .worktrees/
+.pituitary/
+.nocturne-agent-kit-adopted
+.nocturne-product-root
+AGENTS.md
+FIELD_GUIDE/
+.superpowers/

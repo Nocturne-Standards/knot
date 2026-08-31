@@ -12,15 +12,14 @@ fi
 cd "$ROOT"
 
 # Newline-separated find predicates; override with AUDIT_SHA_FIND if needed.
-# Default: docs/internal AUDIT-*/DESIGN-*/IMPLEMENTATION.md plus any nested.
+# Default: AUDIT-*/DESIGN-*/IMPLEMENTATION.md under docs/.
 collect_files() {
   if [[ -n "${AUDIT_SHA_FIND:-}" ]]; then
     eval "$AUDIT_SHA_FIND"
     return
   fi
   {
-    find docs/internal -maxdepth 1 \( -name 'AUDIT-*' -o -name 'DESIGN-*' -o -name 'IMPLEMENTATION.md' \) -type f 2>/dev/null || true
-    find docs -type f \( -name 'AUDIT-*' -o -name 'DESIGN-*' \) 2>/dev/null || true
+    find docs -type f \( -name 'AUDIT-*' -o -name 'DESIGN-*' -o -name 'IMPLEMENTATION.md' \) 2>/dev/null || true
   } | sort -u
 }
 
