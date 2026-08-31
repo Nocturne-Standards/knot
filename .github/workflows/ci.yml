@@ -37,10 +37,15 @@ jobs:
         # Avoid --all-targets: contract integration tests include_bytes! release WASM
         # built only in the test job.
         run: cargo clippy --workspace --lib --bins -- -D warnings
+      - name: Install gitleaks
+        run: |
+          ver=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${ver}/gitleaks_${ver}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Org runners cannot use gitleaks-action without GITLEAKS_LICENSE; run CLI.
+        run: scripts/check-gitleaks.sh
 
   test:
     runs-on: ubuntu-latest
