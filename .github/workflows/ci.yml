@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.0"
+          components: rustfmt, clippy
+      - name: Gate coverage
+        run: scripts/check-gate-coverage.sh
+      - name: Audit/design SHA stamps
+        run: scripts/check-audit-sha.sh
+      - name: Public-surface leak gate
+        # Hard-fail private-tier vocab + credentials (ALLOW_PRIVATE_TIER unset/0).
+        run: scripts/check-public-surface.sh
+      - name: Crate version table vs Cargo.toml
+        run: scripts/check-crate-version-table.sh
+      - name: Shared-code ratchet
+        run: scripts/check-repo-rules.sh
+      - name: cargo fmt --check
+        run: cargo fmt --check
+      - name: cargo clippy
+        # Avoid --all-targets: contract integration tests include_bytes! release WASM
+        # built only in the test job.
+        run: cargo clippy --workspace --lib --bins -- -D warnings
+      - name: Install gitleaks
+        run: |
+          ver=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${ver}/gitleaks_${ver}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Gitleaks
+        # Org runners cannot use gitleaks-action without GITLEAKS_LICENSE; run CLI.
+        run: scripts/check-gitleaks.sh
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.0"
+          targets: wasm32-unknown-unknown
+      # Workspace root = knot nest. Collector is AGPL; encoding/registry/proposals/tool Apache.
+      # Contract tests `include_bytes!` release WASM under nest `target/contract/`.
+      - name: build contract WASM
+        run: |
+          make -C crates/knot-registry wasm
+          make -C crates/knot-proposals wasm
+          make -C crates/knot-proposals/test-target wasm
+        timeout-minutes: 30
+      - name: cargo test (workspace)
+        run: cargo test
+        timeout-minutes: 45

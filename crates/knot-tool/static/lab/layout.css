@@ -1,0 +1,84 @@
+/* nocturne-lab layout - slides / dots / feet / wash */
+
+.lab-wash,
+.slides {
+  background: linear-gradient(
+    180deg,
+    var(--sky) 0%,
+    var(--paper) 42%,
+    var(--paper-2) 100%
+  );
+}
+
+.slides {
+  height: 100%;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.slide {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.legal-links {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: clamp(0.9rem, 2.5vw, 1.5rem);
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  gap: 1rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+.legal-links a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  opacity: 0.75;
+  transition: opacity 0.2s var(--ease), color 0.2s var(--ease);
+}
+.legal-links a:hover {
+  opacity: 1;
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.dots {
+  position: fixed;
+  right: clamp(0.9rem, 2.5vw, 1.75rem);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  transition: background 200ms ease, transform 200ms ease, border-color 200ms ease;
+  text-decoration: none;
+}
+.dot.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  transform: scale(1.2);
+}
+
+.page-foot {
+  position: fixed;
+  left: clamp(0.9rem, 2.5vw, 1.75rem);
+  bottom: clamp(0.7rem, 2vw, 1.2rem);
+  z-index: 15;
+  margin: 0;
+  max-width: min(28rem, calc(100vw - 5rem));
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}

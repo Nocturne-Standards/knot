@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 65">
+  <clipPath id="mark-h"><rect x="0" y="0" width="120" height="60"></rect></clipPath>
+  <circle cx="60" cy="60" r="46" fill="#1c2430" clip-path="url(#mark-h)"></circle>
+  <circle cx="76" cy="48" r="34" fill="#f3f1eb" clip-path="url(#mark-h)"></circle>
+  <rect x="8" y="61" width="36.25" height="4" fill="#1c2430"></rect>
+  <rect x="44.25" y="61" width="67.75" height="4" fill="#f3f1eb"></rect>
+</svg>

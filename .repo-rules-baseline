@@ -1,0 +1,6 @@
+crates/knot-collector/src/store.rs:27:/// Mirrors `chain-gateway-core::db::EventDb`'s pattern.
+crates/knot-tool/Cargo.toml:22:# format must match byte-for-byte for the contract to accept our args.
+crates/knot-tool/src/chain.rs:20:/// Accepted by current testnet (1.7.x); mirrors `agent-pay-lp`.
+crates/knot-tool/src/collector_client.rs:39:/// One row of `GET /v1/proposals` — mirrors `knot_collector::dto::ProposalSummary`.
+crates/knot-tool/src/collector_client.rs:55:/// `POST /v1/party` request body — mirrors `knot_collector::dto::PartySignupDto`.
+crates/knot-tool/src/registry_types.rs:7://! — see README.md), the wire format must match byte-for-byte; including the

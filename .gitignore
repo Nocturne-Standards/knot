@@ -1,0 +1,19 @@
+/target/
+**/target/
+**/*.sqlite
+.DS_Store
+*.swp
+*~
+
+# Local symlink / checkout of Nocturne-Standards/nocturne-deployments pin home.
+/deployments
+
+# Agent / private-tier tooling (lives outside the public carve)
+.cursor/
+.worktrees/
+.pituitary/
+.nocturne-agent-kit-adopted
+.nocturne-product-root
+AGENTS.md
+FIELD_GUIDE/
+.superpowers/

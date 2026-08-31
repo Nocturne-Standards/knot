@@ -1,0 +1,26 @@
+# Substrings that neutralize a leak-gate hit (line contains any of these → ignored).
+# Credentials / absolute paths still hard-fail even when listed here.
+
+# Historical domain tags that cannot change (on-chain)
+sme-platform
+nocturne.knot
+
+# Public protocol section labels (§4a / §4b)
+§4a
+§4b
+
+# Public pin repo + env (documented behavior)
+deployments/testnet.json
+NOCTURNE_DEPLOYMENTS
+
+# Ignore entries that name private-tier paths so they stay untracked
+.pituitary/
+.nocturne-agent-kit-adopted
+.nocturne-product-root
+AGENTS.md
+FIELD_GUIDE/
+
+# Scripts and this allowlist
+scripts/check-public-surface.sh
+.public-surface-allowlist
+.gitignore

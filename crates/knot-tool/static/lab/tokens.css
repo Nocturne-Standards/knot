@@ -1,0 +1,23 @@
+/*
+ * Nocturne Lab - paper/ink tokens for marketing, mock demos, docs.
+ * Do not mix with frontend-kit or WEN/Dusk Tools. See STYLEBOOK.md.
+ */
+:root {
+  --ink: #1c2430;
+  --ink-soft: #4a5568;
+  --paper: #f3f1eb;
+  --paper-2: #e8e4d9;
+  --sky: #d5e0ea;
+  --horizon: #c9a66b;
+  --sea: #3d6b7a;
+  --ok: #2f7d5a;
+  --danger: #b33a2b;
+  --warn: #8a6b3d;
+  --demo: #8a6b3d;
+  --soon: #6b6f78;
+  --line: rgba(28, 36, 48, 0.12);
+  --font-display: "Literata", Georgia, serif;
+  --font-body: "Sora", system-ui, sans-serif;
+  --radius: 10px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
