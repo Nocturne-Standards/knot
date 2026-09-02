@@ -63,8 +63,8 @@ Exact command(s) the worker runs and the parent re-runs:
 
 ## Evidence (worker)
 
-- HEAD (`git rev-parse HEAD`): pending feat commit
-- status_digest (`git status --porcelain=v1 -uall | git hash-object --stdin`): pending
+- HEAD (`git rev-parse HEAD`): f3370bab1277ebf391672e8ed82df15c3779c1ea
+- status_digest (`git status --porcelain=v1 -uall | git hash-object --stdin`): e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
 - If porcelain empty: also `git log --oneline <upstream>..HEAD`. Clean tree AND no new commits = no-op — do not `leaf_done`
 - verification (quote command + output):
 
