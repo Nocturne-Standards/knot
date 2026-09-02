@@ -18,9 +18,12 @@ Architecture and long-form docs:
 
 `atlas/` (per-project service registry) stays **outside** this repo — it
 consumes `knot-proposals` / `knot-registry` as a client. Knot is complete
-without Atlas. Atlas is the reference named service-directory to pair with
-Knot. When both delays exist, set Atlas `timelock_blocks` to 0 so waits do
-not stack.
+without Atlas.
+
+Atlas is another layer: named services, roles, and a consistent admin gate on
+top of a Knot council. Each product can delay. Two delays on one intent means
+two waits. When both exist, leave Atlas `timelock_blocks` at 0 so Knot’s
+per-account delay is the only wait.
 
 ## Crates
 

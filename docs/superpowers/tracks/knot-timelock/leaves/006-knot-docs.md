@@ -66,7 +66,7 @@ rg -n "PINNED-DIFFERENT-REDEPLOYED|timelock_blocks|delay vs deadline" README.md 
 $ rg -n "PINNED-DIFFERENT-REDEPLOYED|timelock_blocks|delay vs deadline" README.md docs/security-model.md docs/design-notes.md crates/knot-encoding/README.md crates/knot-registry/README.md crates/knot-proposals/README.md
 ```
 
-Hits in security-model, design-notes §4, README Atlas pairing, crate READMEs PINNED-DIFFERENT-REDEPLOYED.
+Hits in security-model, design-notes section 4, README Atlas pairing, crate READMEs PINNED-DIFFERENT-REDEPLOYED.
 
 - Covered: delay vs deadline; immediate cancel; PINNED labels; standalone Knot + Atlas delay 0
 - Not covered: nocturne-docs (leaf 4)

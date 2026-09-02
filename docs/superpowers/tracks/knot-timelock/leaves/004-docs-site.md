@@ -6,7 +6,7 @@ owner: knot-timelock-session
 deps:
   - 5
 scope:
-  - /Users/leonidas/dev/aichbindas/nocturne-docs/docs/v1/knot/
+  - nocturne-docs/docs/v1/knot/
 acceptance:
   - "docs.nocturne-standards.org knot pages: Knot works alone; Atlas is reference directory; set Atlas timelock_blocks to 0 when using Knot delay"
 acceptanceDone:
@@ -42,7 +42,7 @@ n/a: behavioral only
 Exact command(s) the worker runs and the parent re-runs:
 
 ```bash
-rg -n "Atlas" /Users/leonidas/dev/aichbindas/nocturne-docs/docs/v1/knot/
+rg -n "Atlas" nocturne-docs/docs/v1/knot/
 ```
 
 ## Evidence (worker)
@@ -53,7 +53,7 @@ rg -n "Atlas" /Users/leonidas/dev/aichbindas/nocturne-docs/docs/v1/knot/
 - verification (quote command + output):
 
 ```
-$ rg -n "Atlas" /Users/leonidas/dev/aichbindas/nocturne-docs/docs/v1/knot/
+$ rg -n "Atlas" nocturne-docs/docs/v1/knot/
 architecture.md: Knot works alone. Atlas is the reference service-directory
 index.md: set Atlas timelock_blocks to 0
 contracts.md: delay 0 applies now / execute / cancel

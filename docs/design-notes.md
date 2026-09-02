@@ -33,8 +33,10 @@ lets a funded relayer pay gas while council members hold no DUSK.
 registry pending is immediate (new quorum), so observers can stop a stolen-key
 action during the wait.
 
-When pairing Knot with Atlas, set Atlas `timelock_blocks` to 0 so the wait is
-not stacked. Atlas remains optional — Knot does not depend on it.
+Atlas is a separate layer (named services, roles, admin gate), not a second
+Knot. Atlas can delay its own admin path. Two delays stack. The usual pairing
+leaves Atlas `timelock_blocks` at 0 so Knot’s wait is the only one. Atlas
+remains optional — Knot does not depend on it.
 
 ## 5. No proof of possession required
 

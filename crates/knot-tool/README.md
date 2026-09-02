@@ -267,12 +267,13 @@ our preimage shape. **No follow-up work in the current suite plan.**
 
 ### Monitoring note
 
-Atlas is optional. Pairing Atlas with Knot: set Atlas `timelock_blocks` to 0
-so Knot's per-account delay is the only wait. Knot membership and proposal
-execution delay when the registry account's delay is greater than 0. Operators
-should alarm on the change *and* on unexpected silence. Registry
-`change_account` remains the membership path with built-in nonce replay
-protection.
+Atlas is optional. It is another layer (named services, roles, admin gate) on
+a Knot council, not a second M-of-N. Pairing both delays: leave Atlas
+`timelock_blocks` at 0 so Knot's per-account delay is the only wait. Knot
+membership and proposal execution delay when the registry account's delay is
+greater than 0. Operators should alarm on the change *and* on unexpected
+silence. Registry `change_account` remains the membership path with built-in
+nonce replay protection.
 
 ## Usage
 

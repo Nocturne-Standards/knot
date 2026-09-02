@@ -12,6 +12,9 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <a class="home-mark" href="https://nocturne-standards.org/" aria-label="Nocturne Standards home">
+    <img src="/assets/nocturne-mark.svg" alt="" width="96" height="52" />
+  </a>
   <main class="slides" id="slides">
     <!-- 1 · Cover -->
     <header class="slide hero" id="top">
@@ -23,28 +26,70 @@
         <h1>Shared control. Keys stay on your machines.</h1>
         <p class="hero-lede">
           Form an M-of-N council, propose an intent, collect approvals to
-          threshold, then finalize - keys never leave the members' machines.
+          threshold, then finalize (or queue until Execute if delay &gt; 0) -
+          keys never leave the members' machines.
         </p>
         <div class="hero-cta">
-          <a class="btn primary" href="#demo">Try the demo</a>
-          <a class="btn ghost" href="#use-cases">Use cases</a>
+          <a class="btn primary" href="#demo" aria-label="Demo">
+            <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+              <path d="M6 2h4" stroke-linecap="round"/>
+              <path d="M7 2v4.1L3.7 13.1a1 1 0 0 0 .9 1.4h6.8a1 1 0 0 0 .9-1.4L9 6.1V2" stroke-linejoin="round"/>
+              <path d="M5.1 10.4h5.8" stroke-linecap="round" opacity="0.45"/>
+            </svg>
+            <span class="btn-label">Demo</span>
+          </a>
+          <a class="btn ghost" href="#rails" aria-label="Rails">
+            <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+              <path d="M2.5 4.5h11M2.5 11.5h11" stroke-linecap="round"/>
+              <path d="M5 4.5v7M8 4.5v7M11 4.5v7" stroke-linecap="round"/>
+            </svg>
+            <span class="btn-label">Rails</span>
+          </a>
           <a
             class="btn ghost"
             href="https://docs.nocturne-standards.org/v1/knot/"
             target="_blank"
             rel="noopener noreferrer"
-          >View the docs</a>
+            aria-label="Docs"
+          >
+            <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+              <path d="M3 2.5h7.5L13 5v8.5H3v-11Z" stroke-linejoin="round"/>
+              <path d="M10.5 2.5V5H13M5 8h6M5 10.5h6" stroke-linecap="round"/>
+            </svg>
+            <span class="btn-label">Docs</span>
+            <svg class="btn-icon btn-icon-ext" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+              <path d="M5 11 11.2 4.8" stroke-linecap="round"/>
+              <path d="M6.5 4.5h5v5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
         </div>
       </div>
     </header>
 
     <!-- 2 · Demo studio -->
     <section class="slide demo-slide" id="demo">
+      <div class="slide-page">
+        <div class="slide-icon slide-icon--demo" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+            <path d="M6 2h4" stroke-linecap="round"/>
+            <path d="M7 2v4.1L3.7 13.1a1 1 0 0 0 .9 1.4h6.8a1 1 0 0 0 .9-1.4L9 6.1V2" stroke-linejoin="round"/>
+            <path d="M5.1 10.4h5.8" stroke-linecap="round" opacity="0.45"/>
+          </svg>
+        </div>
+        <p class="slide-page-name">Demo</p>
+      </div>
       <div class="demo-inner">
         <header class="demo-header" id="status-strip">
           <div class="demo-banner-slot" id="demo-banner-slot" aria-live="polite"></div>
           <div class="demo-header-top">
-            <a class="docs-tab" href="https://docs.nocturne-standards.org/v1/knot/" target="_blank" rel="noopener noreferrer">Docs</a>
+            <span class="mode-tag" id="status-mode" data-mode="mock">Mock</span>
+            <div class="beat-dots" id="beat-dots" role="tablist" aria-label="Demo beats">
+              <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="cast" data-beat="1">1 · Cast</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council" data-beat="2">2 · Council</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check" data-beat="3">3 · Look up</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="4">4 · Propose</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="finalize" data-beat="5">5 · Finalize</button>
+            </div>
             <div class="demo-header-badges">
               <span class="you-chip" id="status-you">You: -</span>
               <span class="pill approvals-pill" id="status-approvals">
@@ -55,15 +100,6 @@
                 <span class="header-council-icon" id="header-council-icon"></span>
                 <span class="header-council-id" id="header-council-id"></span>
               </button>
-            </div>
-          </div>
-          <div class="demo-header-nav">
-            <div class="beat-dots" id="beat-dots" role="tablist" aria-label="Demo beats">
-              <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="cast" data-beat="1">1 · Cast</button>
-              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="council" data-beat="2">2 · Council</button>
-              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="check" data-beat="3">3 · Look up</button>
-              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="proposal" data-beat="4">4 · Propose</button>
-              <button type="button" class="tab" role="tab" aria-selected="false" data-tab="finalize" data-beat="5">5 · Finalize</button>
             </div>
           </div>
         </header>
@@ -118,6 +154,13 @@
                     <button type="button" class="primary" id="btn-create-account" onclick="submitCreateAccount()">Form council</button>
                   </div>
                 </div>
+                <label class="delay-field">
+                  <span class="delay-field-head">
+                    <span class="value-name">Delay (blocks)</span>
+                    <input id="create-delay" type="number" min="0" value="0" dir="ltr" />
+                  </span>
+                  <p class="value-hint">Wait this many blocks after finalize before execution. 0 runs in the same call.</p>
+                </label>
                 <div class="outcome outcome-row" id="create-outcome" hidden></div>
               </div>
             </div>
@@ -128,7 +171,7 @@
                 <header class="pane-head">
                   <p class="pane-role">Beat 3 · Look it up</p>
                   <h3>Look up the council</h3>
-                  <p class="lede">Select a council from this demo run. Free reads confirm members, threshold, and nonce - no gas.</p>
+                  <p class="lede">Select a council from this demo run. Free reads confirm members, threshold, delay, and nonce - no gas.</p>
                 </header>
                 <div id="councils-list" class="councils-grid"></div>
                 <div class="outcome" id="query-outcome" hidden></div>
@@ -139,6 +182,7 @@
                     </svg>
                   </button>
                   <p class="popover-title" id="council-detail-title">Members</p>
+                  <dl class="council-detail-meta" id="council-detail-meta"></dl>
                   <div id="council-detail-members" class="identities-list compact"></div>
                 </div>
               </div>
@@ -181,7 +225,7 @@
                 <header class="pane-head">
                   <p class="pane-role">Beat 5 · Finalize</p>
                   <h3>Approve &amp; finalize</h3>
-                  <p class="lede">Pick a proposal, confirm the intent, approve as each signer, then finalize at threshold.</p>
+                  <p class="lede">Pick a proposal, confirm the intent, approve as each signer, then finalize. Delay &gt; 0 queues until Execute.</p>
                 </header>
 
                 <p class="section-label">Proposals</p>
@@ -222,7 +266,10 @@
                   <div class="actions actions-center">
                     <button type="button" class="primary" id="prop-approve-btn" onclick="proposalApprove()" disabled>Approve</button>
                     <button type="button" class="primary" id="prop-finalize-btn" onclick="proposalFinalize()">Finalize</button>
+                    <button type="button" class="primary" id="prop-execute-btn" onclick="proposalExecute()" hidden>Execute</button>
+                    <button type="button" class="secondary" id="prop-cancel-btn" onclick="proposalCancel()" hidden>Cancel</button>
                   </div>
+                  <div class="outcome outcome-row" id="finalize-outcome" hidden></div>
                 </div>
               </div>
             </div>
@@ -304,12 +351,20 @@
       </div>
     </section>
 
-    <!-- 3 · Use cases -->
-    <section class="slide use-cases-slide" id="use-cases">
+    <!-- 3 · Rails -->
+    <section class="slide rails-slide" id="rails">
       <div class="section-pad">
         <div class="section-head">
-          <h2>What councils are for</h2>
-          <p>Same M-of-N rails - different jobs.</p>
+          <div class="slide-page">
+            <div class="slide-icon slide-icon--rails" aria-hidden="true">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+                <path d="M2.5 4.5h11M2.5 11.5h11" stroke-linecap="round"/>
+                <path d="M5 4.5v7M8 4.5v7M11 4.5v7" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <h2 class="slide-page-name">Rails</h2>
+          </div>
+          <p>M-of-N for real jobs. Delay after quorum is optional.</p>
         </div>
         <div class="use-case-grid">
           <article class="use-case-card">
@@ -333,8 +388,8 @@
               </svg>
             </div>
             <div class="use-case-copy">
-              <h3>Dispute council</h3>
-              <p>Fingerprint-bound council resolve for contested outcomes - shared authority without a single adjudicator.</p>
+              <h3>Delay after quorum</h3>
+              <p>Wait N blocks after finalize before the call runs. 0 still applies immediately. Cancel during the wait is a new quorum.</p>
             </div>
           </article>
           <article class="use-case-card">
@@ -357,7 +412,7 @@
   <nav class="dots" aria-label="Page navigation">
     <a href="#top" class="dot active" data-slide="top" aria-label="Cover"></a>
     <a href="#demo" class="dot" data-slide="demo" aria-label="Demo"></a>
-    <a href="#use-cases" class="dot" data-slide="use-cases" aria-label="Use cases"></a>
+    <a href="#rails" class="dot" data-slide="rails" aria-label="Rails"></a>
   </nav>
 
   <nav class="legal-links" aria-label="Legal">

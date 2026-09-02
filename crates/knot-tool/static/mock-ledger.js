@@ -863,6 +863,64 @@
       if (!/live testnet mode/i.test(e.message)) throw e;
     }
 
+    const tl = await mockApi(`/api/account/${accountId}/set-timelock`, {
+      method: "POST",
+      body: JSON.stringify({ blocks: 5 }),
+    });
+    if (tl.outcome === "panic") throw new Error("set-timelock should succeed in mock");
+    const afterTl = await mockApi(`/api/account/${accountId}`);
+    if (!afterTl || afterTl.timelock_blocks !== 5) throw new Error("account delay after set-timelock");
+
+    const created = await mockApi("/api/proposal/create", {
+      method: "POST",
+      body: JSON.stringify({
+        account: accountId,
+        target: "0000000000000000000000000000000000000000000000000000000000000001",
+        function: "noop",
+        args_hex: "",
+        deadline: 999999999,
+      }),
+    });
+    const proposalId = created.allocated_id_hint;
+    await mockApi(`/api/proposal/${proposalId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ signer: "selftest-a", confirm: true }),
+    });
+    await mockApi(`/api/proposal/${proposalId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ signer: "selftest-b", confirm: true }),
+    });
+    await mockApi(`/api/proposal/${proposalId}/finalize`, { method: "POST", body: "{}" });
+    const queued = await mockApi(`/api/proposal/${proposalId}`);
+    if (!queued || queued.status !== "Queued") throw new Error("finalize with delay should queue");
+    await mockApi(`/api/proposal/${proposalId}/execute`, { method: "POST", body: "{}" });
+    const executed = await mockApi(`/api/proposal/${proposalId}`);
+    if (!executed || executed.status !== "Executed") throw new Error("execute should mark Executed");
+
+    const created2 = await mockApi("/api/proposal/create", {
+      method: "POST",
+      body: JSON.stringify({
+        account: accountId,
+        target: "0000000000000000000000000000000000000000000000000000000000000001",
+        function: "noop",
+        args_hex: "",
+        deadline: 999999999,
+      }),
+    });
+    const cancelId = created2.allocated_id_hint;
+    await mockApi(`/api/proposal/${cancelId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ signer: "selftest-a", confirm: true }),
+    });
+    await mockApi(`/api/proposal/${cancelId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ signer: "selftest-b", confirm: true }),
+    });
+    await mockApi(`/api/proposal/${cancelId}/finalize`, { method: "POST", body: "{}" });
+    await mockApi(`/api/proposal/${cancelId}/cancel`, { method: "POST", body: "{}" });
+    const cancelled = await mockApi(`/api/proposal/${cancelId}`);
+    if (!cancelled || cancelled.status !== "Cancelled") throw new Error("cancel should mark Cancelled");
+
     return true;
   }
 
@@ -895,6 +953,24 @@
     led.finalize(pid);
     if (led.proposal(pid).status !== "finalized") throw new Error("not finalized");
     if (led.account(id).nonce !== 1) throw new Error("nonce bump");
+
+    led.set_timelock(id, 5);
+    if (led.account(id).timelock_blocks !== 5) throw new Error("set_timelock delay");
+    const pidQ = led.create_proposal(id, new Uint8Array(32), "noop", new Uint8Array(0), 0, 2);
+    led.approve(pidQ, m(1));
+    led.approve(pidQ, m(2));
+    led.finalize(pidQ);
+    if (led.proposal(pidQ).status !== "queued") throw new Error("delay should queue");
+    if (!led.proposal(pidQ).execute_at) throw new Error("queued execute_at");
+    led.execute(pidQ);
+    if (led.proposal(pidQ).status !== "finalized") throw new Error("execute should finalize");
+
+    const pidC = led.create_proposal(id, new Uint8Array(32), "noop", new Uint8Array(0), 0, 2);
+    led.approve(pidC, m(1));
+    led.approve(pidC, m(2));
+    led.finalize(pidC);
+    led.cancel_proposal(pidC);
+    if (led.proposal(pidC).status !== "cancelled") throw new Error("cancel should cancel");
     return true;
   }
 

@@ -401,6 +401,56 @@ function updateStatusStrip({ account, threshold, approvals, proposal } = {}) {
   updateHeaderApprovals(p || null);
 }
 
+function proposalPhase(p) {
+  if (!p) return { key: "open", label: "Open", cls: "open" };
+  const raw = String(p.status || "").toLowerCase();
+  if (raw === "queued") {
+    const eta = p.executeAt ? ` · eta ${p.executeAt}` : "";
+    return { key: "queued", label: `Queued${eta}`, cls: "queued" };
+  }
+  if (raw === "cancelled") return { key: "cancelled", label: "Cancelled", cls: "cancelled" };
+  if (raw === "finalized" || raw === "executed" || p.finalized === true) {
+    return { key: "executed", label: "Executed", cls: "finalized" };
+  }
+  const council = demoCouncils.find((c) => c.id === p.accountId);
+  const t = council && council.threshold;
+  const count = p.approvals != null ? p.approvals : 0;
+  if (t != null && count >= t) return { key: "ready", label: "Ready", cls: "ready" };
+  return { key: "open", label: "Open", cls: "open" };
+}
+
+function applyProposalApiView(p, view) {
+  if (!p || !view) return;
+  const st = String(view.status || "");
+  if (st === "Queued") {
+    p.status = "queued";
+    p.finalized = false;
+  } else if (st === "Cancelled") {
+    p.status = "cancelled";
+    p.finalized = false;
+  } else if (st === "Executed" || st === "Tombstoned") {
+    p.status = "finalized";
+    p.finalized = true;
+  } else {
+    p.status = "open";
+    p.finalized = false;
+  }
+  if (view.execute_at != null) p.executeAt = view.execute_at;
+  if (view.approvals_len != null) p.approvals = view.approvals_len;
+}
+
+function syncFinalizeActions(p) {
+  const phase = proposalPhase(p);
+  const fin = el("prop-finalize-btn");
+  const exe = el("prop-execute-btn");
+  const can = el("prop-cancel-btn");
+  const appr = el("prop-approve-btn");
+  if (fin) fin.hidden = phase.key === "queued" || phase.key === "executed" || phase.key === "cancelled";
+  if (exe) exe.hidden = phase.key !== "queued";
+  if (can) can.hidden = phase.key !== "queued";
+  if (appr) appr.hidden = phase.key === "queued" || phase.key === "executed" || phase.key === "cancelled";
+}
+
 function updateHeaderApprovals(p) {
   const text = el("status-approvals-text");
   const state = el("status-prop-state");
@@ -418,15 +468,14 @@ function updateHeaderApprovals(p) {
     state.className = "approvals-state";
     return;
   }
-  const finalized = p.status === "finalized" || p.finalized === true;
+  const phase = proposalPhase(p);
   const count = p.approvals != null ? p.approvals : n;
   statusApprovals = count;
   const council = demoCouncils.find((c) => c.id === p.accountId);
   const t = thr != null ? thr : (council && council.threshold);
-  const ready = !finalized && t != null && count >= t;
   state.hidden = false;
-  state.textContent = finalized ? "Finalized" : ready ? "Ready" : "Open";
-  state.className = "approvals-state " + (finalized ? "finalized" : ready ? "ready" : "open");
+  state.textContent = phase.label;
+  state.className = "approvals-state " + phase.cls;
   if (text) {
     text.textContent = t != null ? `Approvals ${count}/${t}` : `Approvals ${count}`;
   }
@@ -504,7 +553,7 @@ async function ensureStoryCast() {
   await refreshIdentities();
 }
 
-function pushDemoCouncil({ id, members, threshold, nonce, meta }) {
+function pushDemoCouncil({ id, members, threshold, nonce, meta, delay, pendingExecuteAt }) {
   const existing = demoCouncils.findIndex((c) => c.id === id);
   const entry = {
     id,
@@ -512,6 +561,10 @@ function pushDemoCouncil({ id, members, threshold, nonce, meta }) {
     threshold,
     nonce: nonce != null ? nonce : null,
     meta: meta || null,
+    delay: delay != null ? delay : (meta && meta.timelock_blocks != null ? meta.timelock_blocks : 0),
+    pendingExecuteAt: pendingExecuteAt != null
+      ? pendingExecuteAt
+      : (meta && meta.pending_execute_at != null ? meta.pending_execute_at : 0),
   };
   if (existing >= 0) demoCouncils[existing] = { ...demoCouncils[existing], ...entry };
   else demoCouncils.push(entry);
@@ -659,7 +712,8 @@ function renderCouncilCard(c, { onSelect, showDetail } = {}) {
     detailBtn +
     `<span class="council-card-icon">${COUNCIL_ICON_SVG}</span>` +
     `<span class="council-card-id">Council #${escapeHtml(String(c.id))}</span>` +
-    `<span class="council-card-meta">Threshold ${escapeHtml(String(c.threshold))}-of-${escapeHtml(String(c.members.length || "?"))}</span>`;
+    `<span class="council-card-meta">Threshold ${escapeHtml(String(c.threshold))}-of-${escapeHtml(String(c.members.length || "?"))}</span>` +
+    `<span class="council-card-meta">Delay ${escapeHtml(String(c.delay != null ? c.delay : 0))} blocks</span>`;
   card.addEventListener("click", (ev) => {
     if (ev.target.closest("[data-detail]")) return;
     if (onSelect) onSelect(c);
@@ -722,13 +776,9 @@ function renderProposalsList() {
       + (selected ? " selected" : "")
       + (confirmed ? " confirmed" : "");
     card.dataset.id = String(p.id);
-    const finalized = p.status === "finalized" || p.finalized === true;
-    const cardCouncil = demoCouncils.find((c) => c.id === p.accountId);
-    const cardThreshold = cardCouncil && cardCouncil.threshold;
-    const cardApprovals = p.approvals != null ? p.approvals : 0;
-    const ready = !finalized && cardThreshold != null && cardApprovals >= cardThreshold;
-    const cardStatusClass = finalized ? "finalized" : ready ? "ready" : "open";
-    const cardStatusLabel = finalized ? "Executed" : ready ? "Ready" : "Open";
+    const phase = proposalPhase(p);
+    const cardStatusClass = phase.cls;
+    const cardStatusLabel = phase.label;
     let html =
       `<div class="proposal-card-head">` +
       `<span class="proposal-card-council">Council #${escapeHtml(String(p.accountId))}</span>` +
@@ -798,6 +848,7 @@ function updateApproveSection() {
     renderPropSignerList(cachedIdentities);
     const p = demoProposals.find((x) => x.id === selectedProposalId || String(x.id) === String(selectedProposalId));
     if (p) updateStatusCard(p);
+    syncFinalizeActions(p);
   }
 }
 
@@ -815,12 +866,31 @@ function updateStatusCard(p) {
   renderProposalsList();
 }
 
+function delayDetailCopy(blocks) {
+  const n = blocks != null ? Number(blocks) : 0;
+  if (!n) return "0 blocks - executes on finalize";
+  return `${n} blocks - queues until Execute`;
+}
+
 function openCouncilDetail(c) {
   const pop = el("council-detail-popover");
   const title = el("council-detail-title");
+  const metaEl = el("council-detail-meta");
   const membersEl = el("council-detail-members");
   if (!pop || !membersEl) return;
-  if (title) title.textContent = `Council #${c.id} · Threshold ${c.threshold}-of-${c.members.length}`;
+  if (title) title.textContent = `Council #${c.id}`;
+  if (metaEl) {
+    const delay = c.delay != null ? c.delay : 0;
+    const rows = [
+      ["Threshold", `${c.threshold}-of-${c.members.length}`],
+      ["Delay", delayDetailCopy(delay)],
+    ];
+    if (c.pendingExecuteAt) rows.push(["Pending", `eta ${c.pendingExecuteAt}`]);
+    if (c.nonce != null) rows.push(["Nonce", String(c.nonce)]);
+    metaEl.innerHTML = rows
+      .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`)
+      .join("");
+  }
   membersEl.innerHTML = "";
   for (const name of c.members) {
     const ident = cachedIdentities.find((i) => i.name === name) || {
@@ -856,22 +926,35 @@ async function fetchCouncilOutcome(id) {
       : [];
     const demo = demoCouncils.find((c) => c.id === Number(id) || c.id === id);
     const memberNames = demo && demo.members.length ? demo.members : members;
+    const delay = out.timelock_blocks != null
+      ? out.timelock_blocks
+      : (meta && meta.timelock_blocks != null ? meta.timelock_blocks : 0);
+    const pendingAt = out.pending_execute_at != null
+      ? out.pending_execute_at
+      : (meta && meta.pending_execute_at != null ? meta.pending_execute_at : 0);
     pushDemoCouncil({
       id: Number(id),
       members: memberNames,
       threshold: out.threshold,
       nonce: out.nonce != null ? out.nonce : (meta && meta.nonce),
       meta,
+      delay,
+      pendingExecuteAt: pendingAt,
     });
     updateStatusStrip({
       account: id,
       threshold: out.threshold,
       approvals: statusApprovals != null ? statusApprovals : 0,
     });
+    const delayLine =
+      `<span class="outcome-meta"><strong>Delay:</strong> ${escapeHtml(delayDetailCopy(delay))}` +
+      (pendingAt ? ` · pending eta ${escapeHtml(String(pendingAt))}` : "") +
+      `</span>`;
     setOutcome(
       "query-outcome",
       `${outcomeChip(true)}<span class="outcome-title">Council #${escapeHtml(String(id))}</span>` +
         `<span class="outcome-meta"><strong>Threshold:</strong> ${out.threshold}-of-${memberNames.length || "?"}</span>` +
+        delayLine +
         `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(memberNames.length ? memberNames.join(", ") : "(see keys)")}</span>`,
       true
     );
@@ -931,14 +1014,37 @@ async function submitCreateAccount() {
       if (out.outcome !== "panic" && next != null) createdId = next - 1;
     } catch (_) {}
     if (submitOk(out) && createdId != null) {
-      pushDemoCouncil({ id: createdId, members, threshold });
+      const delayEl = el("create-delay");
+      const delayRaw = delayEl ? parseInt(delayEl.value, 10) : 0;
+      const delay = Number.isFinite(delayRaw) && delayRaw > 0 ? delayRaw : 0;
+      if (delay > 0) {
+        const tl = await api(`/api/account/${createdId}/set-timelock`, {
+          method: "POST",
+          body: JSON.stringify({ blocks: delay }),
+        });
+        if (!submitOk(tl)) {
+          showSubmitOutcome("create-outcome", tl);
+          return;
+        }
+      }
+      pushDemoCouncil({
+        id: createdId,
+        members,
+        threshold,
+        delay,
+        nonce: delay > 0 ? 1 : 0,
+      });
       applyAccountIds(createdId);
       updateStatusStrip({ threshold, approvals: 0 });
       updateHeaderCouncil({ animate: true });
+      const delayMeta = delay
+        ? `<span class="outcome-meta"><strong>Delay:</strong> ${delay} blocks</span>`
+        : "";
       setOutcome(
         "create-outcome",
         `${outcomeChip(true)}<span class="outcome-title">Council #${escapeHtml(String(createdId))} formed</span>` +
           `<span class="outcome-meta"><strong>Threshold:</strong> ${threshold}-of-${members.length}</span>` +
+          delayMeta +
           `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(members.join(", "))}</span>`,
         true
       );
@@ -1112,6 +1218,18 @@ async function proposalApprove() {
   }
 }
 
+async function refreshProposalFromApi(id) {
+  const p = demoProposals.find((x) => String(x.id) === String(id));
+  if (!p) return null;
+  try {
+    const view = await api(`/api/proposal/${id}`);
+    applyProposalApiView(p, view);
+  } catch (_) {}
+  updateStatusCard(p);
+  syncFinalizeActions(p);
+  return p;
+}
+
 async function proposalFinalize() {
   const idEl = el("prop-id");
   const id = idEl ? idEl.value : (selectedProposalId != null ? String(selectedProposalId) : "");
@@ -1122,21 +1240,70 @@ async function proposalFinalize() {
   setOutcome("finalize-outcome", `<span class="outcome-meta">Finalizing…</span>`, true);
   try {
     const out = await api(`/api/proposal/${id}/finalize`, { method: "POST", body: "{}" });
-    const p = demoProposals.find((x) => String(x.id) === String(id));
-    if (p && submitOk(out)) {
-      p.status = "finalized";
-      p.finalized = true;
-      updateStatusCard(p);
-    }
-    if (submitOk(out)) {
-      setOutcome(
-        "finalize-outcome",
-        `${outcomeChip(true)}<span class="outcome-title">Proposal #${escapeHtml(String(id))} finalized</span>`,
-        true
-      );
-    } else {
+    if (!submitOk(out)) {
       showSubmitOutcome("finalize-outcome", out);
+      return;
     }
+    const p = await refreshProposalFromApi(id);
+    const phase = proposalPhase(p);
+    const title = phase.key === "queued"
+      ? `Proposal #${escapeHtml(String(id))} queued`
+      : `Proposal #${escapeHtml(String(id))} executed`;
+    setOutcome(
+      "finalize-outcome",
+      `${outcomeChip(true)}<span class="outcome-title">${title}</span>`,
+      true
+    );
+  } catch (e) {
+    showErrorOutcome("finalize-outcome", e.message);
+  }
+}
+
+async function proposalExecute() {
+  const idEl = el("prop-id");
+  const id = idEl ? idEl.value : (selectedProposalId != null ? String(selectedProposalId) : "");
+  if (!id) {
+    showErrorOutcome("finalize-outcome", "Select a proposal first.");
+    return;
+  }
+  setOutcome("finalize-outcome", `<span class="outcome-meta">Executing…</span>`, true);
+  try {
+    const out = await api(`/api/proposal/${id}/execute`, { method: "POST", body: "{}" });
+    if (!submitOk(out)) {
+      showSubmitOutcome("finalize-outcome", out);
+      return;
+    }
+    await refreshProposalFromApi(id);
+    setOutcome(
+      "finalize-outcome",
+      `${outcomeChip(true)}<span class="outcome-title">Proposal #${escapeHtml(String(id))} executed</span>`,
+      true
+    );
+  } catch (e) {
+    showErrorOutcome("finalize-outcome", e.message);
+  }
+}
+
+async function proposalCancel() {
+  const idEl = el("prop-id");
+  const id = idEl ? idEl.value : (selectedProposalId != null ? String(selectedProposalId) : "");
+  if (!id) {
+    showErrorOutcome("finalize-outcome", "Select a proposal first.");
+    return;
+  }
+  setOutcome("finalize-outcome", `<span class="outcome-meta">Cancelling…</span>`, true);
+  try {
+    const out = await api(`/api/proposal/${id}/cancel`, { method: "POST", body: "{}" });
+    if (!submitOk(out)) {
+      showSubmitOutcome("finalize-outcome", out);
+      return;
+    }
+    await refreshProposalFromApi(id);
+    setOutcome(
+      "finalize-outcome",
+      `${outcomeChip(true)}<span class="outcome-title">Proposal #${escapeHtml(String(id))} cancelled</span>`,
+      true
+    );
   } catch (e) {
     showErrorOutcome("finalize-outcome", e.message);
   }
@@ -1175,7 +1342,7 @@ function prepareBeatEntry(index) {
   }
 }
 
-const SLIDE_HASHES = new Set(["top", "demo", "use-cases", ""]);
+const SLIDE_HASHES = new Set(["top", "demo", "rails", "use-cases", ""]);
 
 function tabFromUrl() {
   const params = new URLSearchParams(location.search);
@@ -1296,7 +1463,7 @@ function wireBeatTabs() {
   });
 }
 
-// Highlight page-nav dots from scroll position (cover / demo / use-cases).
+// Highlight page-nav dots from scroll position (cover / demo / rails).
 (function wireSlideDots() {
   const root = el("slides");
   const dots = [...document.querySelectorAll(".dots .dot")];
@@ -1306,7 +1473,8 @@ function wireBeatTabs() {
     .filter(Boolean);
 
   function scrollToHash(behavior) {
-    const id = (location.hash || "#top").replace(/^#/, "") || "top";
+    let id = (location.hash || "#top").replace(/^#/, "") || "top";
+    if (id === "use-cases") id = "rails";
     const node = document.getElementById(id);
     if (!node || !root.contains(node)) return;
     const top = node.offsetTop - root.offsetTop;
@@ -1439,6 +1607,8 @@ window.submitCreateAccount = submitCreateAccount;
 window.proposalCreate = proposalCreate;
 window.proposalApprove = proposalApprove;
 window.proposalFinalize = proposalFinalize;
+window.proposalExecute = proposalExecute;
+window.proposalCancel = proposalCancel;
 window.confirmIntent = confirmIntent;
 window.quorumPreview = quorumPreview;
 window.confirmQuorumIntent = confirmQuorumIntent;
