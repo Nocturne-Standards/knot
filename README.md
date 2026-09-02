@@ -17,7 +17,10 @@ Architecture and long-form docs:
 · [GitHub — Nocturne-Standards/knot](https://github.com/Nocturne-Standards/knot)
 
 `atlas/` (per-project service registry) stays **outside** this repo — it
-consumes `knot-proposals` / `knot-registry` as a client.
+consumes `knot-proposals` / `knot-registry` as a client. Knot is complete
+without Atlas. Atlas is the reference named service-directory to pair with
+Knot. When both delays exist, set Atlas `timelock_blocks` to 0 so waits do
+not stack.
 
 ## Crates
 

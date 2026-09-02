@@ -30,10 +30,11 @@ authorization on top of that answer.
   threshold, gated by a quorum of the account's *current* members signing
   over `knot_encoding::change_account_message_v3` (v3 domain binds
   `chain_id`, registry `self_id`, account id, on-chain nonce, member count,
-  new member pks, new threshold → Keccak-256). Nonce is not an args field — it is folded from state into the digest. This path
-  *does* have built-in replay protection, since the registry controls that
-  message's format itself. On failure, the panic string includes
-  `members`/`threshold`/`member_matches`/`sigs_ok` counters.
+  new member pks, new threshold → Keccak-256). Nonce is not an args field — it is folded from state into the digest. Delay 0 applies in this call;
+  otherwise the change sits in `pending` until `execute_pending`.
+- `set_timelock(SetTimelockArgs)` / `cancel_pending` / `execute_pending` —
+  per-account delay. Raising from 0 applies immediately. **PINNED-DIFFERENT-REDEPLOYED**
+  view layout (`timelock_blocks` + `pending` on `MultisigAccountView`).
 - `verify_quorum_aggregate(VerifyQuorumAggregateArgs) -> bool` — same
   question as `verify_quorum`, checked with **one** native
   `abi::verify_bls_multisig` pairing check instead of one `abi::verify_bls`

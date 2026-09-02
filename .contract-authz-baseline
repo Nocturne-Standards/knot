@@ -7,7 +7,9 @@
 #
 crates/knot-proposals/src/state.rs:approve	PUBLIC — caller must be committee member with valid BLS sig over digest
 crates/knot-proposals/src/state.rs:epoch	PUBLIC — read-only scalar
-crates/knot-proposals/src/state.rs:finalize	PUBLIC — permissionless when quorum met and deadline valid
+crates/knot-proposals/src/state.rs:finalize	PUBLIC — permissionless when quorum met; delay 0 call_raw, else queue
+crates/knot-proposals/src/state.rs:execute	PUBLIC — permissionless when queued and execute_at reached
+crates/knot-proposals/src/state.rs:cancel	PUBLIC — current committee quorum BLS over cancel_proposal_message_v1
 crates/knot-proposals/src/state.rs:init_registry	contract owner only (require_owner)
 crates/knot-proposals/src/state.rs:next_proposal_id	PUBLIC — read-only scalar
 crates/knot-proposals/src/state.rs:proposal	PUBLIC — read-only view
@@ -25,7 +27,10 @@ crates/knot-proposals/test-target/src/lib.rs:set_value	PUBLIC — test-only muta
 crates/knot-proposals/test-target/src/lib.rs:set_value_reenter_finalize	PUBLIC — test-only reentrancy mutator
 crates/knot-proposals/test-target/src/lib.rs:value	PUBLIC — test-only read-only scalar
 crates/knot-registry/src/state.rs:account	PUBLIC — read-only view (may be None on testnet free-read)
-crates/knot-registry/src/state.rs:change_account	PUBLIC — current committee quorum BLS over change_account_message_v3
+crates/knot-registry/src/state.rs:change_account	PUBLIC — current committee quorum BLS over change_account_message_v3; delay 0 applies in-call
+crates/knot-registry/src/state.rs:set_timelock	PUBLIC — current committee quorum BLS over set_timelock_message_v1
+crates/knot-registry/src/state.rs:cancel_pending	PUBLIC — current committee quorum BLS over cancel_pending_message_v1
+crates/knot-registry/src/state.rs:execute_pending	PUBLIC — permissionless after execute_at
 crates/knot-registry/src/state.rs:create_account	PUBLIC — anyone may register a committee
 crates/knot-registry/src/state.rs:next_account_id	PUBLIC — read-only scalar
 crates/knot-registry/src/state.rs:verify_quorum	PUBLIC — read-only BLS verify helper

@@ -189,6 +189,8 @@ fn multisig_account_view_golden() {
         members: vec![keys[0].1, keys[1].1],
         threshold: 2,
         nonce: 3,
+        timelock_blocks: 0,
+        pending: None,
     };
     assert_eq!(archive_hex(&view), GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX);
 }

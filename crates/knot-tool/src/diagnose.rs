@@ -99,6 +99,8 @@ mod tests {
             members: vec![pk1, pk2],
             threshold: 2,
             nonce: 0,
+            timelock_blocks: 0,
+            pending: None,
         };
         let msg = b"diagnose-me".to_vec();
         let good = diagnose_quorum(

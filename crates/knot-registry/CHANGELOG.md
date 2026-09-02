@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+### Added
+
+- Per-account timelock: `set_timelock`, `cancel_pending`, `execute_pending`.
+  Delay 0 keeps `change_account` in-call. **PINNED-DIFFERENT-REDEPLOYED**.
+
 ### Changed
 
 - **Breaking:** `change_account` moved to a v3 signing domain binding

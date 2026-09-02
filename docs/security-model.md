@@ -83,14 +83,27 @@ the collector (see each crate’s `LICENSE` / `LICENSING.md`).
   create before wiring the id into proposals, prediction-market councils, or
   any other consumer — never assume “next id” or that your create was the
   only concurrent registration.
+- Each account has `timelock_blocks` (default 0). `change_account` and
+  `set_timelock` schedule a single pending slot; delay 0 applies in the same
+  call. `execute_pending` is permissionless after `execute_at`. Cancel is
+  immediate and bound to that pending payload. Raising delay from 0 applies
+  now; later delay changes themselves wait the current delay (no instant
+  self-shortening).
 
 ### Proposals
 
 - Anyone may propose, relay approvals, or finalize. Authorization is the
   BLS quorum over the on-chain-recomputed §4a digest
   (`chain_id ‖ committee ‖ nonce ‖ target ‖ fn ‖ args ‖ deadline`).
-- On finalize, the contract calls `call_raw(target, function_name, call_args)`.
-  **Targets must independently require `abi::caller() == proposals`.**
+- On finalize, the contract calls `call_raw(target, function_name, call_args)`
+  immediately when the council's `timelock_blocks` is 0. If delay > 0, finalize
+  **queues** (`Queued`, `execute_at = now + delay`) and anyone may `execute`
+  after that height. `deadline` is still "must run by"; delay is "must not run
+  before." If `now + delay > deadline`, finalize panics — pick a later deadline.
+  **Cancel is immediate** (current-member quorum over a cancel digest), not
+  delayed. Digest stays consumed until deadline so the same intent cannot
+  re-queue.
+- **Targets must independently require `abi::caller() == proposals`.**
   This suite does not maintain a target allowlist.
 - **Never propose owner-gated methods on the proposals contract itself**
   (e.g. `set_tombstone`, `init_chain_id`, `set_proposal_ttl`) unless that is

@@ -55,10 +55,10 @@ pub const GOLDEN_VERIFY_QUORUM_ARGS_HEX: &str = concat!(
     "c0feffff01000000"
 );
 
-/// `MultisigAccountView { members: [pk0, pk1], threshold: 2, nonce: 3 }`.
+/// `MultisigAccountView { members: [pk0, pk1], threshold: 2, nonce: 3, timelock_blocks: 0, pending: None }`.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
 /// After-pin hex (`repr(C)` pin, measured DIFFERENT from the prior layout,
-/// 2026-08-03).
+/// 2026-08-03). Re-recorded 2026-09-02: `timelock_blocks` + `pending` (PINNED-DIFFERENT-REDEPLOYED).
 pub const GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX: &str = concat!(
     "e3a945bd7dbd51365c255b3a7851432419f20ddb7bc948f5b60d677c5b02ff9e",
     "6255228ee75c9dd8a3bd4a86751e9b14cf501c89e69b4b2a2169c189accff3af",
@@ -73,7 +73,8 @@ pub const GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX: &str = concat!(
     "f5b8d28252b6c3a8918eef733d241600235b1bd43fec9e36511e234afcdfe9a",
     "1eb9754a83cc21f3992f76a05fb31f425978548db4a800f7acc435f5bb0fcbcb",
     "1ff8dd71321866759507000000000000000070feffff020000000200000000000000",
-    "0300000000000000"
+    "0300000000000000000000000000000000000000000000000000000000000000",
+    "00000000000000000000000000000000"
 );
 
 #[cfg(test)]
@@ -149,6 +150,8 @@ mod tests {
             members: vec![keys[0].1, keys[1].1],
             threshold: 2,
             nonce: 3,
+            timelock_blocks: 0,
+            pending: None,
         };
         assert_eq!(archive_hex(&view), GOLDEN_MULTISIG_ACCOUNT_VIEW_HEX);
     }
