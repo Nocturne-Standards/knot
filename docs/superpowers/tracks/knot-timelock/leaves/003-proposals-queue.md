@@ -1,8 +1,8 @@
 ---
 id: 3
 slug: proposals-queue
-status: TODO
-owner: null
+status: DONE
+owner: knot-timelock-session
 deps:
   - 1
   - 2
@@ -20,10 +20,10 @@ acceptance:
   - finalize panics if now+delay > deadline
   - cancel immediate with quorum; digest stays consumed until deadline; prune keeps Queued
 acceptanceDone:
-  - false
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
+  - true
 ---
 # Proposals queue execute cancel
 

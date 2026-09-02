@@ -1,7 +1,7 @@
 ---
 id: 1
 slug: encoding-types
-status: IN_PROGRESS
+status: DONE
 owner: knot-timelock-session
 deps: []
 scope:
@@ -15,9 +15,9 @@ acceptance:
   - MultisigAccountView/AccountMeta carry timelock_blocks + pending; ProposalStatus Queued=3 Cancelled=4; ProposalView.execute_at
   - Layout + preimage goldens updated; change_account v3 and proposal v3 digests unchanged
 acceptanceDone:
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
 ---
 # Encoding domains, views, status
 

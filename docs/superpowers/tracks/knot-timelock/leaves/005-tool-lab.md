@@ -1,8 +1,8 @@
 ---
 id: 5
 slug: tool-lab
-status: TODO
-owner: null
+status: DONE
+owner: knot-timelock-session
 deps:
   - 1
   - 2
@@ -16,9 +16,9 @@ acceptance:
   - mock ledger shows eta and queued status
   - account meta includes timelock_blocks
 acceptanceDone:
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
 ---
 # Lab CLI/RPC/mock for delay
 

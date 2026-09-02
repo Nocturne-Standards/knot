@@ -1,8 +1,8 @@
 ---
 id: 4
 slug: docs-site
-status: TODO
-owner: null
+status: DONE
+owner: knot-timelock-session
 deps:
   - 5
 scope:
@@ -10,7 +10,7 @@ scope:
 acceptance:
   - "docs.nocturne-standards.org knot pages: Knot works alone; Atlas is reference directory; set Atlas timelock_blocks to 0 when using Knot delay"
 acceptanceDone:
-  - false
+  - true
 ---
 # nocturne-docs Atlas pairing note
 
