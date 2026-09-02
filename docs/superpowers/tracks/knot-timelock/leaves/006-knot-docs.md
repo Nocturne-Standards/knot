@@ -1,8 +1,8 @@
 ---
 id: 6
 slug: knot-docs
-status: TODO
-owner: null
+status: DONE
+owner: knot-timelock-session
 deps:
   - 2
   - 3
@@ -18,9 +18,9 @@ acceptance:
   - crate READMEs label PINNED-DIFFERENT-REDEPLOYED
   - "knot README: standalone; Atlas optional; Atlas delay 0 when paired"
 acceptanceDone:
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
 ---
 # Knot in-repo timelock docs
 

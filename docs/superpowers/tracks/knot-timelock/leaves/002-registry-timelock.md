@@ -1,8 +1,8 @@
 ---
 id: 2
 slug: registry-timelock
-status: TODO
-owner: null
+status: DONE
+owner: knot-timelock-session
 deps:
   - 1
 scope:
@@ -19,10 +19,10 @@ acceptance:
   - set_timelock from 0 applies now; later shorten is delayed
   - cancel_pending immediate; bound to this pending; authz baseline updated
 acceptanceDone:
-  - false
-  - false
-  - false
-  - false
+  - true
+  - true
+  - true
+  - true
 ---
 # Registry per-account schedule/execute
 
