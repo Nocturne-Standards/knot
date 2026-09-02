@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+### Added
+
+- Queue/execute/cancel: `finalize` queues when account delay > 0; `execute`
+  after `execute_at`; `cancel` immediate. **PINNED-DIFFERENT-REDEPLOYED**.
+
 ### Changed
 
 - **Breaking:** landed the v3 contract interface — epoch counter (`init_registry`

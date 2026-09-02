@@ -25,10 +25,12 @@ use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
 use knot_tool::{blob, bls, collector_client, diagnose, membership, mock_ledger};
 
-use proposals_types::call_types::{ApproveArgs, ProposalStatus, ProposalView, ProposeArgs};
+use proposals_types::call_types::{
+    ApproveArgs, CancelProposalArgs, ProposalStatus, ProposalView, ProposeArgs,
+};
 use registry_types::call_types::{
-    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
-    VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+    CancelPendingArgs, ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SetTimelockArgs,
+    SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
 
 #[derive(Parser)]
@@ -151,6 +153,29 @@ enum AccountCmd {
     List {
         #[arg(long, default_value_t = 64)]
         limit: u64,
+    },
+    /// Raise or lower this account's delay (quorum of current members).
+    SetTimelock {
+        #[arg(long)]
+        account: u64,
+        #[arg(long)]
+        blocks: u64,
+        #[arg(long = "signer", required = true)]
+        signers: Vec<String>,
+        #[arg(long)]
+        confirm: bool,
+    },
+    ExecutePending {
+        #[arg(long)]
+        account: u64,
+    },
+    CancelPending {
+        #[arg(long)]
+        account: u64,
+        #[arg(long = "signer", required = true)]
+        signers: Vec<String>,
+        #[arg(long)]
+        confirm: bool,
     },
 }
 
@@ -291,6 +316,18 @@ enum ProposalCmd {
     Finalize {
         #[arg(long)]
         id: u64,
+    },
+    Execute {
+        #[arg(long)]
+        id: u64,
+    },
+    Cancel {
+        #[arg(long)]
+        id: u64,
+        #[arg(long = "signer", required = true)]
+        signers: Vec<String>,
+        #[arg(long)]
+        confirm: bool,
     },
     /// Free-read next proposal id.
     NextId,
@@ -650,9 +687,12 @@ async fn main() -> Result<()> {
                 match view {
                     Some(v) => {
                         println!(
-                            "account {account_id}: threshold={}, nonce={}",
-                            v.threshold, v.nonce
+                            "account {account_id}: threshold={}, nonce={}, timelock_blocks={}",
+                            v.threshold, v.nonce, v.timelock_blocks
                         );
+                        if let Some(pending) = &v.pending {
+                            println!("  pending execute_at={}", pending.execute_at);
+                        }
                         for pk in &v.members {
                             println!("  member: {}", rpc::bs58_pk(pk));
                         }
@@ -664,10 +704,12 @@ async fn main() -> Result<()> {
                 let view = fetch_account(account_id).await?;
                 match view {
                     Some(v) => println!(
-                        "account_meta {account_id}: threshold={}, nonce={}, members_len={}",
+                        "account_meta {account_id}: threshold={}, nonce={}, members_len={}, timelock_blocks={}, pending_execute_at={}",
                         v.threshold,
                         v.nonce,
-                        v.members.len()
+                        v.members.len(),
+                        v.timelock_blocks,
+                        v.pending.as_ref().map(|p| p.execute_at).unwrap_or(0)
                     ),
                     None => println!("account_meta {account_id}: not found"),
                 }
@@ -700,14 +742,103 @@ async fn main() -> Result<()> {
                     let view: Option<MultisigAccountView> = chain::query("account", bytes).await?;
                     match view {
                         Some(v) => println!(
-                            "  [{id}] threshold={} nonce={} members={}",
+                            "  [{id}] threshold={} nonce={} delay={} members={}",
                             v.threshold,
                             v.nonce,
+                            v.timelock_blocks,
                             v.members.len()
                         ),
                         None => println!("  [{id}] (empty)"),
                     }
                 }
+            }
+            AccountCmd::SetTimelock {
+                account,
+                blocks,
+                signers,
+                confirm,
+            } => {
+                let (identities, _) = load_store(&store_path)?;
+                let current: Option<MultisigAccountView> =
+                    chain::query("account", chain::encode(&account)?).await?;
+                let current =
+                    current.ok_or_else(|| anyhow::anyhow!("account {account} not found"))?;
+                let registry_self_id = chain::contract_self_id_bytes(chain::Contract::Registry)?;
+                let msg =
+                    bls::set_timelock_message(&registry_self_id, account, current.nonce, blocks);
+                ensure_cli_signers_are_members(account, &identities, &signers).await?;
+                print_signing_fingerprint(&msg);
+                require_cli_confirm(confirm)?;
+                let sigs = build_sigs(&identities, &signers, &msg)?;
+                let args = SetTimelockArgs {
+                    account_id: account,
+                    blocks,
+                    sigs,
+                };
+                let bytes = chain::encode(&args)?;
+                let result = chain::submit_call("set_timelock", &bytes)?;
+                print_write_result("set_timelock", result);
+            }
+            AccountCmd::ExecutePending { account } => {
+                let bytes = chain::encode(&account)?;
+                let result = chain::submit_call("execute_pending", &bytes)?;
+                print_write_result("execute_pending", result);
+            }
+            AccountCmd::CancelPending {
+                account,
+                signers,
+                confirm,
+            } => {
+                let (identities, _) = load_store(&store_path)?;
+                let current: Option<MultisigAccountView> =
+                    chain::query("account", chain::encode(&account)?).await?;
+                let current =
+                    current.ok_or_else(|| anyhow::anyhow!("account {account} not found"))?;
+                let pending = current
+                    .pending
+                    .ok_or_else(|| anyhow::anyhow!("account {account} has no pending change"))?;
+                let (kind, payload) = match pending.change {
+                    knot_encoding::call_types::RegistryPendingChange::ChangeAccount {
+                        new_members,
+                        new_threshold,
+                    } => {
+                        let pks: Vec<[u8; 96]> =
+                            new_members.iter().map(|pk| pk.to_bytes()).collect();
+                        (
+                            knot_encoding::PENDING_KIND_CHANGE_ACCOUNT,
+                            knot_encoding::cancel_pending_change_account_payload(
+                                &pks,
+                                new_threshold,
+                            )
+                            .expect("payload"),
+                        )
+                    }
+                    knot_encoding::call_types::RegistryPendingChange::SetTimelock(blocks) => (
+                        knot_encoding::PENDING_KIND_SET_TIMELOCK,
+                        knot_encoding::cancel_pending_set_timelock_payload(blocks),
+                    ),
+                };
+                let registry_self_id = chain::contract_self_id_bytes(chain::Contract::Registry)?;
+                let msg = knot_encoding::cancel_pending_message_v1(
+                    bls::digest_chain_id(),
+                    &registry_self_id,
+                    account,
+                    pending.execute_at,
+                    kind,
+                    &payload,
+                )
+                .expect("cancel_pending encoding");
+                ensure_cli_signers_are_members(account, &identities, &signers).await?;
+                print_signing_fingerprint(&msg);
+                require_cli_confirm(confirm)?;
+                let sigs = build_sigs(&identities, &signers, &msg)?;
+                let args = CancelPendingArgs {
+                    account_id: account,
+                    sigs,
+                };
+                let bytes = chain::encode(&args)?;
+                let result = chain::submit_call("cancel_pending", &bytes)?;
+                print_write_result("cancel_pending", result);
             }
         },
 
@@ -1040,6 +1171,8 @@ async fn main() -> Result<()> {
                             ProposalStatus::Open => "Open",
                             ProposalStatus::Executed => "Executed",
                             ProposalStatus::Tombstoned => "Tombstoned",
+                            ProposalStatus::Queued => "Queued",
+                            ProposalStatus::Cancelled => "Cancelled",
                         };
                         println!(
                             "proposal {id}: status={status}, committee={}, nonce={}, fn={}, digest=0x{}",
@@ -1049,10 +1182,11 @@ async fn main() -> Result<()> {
                             hex::encode(v.signed_digest)
                         );
                         println!(
-                            "  target=0x{} args_len={} deadline={} approvals={}",
+                            "  target=0x{} args_len={} deadline={} execute_at={} approvals={}",
                             hex::encode(v.target.to_bytes()),
                             v.call_args.len(),
                             v.deadline,
+                            v.execute_at,
                             v.approvals.len()
                         );
                         for pk in &v.approvals {
@@ -1065,6 +1199,39 @@ async fn main() -> Result<()> {
                 let bytes = chain::encode(&id)?;
                 let result = chain::submit_call_to(chain::Contract::Proposals, "finalize", &bytes)?;
                 print_write_result("finalize", result);
+            }
+            ProposalCmd::Execute { id } => {
+                let bytes = chain::encode(&id)?;
+                let result = chain::submit_call_to(chain::Contract::Proposals, "execute", &bytes)?;
+                print_write_result("execute", result);
+            }
+            ProposalCmd::Cancel {
+                id,
+                signers,
+                confirm,
+            } => {
+                let (identities, _) = load_store(&store_path)?;
+                let view: Option<ProposalView> = chain::query_contract(
+                    chain::Contract::Proposals,
+                    "proposal",
+                    chain::encode(&id)?,
+                )
+                .await?;
+                let view = view.ok_or_else(|| anyhow::anyhow!("proposal {id} not found"))?;
+                let proposals_self_id = chain::contract_self_id_bytes(chain::Contract::Proposals)?;
+                let msg = bls::cancel_proposal_message(&proposals_self_id, id, &view.signed_digest);
+                ensure_cli_signers_are_members(view.registry_account_id, &identities, &signers)
+                    .await?;
+                print_signing_fingerprint(&msg);
+                require_cli_confirm(confirm)?;
+                let sigs = build_sigs(&identities, &signers, &msg)?;
+                let args = CancelProposalArgs {
+                    proposal_id: id,
+                    sigs,
+                };
+                let bytes = chain::encode(&args)?;
+                let result = chain::submit_call_to(chain::Contract::Proposals, "cancel", &bytes)?;
+                print_write_result("cancel", result);
             }
             ProposalCmd::NextId => {
                 let next: u64 = chain::query_contract(

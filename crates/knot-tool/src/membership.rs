@@ -39,6 +39,8 @@ mod tests {
             members: vec![pk],
             threshold: 1,
             nonce: 0,
+            timelock_blocks: 0,
+            pending: None,
         };
         ensure_pks_are_members(0, &[pk], &view).expect("member");
     }
@@ -51,6 +53,8 @@ mod tests {
             members: vec![pk],
             threshold: 1,
             nonce: 0,
+            timelock_blocks: 0,
+            pending: None,
         };
         let err = ensure_pks_are_members(7, &[other], &view).unwrap_err();
         assert!(err.contains("not a member"));

@@ -99,6 +99,36 @@ pub fn change_account_message(
     .expect("committee within encoding caps")
 }
 
+pub fn set_timelock_message(
+    registry_self_id: &[u8; 32],
+    account_id: u64,
+    nonce: u64,
+    blocks: u64,
+) -> Vec<u8> {
+    knot_encoding::set_timelock_message_v1(
+        digest_chain_id(),
+        registry_self_id,
+        account_id,
+        nonce,
+        blocks,
+    )
+    .expect("set_timelock encoding")
+}
+
+pub fn cancel_proposal_message(
+    proposals_self_id: &[u8; 32],
+    proposal_id: u64,
+    signed_digest: &[u8; 32],
+) -> Vec<u8> {
+    knot_encoding::cancel_proposal_message_v1(
+        digest_chain_id(),
+        proposals_self_id,
+        proposal_id,
+        signed_digest,
+    )
+    .expect("cancel proposal encoding")
+}
+
 /// Build v3 intent from an on-chain [`ProposalView`].
 pub fn proposal_intent_v3_from_view(
     view: &ProposalView,

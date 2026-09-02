@@ -10,7 +10,7 @@ use dusk_bytes::Serializable;
 use dusk_core::abi::{ContractId, Metadata};
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
 use dusk_vm::{ContractData, Session, VM};
-use knot_encoding::proposal_digest_v3;
+use knot_encoding::{cancel_proposal_message_v1, proposal_digest_v3, set_timelock_message_v1};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rkyv::Serialize;
@@ -19,11 +19,11 @@ use rkyv::ser::serializers::AllocSerializer;
 
 #[path = "../src/call_types.rs"]
 mod call_types;
-use call_types::{ApproveArgs, ProposalStatus, ProposalView, ProposeArgs};
+use call_types::{ApproveArgs, CancelProposalArgs, ProposalStatus, ProposalView, ProposeArgs};
 
 #[path = "../../knot-registry/src/call_types.rs"]
 mod registry_call_types;
-use registry_call_types::CreateAccountArgs;
+use registry_call_types::{CreateAccountArgs, SetTimelockArgs, SignatureEntry};
 
 const PROPOSALS_BYTECODE: &[u8] =
     include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_proposals.wasm");
@@ -787,4 +787,246 @@ fn finalize_failed_call_raw_leaves_proposal_open() {
         .data
         .expect("exists");
     assert_eq!(status, ProposalStatus::Open);
+}
+
+fn sign_all(msg: &[u8], sks: &[(&BlsSecretKey, &BlsPublicKey)]) -> Vec<SignatureEntry> {
+    sks.iter()
+        .map(|(sk, pk)| SignatureEntry {
+            signer: **pk,
+            // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
+            signature: sk.sign_insecure(msg),
+        })
+        .collect()
+}
+
+fn raise_delay(
+    session: &mut Session,
+    account_id: u64,
+    nonce: u64,
+    blocks: u64,
+    sks: &[(&BlsSecretKey, &BlsPublicKey)],
+) {
+    let msg = set_timelock_message_v1(
+        u64::from(CHAIN_ID),
+        &REGISTRY_ID.to_bytes(),
+        account_id,
+        nonce,
+        blocks,
+    )
+    .unwrap();
+    session
+        .call::<SetTimelockArgs, ()>(
+            REGISTRY_ID,
+            "set_timelock",
+            &SetTimelockArgs {
+                account_id,
+                blocks,
+                sigs: sign_all(&msg, sks),
+            },
+            POINT_LIMIT,
+        )
+        .expect("set_timelock");
+}
+
+#[test]
+fn delay_zero_finalize_still_call_raw() {
+    let rng = &mut StdRng::seed_from_u64(40);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let (proposal_id, digest) = propose_set_value(&mut session, account_id, 7, 1);
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    approve(&mut session, proposal_id, &sk2, &pk2, &digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .expect("delay 0 finalize");
+    let value = session
+        .call::<(), u64>(TARGET_ID, "value", &(), POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(value, 7);
+}
+
+#[test]
+fn delay_queues_then_execute_after_eta() {
+    let rng = &mut StdRng::seed_from_u64(41);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    raise_delay(
+        &mut session,
+        account_id,
+        0,
+        5,
+        &[(&sk1, &pk1), (&sk2, &pk2)],
+    );
+
+    let (proposal_id, digest) = propose_set_value(&mut session, account_id, 99, 1);
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    approve(&mut session, proposal_id, &sk2, &pk2, &digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .expect("finalize queues");
+    let view = session
+        .call::<u64, Option<ProposalView>>(PROPOSALS_ID, "proposal", &proposal_id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(view.status, ProposalStatus::Queued);
+    assert_eq!(view.execute_at, 5);
+    let value = session
+        .call::<(), u64>(TARGET_ID, "value", &(), POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(value, 0, "call_raw not until execute");
+
+    assert!(
+        session
+            .call::<u64, ()>(PROPOSALS_ID, "execute", &proposal_id, POINT_LIMIT)
+            .is_err(),
+        "execute before eta must fail"
+    );
+
+    set_block_height(&mut session, 5);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "execute", &proposal_id, POINT_LIMIT)
+        .expect("execute after eta");
+    let value = session
+        .call::<(), u64>(TARGET_ID, "value", &(), POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(value, 99);
+}
+
+#[test]
+fn finalize_panics_if_delay_exceeds_deadline() {
+    let rng = &mut StdRng::seed_from_u64(42);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    raise_delay(
+        &mut session,
+        account_id,
+        0,
+        500,
+        &[(&sk1, &pk1), (&sk2, &pk2)],
+    );
+
+    let (proposal_id, digest) = propose_fn(&mut session, account_id, "set_value", 1, 1, 10);
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    approve(&mut session, proposal_id, &sk2, &pk2, &digest);
+    assert!(
+        session
+            .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+            .is_err(),
+        "now+delay > deadline must fail"
+    );
+}
+
+#[test]
+fn cancel_queued_is_immediate_and_digest_stays_consumed() {
+    let rng = &mut StdRng::seed_from_u64(43);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    raise_delay(
+        &mut session,
+        account_id,
+        0,
+        5,
+        &[(&sk1, &pk1), (&sk2, &pk2)],
+    );
+    let (proposal_id, digest) = propose_set_value(&mut session, account_id, 3, 1);
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    approve(&mut session, proposal_id, &sk2, &pk2, &digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .unwrap();
+
+    let cancel_msg = cancel_proposal_message_v1(
+        u64::from(CHAIN_ID),
+        &PROPOSALS_ID.to_bytes(),
+        proposal_id,
+        &digest,
+    )
+    .unwrap();
+    session
+        .call::<CancelProposalArgs, ()>(
+            PROPOSALS_ID,
+            "cancel",
+            &CancelProposalArgs {
+                proposal_id,
+                sigs: sign_all(&cancel_msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .expect("cancel immediate");
+    let status = session
+        .call::<u64, Option<ProposalStatus>>(PROPOSALS_ID, "status", &proposal_id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(status, ProposalStatus::Cancelled);
+
+    let args = ProposeArgs {
+        registry_account_id: account_id,
+        target: TARGET_ID,
+        function_name: String::from("set_value"),
+        call_args: rkyv_bytes(&3u64),
+        nonce: 1,
+        deadline: deadline_at_height(0),
+    };
+    assert!(
+        session
+            .call::<ProposeArgs, u64>(PROPOSALS_ID, "propose", &args, POINT_LIMIT)
+            .is_err(),
+        "cancelled digest stays consumed until deadline"
+    );
+}
+
+#[test]
+fn prune_keeps_queued_until_deadline() {
+    let rng = &mut StdRng::seed_from_u64(44);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    raise_delay(
+        &mut session,
+        account_id,
+        0,
+        5,
+        &[(&sk1, &pk1), (&sk2, &pk2)],
+    );
+    let (proposal_id, digest) = propose_set_value(&mut session, account_id, 3, 1);
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    approve(&mut session, proposal_id, &sk2, &pk2, &digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .unwrap();
+    let pruned = session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &8u32, POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(pruned, 0, "queued must survive prune before deadline");
+    let view = session
+        .call::<u64, Option<ProposalView>>(PROPOSALS_ID, "proposal", &proposal_id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(view.status, ProposalStatus::Queued);
 }
