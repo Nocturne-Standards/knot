@@ -17,7 +17,13 @@ Architecture and long-form docs:
 · [GitHub — Nocturne-Standards/knot](https://github.com/Nocturne-Standards/knot)
 
 `atlas/` (per-project service registry) stays **outside** this repo — it
-consumes `knot-proposals` / `knot-registry` as a client.
+consumes `knot-proposals` / `knot-registry` as a client. Knot is complete
+without Atlas.
+
+Atlas is another layer: named services, roles, and a consistent admin gate on
+top of a Knot council. Each product can delay. Two delays on one intent means
+two waits. When both exist, leave Atlas `timelock_blocks` at 0 so Knot’s
+per-account delay is the only wait.
 
 ## Crates
 

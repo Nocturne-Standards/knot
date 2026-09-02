@@ -235,8 +235,10 @@ developers can exercise multisig flows; do not treat it as a hardened wallet.
 4. Each member on their own machine: `proposal approve --id ID --signer <me>`
    (prints fingerprint; re-run with `--confirm` to submit) — tool refuses if
    digest ≠ recomputed.
-5. Anyone: `proposal finalize --id ID` when approvals ≥ threshold (executes `call_raw` on target).
-6. `proposal status --id ID` should show `Executed` (or `Tombstoned`).
+5. Anyone: `proposal finalize --id ID` when approvals ≥ threshold. Delay 0
+   runs `call_raw` now; delay > 0 queues until `proposal execute --id ID`.
+6. `proposal status --id ID` should show `Executed`, `Queued`, `Cancelled`,
+   or `Tombstoned`. Cancel a queue with `proposal cancel --id ID --signer …`.
 
 Same flow is in the web UI "Multi-person — on-chain proposals" panel.
 
@@ -265,9 +267,13 @@ our preimage shape. **No follow-up work in the current suite plan.**
 
 ### Monitoring note
 
-Atlas authority / service-repoint changes are timelocked (Atlas is outside this
-repo). Operators should alarm on the change *and* on unexpected silence. Registry `change_account` remains the membership path
-with built-in nonce replay protection.
+Atlas is optional. It is another layer (named services, roles, admin gate) on
+a Knot council, not a second M-of-N. Pairing both delays: leave Atlas
+`timelock_blocks` at 0 so Knot's per-account delay is the only wait. Knot
+membership and proposal execution delay when the registry account's delay is
+greater than 0. Operators should alarm on the change *and* on unexpected
+silence. Registry `change_account` remains the membership path with built-in
+nonce replay protection.
 
 ## Usage
 
@@ -312,6 +318,9 @@ knot-tool account query 0
 knot-tool account meta 0
 knot-tool account keys 0
 knot-tool account next-id
+knot-tool account set-timelock --account 0 --blocks 5 --signer alice --signer bob --confirm
+knot-tool account execute-pending --account 0
+knot-tool account cancel-pending --account 0 --signer alice --signer bob --confirm
 
 # Lab-only unsafe demo — arbitrary UTF-8 message, not a structured intent:
 knot-tool quorum submit --account 0 --msg "hello" --signer alice --signer bob  # preview
@@ -337,6 +346,8 @@ knot-tool proposal approve --id 0 --signer alice --confirm  # sign + submit
 knot-tool proposal approve --id 0 --signer bob --confirm
 knot-tool proposal status --id 0
 knot-tool proposal finalize --id 0
+knot-tool proposal execute --id 0
+knot-tool proposal cancel --id 0 --signer alice --signer bob --confirm
 
 # Topology B — file / BYO channel (QR deferred). Move the JSON between machines.
 knot-tool blob create --out proposal.json --committee-id 0 --threshold 2 \

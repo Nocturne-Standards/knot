@@ -714,6 +714,8 @@ fn mock_proposal_status_out(id: u64, p: MockProposal) -> ProposalStatusOut {
     let status = match p.status {
         MockProposalStatus::Open => "Open",
         MockProposalStatus::Finalized => "Executed",
+        MockProposalStatus::Queued => "Queued",
+        MockProposalStatus::Cancelled => "Cancelled",
     };
     ProposalStatusOut {
         id,
@@ -725,6 +727,7 @@ fn mock_proposal_status_out(id: u64, p: MockProposal) -> ProposalStatusOut {
         function: p.function_name,
         call_args_hex: format!("0x{}", hex::encode(&p.call_args)),
         deadline: p.deadline,
+        execute_at: p.execute_at,
         digest_hex: format!("0x{}", hex::encode(p.digest)),
         approvals_len: p.approvals.len(),
         approvals: p
@@ -906,6 +909,8 @@ async fn api_account_create(
 struct AccountView {
     threshold: u32,
     nonce: u64,
+    timelock_blocks: u64,
+    pending_execute_at: u64,
     members: Vec<String>,
 }
 
@@ -919,6 +924,8 @@ async fn api_account_query(
             AccountView {
                 threshold: v.threshold,
                 nonce: v.nonce,
+                timelock_blocks: v.timelock_blocks,
+                pending_execute_at: v.pending_execute_at,
                 members: v
                     .members
                     .iter()
@@ -934,6 +941,8 @@ async fn api_account_query(
     Ok(Json(view.map(|v| AccountView {
         threshold: v.threshold,
         nonce: v.nonce,
+        timelock_blocks: v.timelock_blocks,
+        pending_execute_at: v.pending.as_ref().map(|p| p.execute_at).unwrap_or(0),
         members: v.members.iter().map(bs58_pk).collect(),
     })))
 }
@@ -943,6 +952,8 @@ struct MetaOut {
     threshold: u32,
     nonce: u64,
     members_len: u32,
+    timelock_blocks: u64,
+    pending_execute_at: u64,
 }
 
 async fn api_account_meta(
@@ -955,6 +966,8 @@ async fn api_account_meta(
             threshold: m.threshold,
             nonce: m.nonce,
             members_len: m.member_count,
+            timelock_blocks: m.timelock_blocks,
+            pending_execute_at: m.pending_execute_at,
         })));
     }
     let view = fetch_registry_account(state.as_ref(), id).await.ok();
@@ -962,6 +975,8 @@ async fn api_account_meta(
         threshold: v.threshold,
         nonce: v.nonce,
         members_len: v.members.len() as u32,
+        timelock_blocks: v.timelock_blocks,
+        pending_execute_at: v.pending.as_ref().map(|p| p.execute_at).unwrap_or(0),
     })))
 }
 
@@ -1911,6 +1926,7 @@ struct ProposalStatusOut {
     function: String,
     call_args_hex: String,
     deadline: u64,
+    execute_at: u64,
     digest_hex: String,
     approvals: Vec<String>,
     approvals_len: usize,
@@ -1938,6 +1954,8 @@ async fn api_proposal_status(
             ProposalStatus::Open => "Open",
             ProposalStatus::Executed => "Executed",
             ProposalStatus::Tombstoned => "Tombstoned",
+            ProposalStatus::Queued => "Queued",
+            ProposalStatus::Cancelled => "Cancelled",
         };
         ProposalStatusOut {
             id,
@@ -1949,6 +1967,7 @@ async fn api_proposal_status(
             function: v.function_name,
             call_args_hex: format!("0x{}", hex::encode(&v.call_args)),
             deadline: v.deadline,
+            execute_at: v.execute_at,
             digest_hex: format!("0x{}", hex::encode(v.signed_digest)),
             approvals_len: v.approvals.len(),
             approvals: v.approvals.iter().map(bs58_pk).collect(),
@@ -1976,6 +1995,112 @@ async fn api_proposal_finalize(
     .map_err(RpcError::internal)?
     .map_err(RpcError::internal)?;
     Ok(Json(submit_from_log(result.stdout)))
+}
+
+async fn api_proposal_execute(
+    State(state): State<Arc<AppState>>,
+    AxPath(id): AxPath<u64>,
+) -> ApiResult<Json<SubmitOut>> {
+    if state.demo_mode == DemoMode::Mock {
+        let mut mock = state.mock.lock().await;
+        mock.execute(id).map_err(RpcError::invalid_input)?;
+        return Ok(Json(mock_ok_submit(
+            format!("mock: execute proposal {id}"),
+            format!("mock-execute-{id}"),
+        )));
+    }
+    let bytes = chain::encode(&id).map_err(RpcError::internal)?;
+    let result = tokio::task::spawn_blocking(move || {
+        chain::submit_call_to(chain::Contract::Proposals, "execute", &bytes)
+    })
+    .await
+    .map_err(RpcError::internal)?
+    .map_err(RpcError::internal)?;
+    Ok(Json(submit_from_log(result.stdout)))
+}
+
+#[derive(Deserialize)]
+struct SetTimelockReq {
+    blocks: u64,
+}
+
+async fn api_set_timelock(
+    State(state): State<Arc<AppState>>,
+    AxPath(id): AxPath<u64>,
+    Json(req): Json<SetTimelockReq>,
+) -> ApiResult<Json<SubmitOut>> {
+    if state.demo_mode == DemoMode::Mock {
+        let mut mock = state.mock.lock().await;
+        mock.set_timelock(id, req.blocks)
+            .map_err(RpcError::invalid_input)?;
+        return Ok(Json(mock_ok_submit(
+            format!("mock: set_timelock account={id} blocks={}", req.blocks),
+            format!("mock-set-timelock-{id}"),
+        )));
+    }
+    Err(RpcError::catalog(
+        StatusCode::BAD_REQUEST,
+        "use_cli",
+        "Testnet set_timelock requires CLI signing (knot-tool account set-timelock).",
+    ))
+}
+
+async fn api_execute_pending(
+    State(state): State<Arc<AppState>>,
+    AxPath(id): AxPath<u64>,
+) -> ApiResult<Json<SubmitOut>> {
+    if state.demo_mode == DemoMode::Mock {
+        let mut mock = state.mock.lock().await;
+        mock.execute_pending(id).map_err(RpcError::invalid_input)?;
+        return Ok(Json(mock_ok_submit(
+            format!("mock: execute_pending account={id}"),
+            format!("mock-execute-pending-{id}"),
+        )));
+    }
+    let bytes = chain::encode(&id).map_err(RpcError::internal)?;
+    let result = tokio::task::spawn_blocking(move || chain::submit_call("execute_pending", &bytes))
+        .await
+        .map_err(RpcError::internal)?
+        .map_err(RpcError::internal)?;
+    Ok(Json(submit_from_log(result.stdout)))
+}
+
+async fn api_cancel_pending(
+    State(state): State<Arc<AppState>>,
+    AxPath(id): AxPath<u64>,
+) -> ApiResult<Json<SubmitOut>> {
+    if state.demo_mode == DemoMode::Mock {
+        let mut mock = state.mock.lock().await;
+        mock.cancel_pending(id).map_err(RpcError::invalid_input)?;
+        return Ok(Json(mock_ok_submit(
+            format!("mock: cancel_pending account={id}"),
+            format!("mock-cancel-pending-{id}"),
+        )));
+    }
+    Err(RpcError::catalog(
+        StatusCode::BAD_REQUEST,
+        "use_cli",
+        "Testnet cancel_pending requires CLI signing (knot-tool account cancel-pending).",
+    ))
+}
+
+async fn api_proposal_cancel(
+    State(state): State<Arc<AppState>>,
+    AxPath(id): AxPath<u64>,
+) -> ApiResult<Json<SubmitOut>> {
+    if state.demo_mode == DemoMode::Mock {
+        let mut mock = state.mock.lock().await;
+        mock.cancel_proposal(id).map_err(RpcError::invalid_input)?;
+        return Ok(Json(mock_ok_submit(
+            format!("mock: cancel proposal {id}"),
+            format!("mock-cancel-{id}"),
+        )));
+    }
+    Err(RpcError::catalog(
+        StatusCode::BAD_REQUEST,
+        "use_cli",
+        "Testnet proposal cancel requires CLI signing (knot-tool proposal cancel).",
+    ))
 }
 
 async fn api_proposal_next_id(State(state): State<Arc<AppState>>) -> ApiResult<Json<u64>> {
@@ -2028,7 +2153,15 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/proposal/{id}/approve", post(api_proposal_approve))
         .route("/api/proposal/{id}", get(api_proposal_status))
         .route("/api/proposal/{id}/finalize", post(api_proposal_finalize))
+        .route("/api/proposal/{id}/execute", post(api_proposal_execute))
+        .route("/api/proposal/{id}/cancel", post(api_proposal_cancel))
         .route("/api/proposal/next-id", get(api_proposal_next_id))
+        .route("/api/account/{id}/set-timelock", post(api_set_timelock))
+        .route(
+            "/api/account/{id}/execute-pending",
+            post(api_execute_pending),
+        )
+        .route("/api/account/{id}/cancel-pending", post(api_cancel_pending))
         .route("/api/blob/{id}/preview", get(api_blob_preview))
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),

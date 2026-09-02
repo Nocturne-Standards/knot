@@ -20,6 +20,9 @@ NOCTURNE_DEPLOYMENTS
 AGENTS.md
 FIELD_GUIDE/
 
+# Track STATUS rollup (MCP-owned; TODO/CLAIMED labels are counts)
+docs/superpowers/tracks/
+
 # Scripts and this allowlist
 scripts/check-public-surface.sh
 .public-surface-allowlist

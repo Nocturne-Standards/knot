@@ -7,9 +7,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Added
 
-- Local `deployments/testnet.json` pin loader (`NOCTURNE_DEPLOYMENTS` or walk-up).
-  Dropped the private `nocturne-deployments` git dependency so default CI/builds
-  need no org token.
+- CLI/RPC: `account set-timelock` / `execute-pending` / `cancel-pending`,
+  `proposal execute` / `cancel`. Mock ledger shows queued + eta.
 
 ### Changed
 

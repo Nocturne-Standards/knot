@@ -8,20 +8,23 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use dusk_bytes::Serializable;
-use dusk_core::abi::ContractId;
+use dusk_core::abi::{ContractId, Metadata};
 use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
 };
 use dusk_vm::{ContractData, Session, VM};
-use knot_encoding::change_account_message_v3;
+use knot_encoding::{
+    PENDING_KIND_SET_TIMELOCK, cancel_pending_message_v1, cancel_pending_set_timelock_payload,
+    change_account_message_v3, set_timelock_message_v1,
+};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
 #[path = "../src/call_types.rs"]
 mod call_types;
 use call_types::{
-    ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SignatureEntry,
-    VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+    CancelPendingArgs, ChangeAccountArgs, CreateAccountArgs, MultisigAccountView, SetTimelockArgs,
+    SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
 
 const REGISTRY_BYTECODE: &[u8] =
@@ -549,14 +552,15 @@ fn verify_quorum_aggregate_false_for_unknown_account() {
 }
 
 #[test]
-fn wire_option_none_is_32_zero_bytes() {
-    // Empirical: rkyv archives `Option<MultisigAccountView>::None` as 32
-    // zero bytes (tagged union sized for the Some variant). Useful when
-    // inspecting raw RUES bodies. The live "always None" false alarm was a
-    // client hex-encoding bug (wrong u64 id), not this shape and not a
-    // contract/query state failure — see knot-tool README.
+fn wire_option_none_is_72_zero_bytes() {
+    // Empirical: rkyv archives `Option<MultisigAccountView>::None` as 72
+    // zero bytes (tagged union sized for the Some variant, grown after
+    // `timelock_blocks` + `pending`). Useful when inspecting raw RUES
+    // bodies. The live "always None" false alarm was a client hex-encoding
+    // bug (wrong u64 id), not this shape and not a contract/query state
+    // failure — see knot-tool README.
     let none_bytes = rkyv::to_bytes::<_, 256>(&Option::<MultisigAccountView>::None).unwrap();
-    assert_eq!(none_bytes.as_slice(), &[0u8; 32]);
+    assert_eq!(none_bytes.as_slice(), &[0u8; 72]);
 
     let mut rng = StdRng::seed_from_u64(1);
     let sk = BlsSecretKey::random(&mut rng);
@@ -565,10 +569,12 @@ fn wire_option_none_is_32_zero_bytes() {
         members: alloc::vec![pk],
         threshold: 1,
         nonce: 0,
+        timelock_blocks: 0,
+        pending: None,
     });
     let some_bytes = rkyv::to_bytes::<_, 256>(&some).unwrap();
-    assert_ne!(some_bytes.as_slice(), &[0u8; 32]);
-    assert!(some_bytes.len() > 32);
+    assert_ne!(some_bytes.as_slice(), &[0u8; 72]);
+    assert!(some_bytes.len() > 72);
 }
 
 #[test]
@@ -641,4 +647,242 @@ fn next_account_id_and_account_roundtrip() {
     assert_eq!(view.members.len(), 2);
     assert_eq!(view.members[0].to_bytes(), pk1.to_bytes());
     assert_eq!(view.members[1].to_bytes(), pk2.to_bytes());
+}
+
+fn set_block_height(session: &mut Session, height: u64) {
+    session
+        .set_meta(Metadata::BLOCK_HEIGHT, Some(height))
+        .expect("setting block_height metadata should succeed");
+}
+
+fn set_timelock_msg(account_id: u64, nonce: u64, blocks: u64) -> Vec<u8> {
+    set_timelock_message_v1(
+        u64::from(CHAIN_ID),
+        &REGISTRY_ID.to_bytes(),
+        account_id,
+        nonce,
+        blocks,
+    )
+    .expect("set_timelock encoding")
+}
+
+#[test]
+fn delay_zero_change_account_still_applies_in_call() {
+    let rng = &mut StdRng::seed_from_u64(20);
+    let mut session = initialize();
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let (_sk3, pk3) = keypair(rng);
+    let (_new_sk, new_pk) = keypair(rng);
+
+    let id = session
+        .call::<CreateAccountArgs, u64>(
+            REGISTRY_ID,
+            "create_account",
+            &CreateAccountArgs {
+                members: alloc::vec![pk1, pk2, pk3],
+                threshold: 2,
+            },
+            POINT_LIMIT,
+        )
+        .unwrap()
+        .data;
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(view.timelock_blocks, 0);
+    assert!(view.pending.is_none());
+
+    let new_members = alloc::vec![pk1, new_pk];
+    let msg = change_message(id, 0, &new_members, 2);
+    session
+        .call::<ChangeAccountArgs, ()>(
+            REGISTRY_ID,
+            "change_account",
+            &ChangeAccountArgs {
+                account_id: id,
+                new_members: new_members.clone(),
+                new_threshold: 2,
+                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .expect("delay 0 change_account applies in-call");
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(view.members, new_members);
+    assert_eq!(view.nonce, 1);
+    assert!(view.pending.is_none());
+}
+
+#[test]
+fn set_timelock_from_zero_applies_now_later_change_is_delayed() {
+    let rng = &mut StdRng::seed_from_u64(21);
+    let mut session = initialize();
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let id = session
+        .call::<CreateAccountArgs, u64>(
+            REGISTRY_ID,
+            "create_account",
+            &CreateAccountArgs {
+                members: alloc::vec![pk1, pk2],
+                threshold: 2,
+            },
+            POINT_LIMIT,
+        )
+        .unwrap()
+        .data;
+
+    let msg = set_timelock_msg(id, 0, 5);
+    session
+        .call::<SetTimelockArgs, ()>(
+            REGISTRY_ID,
+            "set_timelock",
+            &SetTimelockArgs {
+                account_id: id,
+                blocks: 5,
+                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .expect("raise from 0 applies now");
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(view.timelock_blocks, 5);
+    assert_eq!(view.nonce, 1);
+    assert!(view.pending.is_none());
+
+    let new_members = alloc::vec![pk1];
+    let msg = change_message(id, 1, &new_members, 1);
+    session
+        .call::<ChangeAccountArgs, ()>(
+            REGISTRY_ID,
+            "change_account",
+            &ChangeAccountArgs {
+                account_id: id,
+                new_members: new_members.clone(),
+                new_threshold: 1,
+                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .expect("schedule membership change");
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(view.members.len(), 2, "members not live until execute");
+    assert_eq!(view.nonce, 2);
+    let pending = view.pending.expect("pending scheduled");
+    assert_eq!(pending.execute_at, 5);
+
+    assert!(
+        session
+            .call::<u64, ()>(REGISTRY_ID, "execute_pending", &id, POINT_LIMIT)
+            .is_err(),
+        "execute before eta must fail"
+    );
+
+    set_block_height(&mut session, 5);
+    session
+        .call::<u64, ()>(REGISTRY_ID, "execute_pending", &id, POINT_LIMIT)
+        .expect("execute after eta");
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(view.members, new_members);
+    assert!(view.pending.is_none());
+}
+
+#[test]
+fn cancel_pending_is_immediate_and_bound_to_this_pending() {
+    let rng = &mut StdRng::seed_from_u64(22);
+    let mut session = initialize();
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let id = session
+        .call::<CreateAccountArgs, u64>(
+            REGISTRY_ID,
+            "create_account",
+            &CreateAccountArgs {
+                members: alloc::vec![pk1, pk2],
+                threshold: 2,
+            },
+            POINT_LIMIT,
+        )
+        .unwrap()
+        .data;
+    let msg = set_timelock_msg(id, 0, 3);
+    session
+        .call::<SetTimelockArgs, ()>(
+            REGISTRY_ID,
+            "set_timelock",
+            &SetTimelockArgs {
+                account_id: id,
+                blocks: 3,
+                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .unwrap();
+    let msg = set_timelock_msg(id, 1, 1);
+    session
+        .call::<SetTimelockArgs, ()>(
+            REGISTRY_ID,
+            "set_timelock",
+            &SetTimelockArgs {
+                account_id: id,
+                blocks: 1,
+                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .unwrap();
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert_eq!(view.timelock_blocks, 3);
+    let pending = view.pending.expect("shorten is delayed");
+    let payload = cancel_pending_set_timelock_payload(1);
+    let cancel_msg = cancel_pending_message_v1(
+        u64::from(CHAIN_ID),
+        &REGISTRY_ID.to_bytes(),
+        id,
+        pending.execute_at,
+        PENDING_KIND_SET_TIMELOCK,
+        &payload,
+    )
+    .unwrap();
+    session
+        .call::<CancelPendingArgs, ()>(
+            REGISTRY_ID,
+            "cancel_pending",
+            &CancelPendingArgs {
+                account_id: id,
+                sigs: sign_all(&cancel_msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .expect("cancel immediate");
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    assert!(view.pending.is_none());
+    assert_eq!(view.timelock_blocks, 3);
 }

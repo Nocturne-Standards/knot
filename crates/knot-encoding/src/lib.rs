@@ -95,6 +95,20 @@ pub const DOMAIN_PROPOSAL_V3: &[u8] = b"nocturne.knot.multisig.proposal.v3";
 /// and explicit `member_count`.
 pub const DOMAIN_CHANGE_ACCOUNT_V3: &[u8] = b"nocturne.knot.multisig-registry.change_account.v3";
 
+/// Per-account delay change. Binds `chain_id`, registry `self_id`, account, nonce.
+pub const DOMAIN_SET_TIMELOCK_V1: &[u8] = b"nocturne.knot.multisig-registry.set_timelock.v1";
+
+/// Cancel a scheduled registry pending. Binds the pending payload, not just id.
+pub const DOMAIN_CANCEL_PENDING_V1: &[u8] = b"nocturne.knot.multisig-registry.cancel_pending.v1";
+
+/// Cancel a queued proposal. Binds `proposal_id` + signed digest.
+pub const DOMAIN_CANCEL_PROPOSAL_V1: &[u8] = b"nocturne.knot.multisig.proposal.cancel.v1";
+
+/// Discriminant in [`cancel_pending_preimage_v1`] for a membership change.
+pub const PENDING_KIND_CHANGE_ACCOUNT: u8 = 0;
+/// Discriminant in [`cancel_pending_preimage_v1`] for a delay change.
+pub const PENDING_KIND_SET_TIMELOCK: u8 = 1;
+
 /// M12 party roster signup domain — collector relay proof-of-possession.
 pub const DOMAIN_PARTY_V1: &[u8] = b"nocturne.knot.collector.party.v1";
 
@@ -226,6 +240,201 @@ pub fn change_account_message_v3(
         new_threshold,
     )?
     .to_vec())
+}
+
+fn keccak256(bytes: &[u8]) -> [u8; 32] {
+    let mut hasher = Keccak::v256();
+    hasher.update(bytes);
+    let mut out = [0u8; 32];
+    hasher.finalize(&mut out);
+    out
+}
+
+/// v1 `set_timelock` preimage.
+pub fn set_timelock_preimage_v1(
+    chain_id: u64,
+    self_id: &[u8; 32],
+    account_id: u64,
+    nonce: u64,
+    blocks: u64,
+) -> Result<Vec<u8>, EncodingError> {
+    let capacity = DOMAIN_SET_TIMELOCK_V1
+        .len()
+        .checked_add(8)
+        .and_then(|n| n.checked_add(32))
+        .and_then(|n| n.checked_add(8))
+        .and_then(|n| n.checked_add(8))
+        .and_then(|n| n.checked_add(8))
+        .ok_or(EncodingError::CapacityOverflow)?;
+    let mut out = Vec::with_capacity(capacity);
+    out.extend_from_slice(DOMAIN_SET_TIMELOCK_V1);
+    out.extend_from_slice(&chain_id.to_le_bytes());
+    out.extend_from_slice(self_id);
+    out.extend_from_slice(&account_id.to_le_bytes());
+    out.extend_from_slice(&nonce.to_le_bytes());
+    out.extend_from_slice(&blocks.to_le_bytes());
+    Ok(out)
+}
+
+/// Keccak256 of the v1 `set_timelock` preimage.
+pub fn set_timelock_digest_v1(
+    chain_id: u64,
+    self_id: &[u8; 32],
+    account_id: u64,
+    nonce: u64,
+    blocks: u64,
+) -> Result<[u8; 32], EncodingError> {
+    Ok(keccak256(&set_timelock_preimage_v1(
+        chain_id, self_id, account_id, nonce, blocks,
+    )?))
+}
+
+/// Digest bytes as `Vec` for host/`abi::verify_bls` buffers.
+pub fn set_timelock_message_v1(
+    chain_id: u64,
+    self_id: &[u8; 32],
+    account_id: u64,
+    nonce: u64,
+    blocks: u64,
+) -> Result<Vec<u8>, EncodingError> {
+    Ok(set_timelock_digest_v1(chain_id, self_id, account_id, nonce, blocks)?.to_vec())
+}
+
+/// Payload hashed into a cancel-pending preimage for a membership change.
+pub fn cancel_pending_change_account_payload(
+    member_pks: &[[u8; 96]],
+    new_threshold: u32,
+) -> Result<Vec<u8>, EncodingError> {
+    let member_count = checked_u32_len("member_pks", member_pks.len())?;
+    let pk_bytes = member_pks
+        .len()
+        .checked_mul(96)
+        .ok_or(EncodingError::CapacityOverflow)?;
+    let capacity = 4usize
+        .checked_add(pk_bytes)
+        .and_then(|n| n.checked_add(4))
+        .ok_or(EncodingError::CapacityOverflow)?;
+    let mut out = Vec::with_capacity(capacity);
+    out.extend_from_slice(&member_count.to_le_bytes());
+    for pk in member_pks {
+        out.extend_from_slice(pk);
+    }
+    out.extend_from_slice(&new_threshold.to_le_bytes());
+    Ok(out)
+}
+
+/// Payload hashed into a cancel-pending preimage for a delay change.
+pub fn cancel_pending_set_timelock_payload(blocks: u64) -> Vec<u8> {
+    blocks.to_le_bytes().to_vec()
+}
+
+/// v1 `cancel_pending` preimage — binds this exact pending, not just account id.
+pub fn cancel_pending_preimage_v1(
+    chain_id: u64,
+    self_id: &[u8; 32],
+    account_id: u64,
+    execute_at: u64,
+    kind: u8,
+    payload: &[u8],
+) -> Result<Vec<u8>, EncodingError> {
+    let payload_len = checked_u32_len("payload", payload.len())?;
+    let capacity = DOMAIN_CANCEL_PENDING_V1
+        .len()
+        .checked_add(8)
+        .and_then(|n| n.checked_add(32))
+        .and_then(|n| n.checked_add(8))
+        .and_then(|n| n.checked_add(8))
+        .and_then(|n| n.checked_add(1))
+        .and_then(|n| n.checked_add(4))
+        .and_then(|n| n.checked_add(payload.len()))
+        .ok_or(EncodingError::CapacityOverflow)?;
+    let mut out = Vec::with_capacity(capacity);
+    out.extend_from_slice(DOMAIN_CANCEL_PENDING_V1);
+    out.extend_from_slice(&chain_id.to_le_bytes());
+    out.extend_from_slice(self_id);
+    out.extend_from_slice(&account_id.to_le_bytes());
+    out.extend_from_slice(&execute_at.to_le_bytes());
+    out.push(kind);
+    out.extend_from_slice(&payload_len.to_le_bytes());
+    out.extend_from_slice(payload);
+    Ok(out)
+}
+
+/// Keccak256 of the v1 `cancel_pending` preimage.
+pub fn cancel_pending_digest_v1(
+    chain_id: u64,
+    self_id: &[u8; 32],
+    account_id: u64,
+    execute_at: u64,
+    kind: u8,
+    payload: &[u8],
+) -> Result<[u8; 32], EncodingError> {
+    Ok(keccak256(&cancel_pending_preimage_v1(
+        chain_id, self_id, account_id, execute_at, kind, payload,
+    )?))
+}
+
+/// Digest bytes as `Vec` for host buffers.
+pub fn cancel_pending_message_v1(
+    chain_id: u64,
+    self_id: &[u8; 32],
+    account_id: u64,
+    execute_at: u64,
+    kind: u8,
+    payload: &[u8],
+) -> Result<Vec<u8>, EncodingError> {
+    Ok(
+        cancel_pending_digest_v1(chain_id, self_id, account_id, execute_at, kind, payload)?
+            .to_vec(),
+    )
+}
+
+/// v1 proposal-cancel preimage.
+pub fn cancel_proposal_preimage_v1(
+    chain_id: u64,
+    self_id: &[u8; 32],
+    proposal_id: u64,
+    signed_digest: &[u8; 32],
+) -> Result<Vec<u8>, EncodingError> {
+    let capacity = DOMAIN_CANCEL_PROPOSAL_V1
+        .len()
+        .checked_add(8)
+        .and_then(|n| n.checked_add(32))
+        .and_then(|n| n.checked_add(8))
+        .and_then(|n| n.checked_add(32))
+        .ok_or(EncodingError::CapacityOverflow)?;
+    let mut out = Vec::with_capacity(capacity);
+    out.extend_from_slice(DOMAIN_CANCEL_PROPOSAL_V1);
+    out.extend_from_slice(&chain_id.to_le_bytes());
+    out.extend_from_slice(self_id);
+    out.extend_from_slice(&proposal_id.to_le_bytes());
+    out.extend_from_slice(signed_digest);
+    Ok(out)
+}
+
+/// Keccak256 of the v1 proposal-cancel preimage.
+pub fn cancel_proposal_digest_v1(
+    chain_id: u64,
+    self_id: &[u8; 32],
+    proposal_id: u64,
+    signed_digest: &[u8; 32],
+) -> Result<[u8; 32], EncodingError> {
+    Ok(keccak256(&cancel_proposal_preimage_v1(
+        chain_id,
+        self_id,
+        proposal_id,
+        signed_digest,
+    )?))
+}
+
+/// Digest bytes as `Vec` for host buffers.
+pub fn cancel_proposal_message_v1(
+    chain_id: u64,
+    self_id: &[u8; 32],
+    proposal_id: u64,
+    signed_digest: &[u8; 32],
+) -> Result<Vec<u8>, EncodingError> {
+    Ok(cancel_proposal_digest_v1(chain_id, self_id, proposal_id, signed_digest)?.to_vec())
 }
 
 /// Fields that fully determine the §4a preimage / digest (v2 layout).
@@ -848,5 +1057,61 @@ mod tests {
         let d_one = change_account_digest_v3(1, &self_id, 0, 0, &one_pk, 1).unwrap();
         let d_two = change_account_digest_v3(1, &self_id, 0, 0, &two_pks, 1).unwrap();
         assert_ne!(d_one, d_two);
+    }
+
+    #[test]
+    fn set_timelock_digest_v1_known_vector() {
+        let self_id = [0x22; 32];
+        let digest = set_timelock_digest_v1(0xCA, &self_id, 1, 0, 5).unwrap();
+        let msg = set_timelock_message_v1(0xCA, &self_id, 1, 0, 5).unwrap();
+        assert_eq!(digest.as_slice(), msg.as_slice());
+        let expected =
+            hex_decode("80641fede9005c22a5df38bd2986d67999d65dbbadadbee51cf5a8a81cf76293");
+        assert_eq!(digest, expected);
+    }
+
+    #[test]
+    fn cancel_pending_digest_v1_known_vector() {
+        let self_id = [0x22; 32];
+        let payload = cancel_pending_set_timelock_payload(5);
+        let digest =
+            cancel_pending_digest_v1(0xCA, &self_id, 1, 10, PENDING_KIND_SET_TIMELOCK, &payload)
+                .unwrap();
+        let expected =
+            hex_decode("f8df32ef615b7a6cc25bf304937d163b8492e324a25d05b5b219de8a4a2758ac");
+        assert_eq!(digest, expected);
+    }
+
+    #[test]
+    fn cancel_proposal_digest_v1_known_vector() {
+        let self_id = [0x11; 32];
+        let digest = cancel_proposal_digest_v1(0xCA, &self_id, 7, &[0xab; 32]).unwrap();
+        let expected =
+            hex_decode("aca9f2629924fb97cb386fc96d870ae87ce671bfdf68c12685b36e1a25f9494e");
+        assert_eq!(digest, expected);
+    }
+
+    #[test]
+    fn cancel_pending_payload_binds_kind() {
+        let self_id = [0x22; 32];
+        let pks = [[0u8; 96], [1u8; 96]];
+        let ca = cancel_pending_change_account_payload(&pks, 2).unwrap();
+        let st = cancel_pending_set_timelock_payload(5);
+        let d_ca =
+            cancel_pending_digest_v1(0xCA, &self_id, 1, 10, PENDING_KIND_CHANGE_ACCOUNT, &ca)
+                .unwrap();
+        let d_st = cancel_pending_digest_v1(0xCA, &self_id, 1, 10, PENDING_KIND_SET_TIMELOCK, &st)
+            .unwrap();
+        assert_ne!(d_ca, d_st);
+    }
+
+    #[test]
+    fn set_timelock_binds_chain_and_nonce() {
+        let self_id = [0x22; 32];
+        let base = set_timelock_digest_v1(0xCA, &self_id, 1, 0, 5).unwrap();
+        let other_chain = set_timelock_digest_v1(0xBB, &self_id, 1, 0, 5).unwrap();
+        let other_nonce = set_timelock_digest_v1(0xCA, &self_id, 1, 1, 5).unwrap();
+        assert_ne!(base, other_chain);
+        assert_ne!(base, other_nonce);
     }
 }

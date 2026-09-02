@@ -8,10 +8,10 @@ mod knot_proposals {
     use dusk_core::abi::{self, ContractId, block_height, chain_id};
     use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, Signature as BlsSignature};
 
-    use knot_encoding::proposal_digest_v3;
+    use knot_encoding::{cancel_proposal_message_v1, proposal_digest_v3};
     use knot_proposals::call_types::{
-        ApproveArgs, MultisigAccountView, ProposalStatus, ProposalView, ProposeArgs,
-        SignatureEntry, VerifyQuorumArgs,
+        ApproveArgs, CancelProposalArgs, MultisigAccountView, ProposalStatus, ProposalView,
+        ProposeArgs, SignatureEntry, VerifyQuorumArgs,
     };
 
     const MAX_FUNCTION_NAME_LEN: usize = 64;
@@ -38,6 +38,7 @@ mod knot_proposals {
         approvals: Vec<BlsPublicKey>,
         approval_sigs: Vec<BlsSignature>,
         status: ProposalStatus,
+        execute_at: u64,
     }
 
     pub struct MultisigProposalsState {
@@ -178,6 +179,7 @@ mod knot_proposals {
                     approvals: Vec::new(),
                     approval_sigs: Vec::new(),
                     status: ProposalStatus::Open,
+                    execute_at: 0,
                 },
             );
             self.by_digest.insert(
@@ -252,6 +254,7 @@ mod knot_proposals {
                 approvals: p.approvals.clone(),
                 approval_sigs: p.approval_sigs.clone(),
                 status: p.status,
+                execute_at: p.execute_at,
             })
         }
 
@@ -263,8 +266,8 @@ mod knot_proposals {
             self.next_id
         }
 
-        /// At threshold: verify quorum, then CEI — mark terminal status, mark
-        /// digest consumed, emit — **then** `call_raw` the target.
+        /// At threshold: verify quorum. Delay 0: CEI then `call_raw`.
+        /// Delay > 0: queue until `execute_at` (must be `<= deadline`).
         pub fn finalize(&mut self, proposal_id: u64) {
             let registry = self.require_registry();
 
@@ -320,12 +323,125 @@ mod knot_proposals {
             let fn_name = proposal.function_name.clone();
             let call_args = proposal.call_args.clone();
             let committee = proposal.registry_account_id;
+            let deadline = proposal.deadline;
 
             if target == abi::self_id() {
                 panic!("finalize: target must not be this contract");
             }
 
-            // Effects first (CEI): consume proposal before external call.
+            let delay = view.timelock_blocks;
+            if delay == 0 {
+                self.mark_executed(proposal_id, digest, committee, target, fn_name.clone());
+                let _ = abi::call_raw(target, &fn_name, &call_args)
+                    .expect("finalize: call_raw to target failed");
+                return;
+            }
+
+            let execute_at = block_height()
+                .checked_add(delay)
+                .expect("timelock overflow");
+            if deadline != 0 && execute_at > deadline {
+                panic!("proposal delay exceeds deadline");
+            }
+            let proposal = self.proposals.get_mut(&proposal_id).unwrap();
+            proposal.status = ProposalStatus::Queued;
+            proposal.execute_at = execute_at;
+            if let Some(rec) = self.by_digest.get_mut(&digest) {
+                rec.consumed = true;
+            }
+            abi::emit(
+                "proposal_queued",
+                (proposal_id, digest, committee, execute_at),
+            );
+        }
+
+        /// Permissionless `call_raw` after `execute_at`.
+        pub fn execute(&mut self, proposal_id: u64) {
+            let proposal = self
+                .proposals
+                .get(&proposal_id)
+                .unwrap_or_else(|| panic!("no such proposal"));
+            if proposal.status != ProposalStatus::Queued {
+                panic!("proposal is not queued");
+            }
+            if proposal.epoch != self.epoch {
+                panic!("proposal belongs to a retired epoch");
+            }
+            if block_height() < proposal.execute_at {
+                panic!("timelock not elapsed");
+            }
+            if proposal.deadline != 0 && block_height() > proposal.deadline {
+                panic!("proposal deadline passed");
+            }
+
+            let digest = proposal.signed_digest;
+            let target = proposal.target;
+            let fn_name = proposal.function_name.clone();
+            let call_args = proposal.call_args.clone();
+            let committee = proposal.registry_account_id;
+
+            self.mark_executed(proposal_id, digest, committee, target, fn_name.clone());
+            let _ = abi::call_raw(target, &fn_name, &call_args)
+                .expect("execute: call_raw to target failed");
+        }
+
+        /// Immediate cancel of a queued proposal. Quorum of *current* members
+        /// over `cancel_proposal_message_v1`. Digest stays consumed until deadline.
+        pub fn cancel(&mut self, args: CancelProposalArgs) {
+            let registry = self.require_registry();
+            let proposal = self
+                .proposals
+                .get(&args.proposal_id)
+                .unwrap_or_else(|| panic!("no such proposal"));
+            if proposal.status != ProposalStatus::Queued {
+                panic!("proposal is not queued");
+            }
+            if proposal.epoch != self.epoch {
+                panic!("proposal belongs to a retired epoch");
+            }
+
+            let view: Option<MultisigAccountView> =
+                abi::call(registry, "account", &proposal.registry_account_id)
+                    .expect("cross-contract call to knot-registry account failed");
+            if view.is_none() {
+                panic!("unknown knot-registry account");
+            }
+
+            let msg = cancel_proposal_message_v1(
+                u64::from(chain_id()),
+                &abi::self_id().to_bytes(),
+                args.proposal_id,
+                &proposal.signed_digest,
+            )
+            .expect("cancel encoding");
+            let quorum_args = VerifyQuorumArgs {
+                account_id: proposal.registry_account_id,
+                msg,
+                sigs: args.sigs,
+            };
+            let ok: bool = abi::call(registry, "verify_quorum", &quorum_args)
+                .expect("cross-contract call to knot-registry verify_quorum failed");
+            if !ok {
+                panic!("cancel: registry verify_quorum rejected");
+            }
+
+            let digest = proposal.signed_digest;
+            let proposal = self.proposals.get_mut(&args.proposal_id).unwrap();
+            proposal.status = ProposalStatus::Cancelled;
+            if let Some(rec) = self.by_digest.get_mut(&digest) {
+                rec.consumed = true;
+            }
+            abi::emit("proposal_cancelled", (args.proposal_id, digest));
+        }
+
+        fn mark_executed(
+            &mut self,
+            proposal_id: u64,
+            digest: [u8; 32],
+            committee: u64,
+            target: ContractId,
+            fn_name: String,
+        ) {
             let proposal = self.proposals.get_mut(&proposal_id).unwrap();
             proposal.status = if self.tombstone {
                 ProposalStatus::Tombstoned
@@ -337,12 +453,8 @@ mod knot_proposals {
             }
             abi::emit(
                 "proposal_finalized",
-                (proposal_id, digest, committee, target, fn_name.clone()),
+                (proposal_id, digest, committee, target, fn_name),
             );
-
-            // Interaction last.
-            let _ = abi::call_raw(target, &fn_name, &call_args)
-                .expect("finalize: call_raw to target failed");
         }
 
         /// Permissionless storage reclamation. Removes prunable proposal payloads
@@ -357,10 +469,16 @@ mod knot_proposals {
                 if pruned >= batch {
                     break;
                 }
-                let terminal = proposal.status != ProposalStatus::Open;
                 let retired = proposal.epoch != self.epoch;
                 let expired = proposal.deadline < now;
-                if terminal || retired || expired {
+                let keep_queued = proposal.status == ProposalStatus::Queued && !expired;
+                let terminal = matches!(
+                    proposal.status,
+                    ProposalStatus::Executed
+                        | ProposalStatus::Tombstoned
+                        | ProposalStatus::Cancelled
+                );
+                if (terminal || retired || expired) && !keep_queued {
                     remove_ids.push(id);
                     pruned += 1;
                 }

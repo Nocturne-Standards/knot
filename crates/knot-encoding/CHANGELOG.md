@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+### Added
+
+- `set_timelock.v1`, `cancel_pending.v1`, `cancel_proposal.v1` signing domains
+  (declared once here). `MultisigAccountView` / `AccountMeta` gain
+  `timelock_blocks` + pending; `ProposalStatus::{Queued,Cancelled}`;
+  `ProposalView.execute_at`. **PINNED-DIFFERENT-REDEPLOYED** for view layout.
+  Proposal digest v3 and `change_account` digest v3 are unchanged.
+
 ### Changed
 
 - Crate renamed from `multisig-encoding` to `knot-encoding` (mechanical:

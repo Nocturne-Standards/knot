@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use dusk_bytes::Serializable;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-use knot_encoding::call_types::MultisigAccountView;
+use knot_encoding::call_types::{MultisigAccountView, RegistryPendingChange, RegistryPendingView};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DemoMode {
@@ -58,6 +58,8 @@ impl DemoMode {
 pub enum MockProposalStatus {
     Open,
     Finalized,
+    Queued,
+    Cancelled,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,6 +67,9 @@ pub struct MockAccount {
     pub threshold: u32,
     pub nonce: u64,
     pub members: Vec<[u8; 96]>,
+    pub timelock_blocks: u64,
+    pub pending_execute_at: u64,
+    pub pending_timelock: Option<u64>,
 }
 
 impl MockAccount {
@@ -76,10 +81,22 @@ impl MockAccount {
                 BlsPublicKey::from_bytes(bytes).expect("mock ledger stores valid BLS public keys")
             })
             .collect();
+        let pending = if self.pending_execute_at == 0 {
+            None
+        } else {
+            Some(RegistryPendingView {
+                change: RegistryPendingChange::SetTimelock(
+                    self.pending_timelock.unwrap_or(self.timelock_blocks),
+                ),
+                execute_at: self.pending_execute_at,
+            })
+        };
         MultisigAccountView {
             members,
             threshold: self.threshold,
             nonce: self.nonce,
+            timelock_blocks: self.timelock_blocks,
+            pending,
         }
     }
 }
@@ -89,6 +106,8 @@ pub struct MockAccountMeta {
     pub nonce: u64,
     pub threshold: u32,
     pub member_count: u32,
+    pub timelock_blocks: u64,
+    pub pending_execute_at: u64,
 }
 
 /// Stable mock proposals contract id for v3 digests (Lab-only).
@@ -111,6 +130,7 @@ pub struct MockProposal {
     pub deadline: u64,
     pub digest: [u8; 32],
     pub approvals: Vec<[u8; 96]>,
+    pub execute_at: u64,
 }
 
 pub struct MockLedger {
@@ -170,6 +190,9 @@ impl MockLedger {
                 threshold,
                 nonce: 0,
                 members,
+                timelock_blocks: 0,
+                pending_execute_at: 0,
+                pending_timelock: None,
             },
         );
         Ok(id)
@@ -184,6 +207,8 @@ impl MockLedger {
             nonce: a.nonce,
             threshold: a.threshold,
             member_count: a.members.len() as u32,
+            timelock_blocks: a.timelock_blocks,
+            pending_execute_at: a.pending_execute_at,
         })
     }
 
@@ -237,6 +262,7 @@ impl MockLedger {
                 deadline,
                 digest,
                 approvals: Vec::new(),
+                execute_at: 0,
             },
         );
         Ok(id)
@@ -294,8 +320,82 @@ impl MockLedger {
             ));
         }
 
+        let delay = account.timelock_blocks;
         let proposal = self.proposals.get_mut(&id).expect("proposal exists");
+        if delay == 0 {
+            proposal.status = MockProposalStatus::Finalized;
+        } else {
+            proposal.status = MockProposalStatus::Queued;
+            proposal.execute_at = delay;
+        }
+        Ok(())
+    }
+
+    pub fn execute(&mut self, id: u64) -> Result<(), String> {
+        let proposal = self
+            .proposals
+            .get_mut(&id)
+            .ok_or_else(|| format!("no such proposal {id}"))?;
+        if proposal.status != MockProposalStatus::Queued {
+            return Err("proposal is not queued".into());
+        }
         proposal.status = MockProposalStatus::Finalized;
+        Ok(())
+    }
+
+    pub fn cancel_proposal(&mut self, id: u64) -> Result<(), String> {
+        let proposal = self
+            .proposals
+            .get_mut(&id)
+            .ok_or_else(|| format!("no such proposal {id}"))?;
+        if proposal.status != MockProposalStatus::Queued {
+            return Err("proposal is not queued".into());
+        }
+        proposal.status = MockProposalStatus::Cancelled;
+        Ok(())
+    }
+
+    pub fn set_timelock(&mut self, id: u64, blocks: u64) -> Result<(), String> {
+        let account = self
+            .accounts
+            .get_mut(&id)
+            .ok_or_else(|| format!("unknown registry account {id}"))?;
+        if account.timelock_blocks == 0 {
+            account.timelock_blocks = blocks;
+            account.nonce += 1;
+            return Ok(());
+        }
+        account.pending_timelock = Some(blocks);
+        account.pending_execute_at = account.timelock_blocks;
+        account.nonce += 1;
+        Ok(())
+    }
+
+    pub fn execute_pending(&mut self, id: u64) -> Result<(), String> {
+        let account = self
+            .accounts
+            .get_mut(&id)
+            .ok_or_else(|| format!("unknown registry account {id}"))?;
+        if account.pending_execute_at == 0 {
+            return Err("no pending change".into());
+        }
+        if let Some(blocks) = account.pending_timelock.take() {
+            account.timelock_blocks = blocks;
+        }
+        account.pending_execute_at = 0;
+        Ok(())
+    }
+
+    pub fn cancel_pending(&mut self, id: u64) -> Result<(), String> {
+        let account = self
+            .accounts
+            .get_mut(&id)
+            .ok_or_else(|| format!("unknown registry account {id}"))?;
+        if account.pending_execute_at == 0 {
+            return Err("no pending change".into());
+        }
+        account.pending_timelock = None;
+        account.pending_execute_at = 0;
         Ok(())
     }
 }
@@ -603,5 +703,66 @@ mod tests {
             0,
             "v3 finalize does not bump committee nonce"
         );
+    }
+
+    #[test]
+    fn delay_zero_finalize_still_immediate() {
+        let mut ledger = MockLedger::new();
+        let account_id = ledger
+            .create_account(members_2of3(), 2)
+            .expect("create account");
+        assert_eq!(ledger.account(account_id).unwrap().timelock_blocks, 0);
+        let proposal_id = ledger
+            .create_proposal(account_id, [0; 32], "noop".into(), vec![], 10, 0)
+            .expect("create");
+        ledger.approve(proposal_id, member(1)).unwrap();
+        ledger.approve(proposal_id, member(2)).unwrap();
+        ledger.finalize(proposal_id).unwrap();
+        assert_eq!(
+            ledger.proposal(proposal_id).unwrap().status,
+            MockProposalStatus::Finalized
+        );
+    }
+
+    #[test]
+    fn delay_queues_until_execute() {
+        let mut ledger = MockLedger::new();
+        let account_id = ledger
+            .create_account(members_2of3(), 2)
+            .expect("create account");
+        ledger.set_timelock(account_id, 5).unwrap();
+        assert_eq!(ledger.account(account_id).unwrap().timelock_blocks, 5);
+        let proposal_id = ledger
+            .create_proposal(account_id, [0; 32], "noop".into(), vec![], 10, 0)
+            .expect("create");
+        ledger.approve(proposal_id, member(1)).unwrap();
+        ledger.approve(proposal_id, member(2)).unwrap();
+        ledger.finalize(proposal_id).unwrap();
+        let p = ledger.proposal(proposal_id).unwrap();
+        assert_eq!(p.status, MockProposalStatus::Queued);
+        assert_eq!(p.execute_at, 5);
+        ledger.execute(proposal_id).unwrap();
+        assert_eq!(
+            ledger.proposal(proposal_id).unwrap().status,
+            MockProposalStatus::Finalized
+        );
+    }
+
+    #[test]
+    fn set_timelock_shorten_is_pending_until_execute() {
+        let mut ledger = MockLedger::new();
+        let account_id = ledger
+            .create_account(members_2of3(), 2)
+            .expect("create account");
+        ledger.set_timelock(account_id, 5).unwrap();
+        ledger.set_timelock(account_id, 1).unwrap();
+        let acct = ledger.account(account_id).unwrap();
+        assert_eq!(acct.timelock_blocks, 5);
+        assert_eq!(acct.pending_execute_at, 5);
+        assert_eq!(acct.pending_timelock, Some(1));
+        ledger.execute_pending(account_id).unwrap();
+        let acct = ledger.account(account_id).unwrap();
+        assert_eq!(acct.timelock_blocks, 1);
+        assert_eq!(acct.pending_execute_at, 0);
     }
 }

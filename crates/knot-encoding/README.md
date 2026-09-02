@@ -6,6 +6,11 @@ suite, plus shared call types behind a default-off feature. Shared by
 
 ## Status
 
+- **v0.1.2+timelock** — **PINNED-DIFFERENT-REDEPLOYED** view layout:
+  `timelock_blocks` + `pending` on `MultisigAccountView`; `Queued`/`Cancelled`
+  on `ProposalStatus`; `execute_at` on `ProposalView`. New domains
+  `set_timelock.v1` / `cancel_pending.v1` / `cancel_proposal.v1`. Signing
+  digests for proposal v3 and `change_account` v3 are unchanged.
 - **v0.1.2** — `#[archive_attr(repr(C))]` on struct Archive types in
   `call_types` (fieldless `ProposalStatus` stays `#[repr(u8)]` only).
   Measured **DIFFERENT** on `MultisigAccountView` (and several registry /
@@ -31,11 +36,18 @@ suite, plus shared call types behind a default-off feature. Shared by
   `human_summary` for trust (display must use canonical fields).
 - `digest_mnemonic(digest)` / `digest_hex` / `digest_safety_number` — full-hash
   out-of-band fingerprints (M3).
-- Domain tags: `nocturne.knot.multisig.proposal.v2` (proposal preimage),
-  `nocturne.knot.multisig-registry.change_account.v2` (registry quorum).
+- Domain tags: `nocturne.knot.multisig.proposal.v3` (proposal preimage),
+  `nocturne.knot.multisig-registry.change_account.v3` (registry membership),
+  `nocturne.knot.multisig-registry.set_timelock.v1`,
+  `nocturne.knot.multisig-registry.cancel_pending.v1`,
+  `nocturne.knot.multisig.proposal.cancel.v1`. Older v2 tags remain for
+  history.
   **v3**: `proposal_digest_v3` / `ProposalIntentV3` bind `self_id` +
   `epoch`; `change_account_digest_v3` binds `chain_id`, registry `self_id`, and
   explicit `member_count`.
+  **Timelock v1**: `set_timelock_digest_v1` / `cancel_pending_digest_v1` /
+  `cancel_proposal_digest_v1` — delay is account state, not part of the
+  proposal signing preimage.
 - `--features call-types` — `call_types::{SignatureEntry, VerifyQuorumArgs,
   MultisigAccountView}`.
 

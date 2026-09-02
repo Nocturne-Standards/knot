@@ -220,6 +220,9 @@
         threshold,
         nonce: 0,
         members: members.map((m) => new Uint8Array(m)),
+        timelock_blocks: 0,
+        pending_execute_at: 0,
+        pending_timelock: null,
       });
       return id;
     }
@@ -236,6 +239,8 @@
         nonce: a.nonce,
         threshold: a.threshold,
         member_count: a.members.length,
+        timelock_blocks: a.timelock_blocks || 0,
+        pending_execute_at: a.pending_execute_at || 0,
       };
     }
 
@@ -265,6 +270,7 @@
         deadline,
         digest,
         approvals: [],
+        execute_at: 0,
       });
       return id;
     }
@@ -312,7 +318,59 @@
         throw new Error("account nonce overflow");
       }
       account.nonce += 1;
+      const delay = account.timelock_blocks || 0;
+      if (delay === 0) {
+        proposal.status = "finalized";
+      } else {
+        proposal.status = "queued";
+        proposal.execute_at = delay;
+      }
+    }
+
+    execute(id) {
+      const proposal = this.proposals.get(Number(id));
+      if (!proposal) throw new Error(`no such proposal ${id}`);
+      if (proposal.status !== "queued") throw new Error("proposal is not queued");
       proposal.status = "finalized";
+    }
+
+    cancel_proposal(id) {
+      const proposal = this.proposals.get(Number(id));
+      if (!proposal) throw new Error(`no such proposal ${id}`);
+      if (proposal.status !== "queued") throw new Error("proposal is not queued");
+      proposal.status = "cancelled";
+    }
+
+    set_timelock(id, blocks) {
+      const account = this.accounts.get(Number(id));
+      if (!account) throw new Error(`unknown registry account ${id}`);
+      if (!account.timelock_blocks) {
+        account.timelock_blocks = Number(blocks);
+        account.nonce += 1;
+        return;
+      }
+      account.pending_timelock = Number(blocks);
+      account.pending_execute_at = account.timelock_blocks;
+      account.nonce += 1;
+    }
+
+    execute_pending(id) {
+      const account = this.accounts.get(Number(id));
+      if (!account) throw new Error(`unknown registry account ${id}`);
+      if (!account.pending_execute_at) throw new Error("no pending change");
+      if (account.pending_timelock != null) {
+        account.timelock_blocks = account.pending_timelock;
+        account.pending_timelock = null;
+      }
+      account.pending_execute_at = 0;
+    }
+
+    cancel_pending(id) {
+      const account = this.accounts.get(Number(id));
+      if (!account) throw new Error(`unknown registry account ${id}`);
+      if (!account.pending_execute_at) throw new Error("no pending change");
+      account.pending_timelock = null;
+      account.pending_execute_at = 0;
     }
   }
 
@@ -469,6 +527,8 @@
       return {
         threshold: acct.threshold,
         nonce: acct.nonce,
+        timelock_blocks: acct.timelock_blocks || 0,
+        pending_execute_at: acct.pending_execute_at || 0,
         members: acct.members.map((pk) => bytesToB58ish(pk)),
       };
     }
@@ -481,6 +541,8 @@
         threshold: meta.threshold,
         nonce: meta.nonce,
         members_len: meta.member_count,
+        timelock_blocks: meta.timelock_blocks || 0,
+        pending_execute_at: meta.pending_execute_at || 0,
       };
     }
 
@@ -582,6 +644,62 @@
       return store.okSubmit(`mock: finalize proposal ${id}`, `mock-finalize-${id}`);
     }
 
+    m = q.match(/^\/api\/proposal\/(\d+)\/execute$/);
+    if (m && method === "POST") {
+      const id = Number(m[1]);
+      try {
+        store.ledger.execute(id);
+      } catch (e) {
+        httpError(400, e.message);
+      }
+      return store.okSubmit(`mock: execute proposal ${id}`, `mock-execute-${id}`);
+    }
+
+    m = q.match(/^\/api\/proposal\/(\d+)\/cancel$/);
+    if (m && method === "POST") {
+      const id = Number(m[1]);
+      try {
+        store.ledger.cancel_proposal(id);
+      } catch (e) {
+        httpError(400, e.message);
+      }
+      return store.okSubmit(`mock: cancel proposal ${id}`, `mock-cancel-${id}`);
+    }
+
+    m = q.match(/^\/api\/account\/(\d+)\/set-timelock$/);
+    if (m && method === "POST") {
+      const id = Number(m[1]);
+      const body = parseBody(opts);
+      try {
+        store.ledger.set_timelock(id, body.blocks);
+      } catch (e) {
+        httpError(400, e.message);
+      }
+      return store.okSubmit(`mock: set_timelock account ${id}`, `mock-set-timelock-${id}`);
+    }
+
+    m = q.match(/^\/api\/account\/(\d+)\/execute-pending$/);
+    if (m && method === "POST") {
+      const id = Number(m[1]);
+      try {
+        store.ledger.execute_pending(id);
+      } catch (e) {
+        httpError(400, e.message);
+      }
+      return store.okSubmit(`mock: execute_pending account ${id}`, `mock-execute-pending-${id}`);
+    }
+
+    m = q.match(/^\/api\/account\/(\d+)\/cancel-pending$/);
+    if (m && method === "POST") {
+      const id = Number(m[1]);
+      try {
+        store.ledger.cancel_pending(id);
+      } catch (e) {
+        httpError(400, e.message);
+      }
+      return store.okSubmit(`mock: cancel_pending account ${id}`, `mock-cancel-pending-${id}`);
+    }
+
     m = q.match(/^\/api\/proposal\/(\d+)$/);
     if (m && method === "GET") {
       const id = Number(m[1]);
@@ -589,7 +707,14 @@
       if (!p) return null;
       return {
         id,
-        status: p.status === "finalized" ? "Executed" : "Open",
+        status:
+          p.status === "finalized"
+            ? "Executed"
+            : p.status === "queued"
+              ? "Queued"
+              : p.status === "cancelled"
+                ? "Cancelled"
+                : "Open",
         registry_account_id: p.registry_account_id,
         chain_id: p.chain_id,
         nonce: p.nonce,
@@ -597,6 +722,7 @@
         function: p.function_name,
         call_args_hex: `0x${bytesToHex(p.call_args)}`,
         deadline: p.deadline,
+        execute_at: p.execute_at || 0,
         digest_hex: `0x${bytesToHex(p.digest)}`,
         approvals_len: p.approvals.length,
         approvals: p.approvals.map((a) => bytesToB58ish(a)),
@@ -737,6 +863,64 @@
       if (!/live testnet mode/i.test(e.message)) throw e;
     }
 
+    const tl = await mockApi(`/api/account/${accountId}/set-timelock`, {
+      method: "POST",
+      body: JSON.stringify({ blocks: 5 }),
+    });
+    if (tl.outcome === "panic") throw new Error("set-timelock should succeed in mock");
+    const afterTl = await mockApi(`/api/account/${accountId}`);
+    if (!afterTl || afterTl.timelock_blocks !== 5) throw new Error("account delay after set-timelock");
+
+    const created = await mockApi("/api/proposal/create", {
+      method: "POST",
+      body: JSON.stringify({
+        account: accountId,
+        target: "0000000000000000000000000000000000000000000000000000000000000001",
+        function: "noop",
+        args_hex: "",
+        deadline: 999999999,
+      }),
+    });
+    const proposalId = created.allocated_id_hint;
+    await mockApi(`/api/proposal/${proposalId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ signer: "selftest-a", confirm: true }),
+    });
+    await mockApi(`/api/proposal/${proposalId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ signer: "selftest-b", confirm: true }),
+    });
+    await mockApi(`/api/proposal/${proposalId}/finalize`, { method: "POST", body: "{}" });
+    const queued = await mockApi(`/api/proposal/${proposalId}`);
+    if (!queued || queued.status !== "Queued") throw new Error("finalize with delay should queue");
+    await mockApi(`/api/proposal/${proposalId}/execute`, { method: "POST", body: "{}" });
+    const executed = await mockApi(`/api/proposal/${proposalId}`);
+    if (!executed || executed.status !== "Executed") throw new Error("execute should mark Executed");
+
+    const created2 = await mockApi("/api/proposal/create", {
+      method: "POST",
+      body: JSON.stringify({
+        account: accountId,
+        target: "0000000000000000000000000000000000000000000000000000000000000001",
+        function: "noop",
+        args_hex: "",
+        deadline: 999999999,
+      }),
+    });
+    const cancelId = created2.allocated_id_hint;
+    await mockApi(`/api/proposal/${cancelId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ signer: "selftest-a", confirm: true }),
+    });
+    await mockApi(`/api/proposal/${cancelId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ signer: "selftest-b", confirm: true }),
+    });
+    await mockApi(`/api/proposal/${cancelId}/finalize`, { method: "POST", body: "{}" });
+    await mockApi(`/api/proposal/${cancelId}/cancel`, { method: "POST", body: "{}" });
+    const cancelled = await mockApi(`/api/proposal/${cancelId}`);
+    if (!cancelled || cancelled.status !== "Cancelled") throw new Error("cancel should mark Cancelled");
+
     return true;
   }
 
@@ -769,6 +953,24 @@
     led.finalize(pid);
     if (led.proposal(pid).status !== "finalized") throw new Error("not finalized");
     if (led.account(id).nonce !== 1) throw new Error("nonce bump");
+
+    led.set_timelock(id, 5);
+    if (led.account(id).timelock_blocks !== 5) throw new Error("set_timelock delay");
+    const pidQ = led.create_proposal(id, new Uint8Array(32), "noop", new Uint8Array(0), 0, 2);
+    led.approve(pidQ, m(1));
+    led.approve(pidQ, m(2));
+    led.finalize(pidQ);
+    if (led.proposal(pidQ).status !== "queued") throw new Error("delay should queue");
+    if (!led.proposal(pidQ).execute_at) throw new Error("queued execute_at");
+    led.execute(pidQ);
+    if (led.proposal(pidQ).status !== "finalized") throw new Error("execute should finalize");
+
+    const pidC = led.create_proposal(id, new Uint8Array(32), "noop", new Uint8Array(0), 0, 2);
+    led.approve(pidC, m(1));
+    led.approve(pidC, m(2));
+    led.finalize(pidC);
+    led.cancel_proposal(pidC);
+    if (led.proposal(pidC).status !== "cancelled") throw new Error("cancel should cancel");
     return true;
   }
 

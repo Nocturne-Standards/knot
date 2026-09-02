@@ -44,6 +44,30 @@ pub struct VerifyQuorumArgs {
     pub sigs: Vec<SignatureEntry>,
 }
 
+/// Scheduled registry mutation awaiting `execute_pending`.
+///
+/// Data-carrying enum: `#[archive_attr(repr(C))]` is rejected by rustc
+/// ("enums may only be repr(i*) or repr(u*)"). Pin is the layout golden.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub enum RegistryPendingChange {
+    ChangeAccount {
+        new_members: Vec<BlsPublicKey>,
+        new_threshold: u32,
+    },
+    SetTimelock(u64),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct RegistryPendingView {
+    pub change: RegistryPendingChange,
+    pub execute_at: u64,
+}
+
 /// Read-only view of an account, returned by `account`.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
@@ -53,6 +77,8 @@ pub struct MultisigAccountView {
     pub members: Vec<BlsPublicKey>,
     pub threshold: u32,
     pub nonce: u64,
+    pub timelock_blocks: u64,
+    pub pending: Option<RegistryPendingView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -81,6 +107,40 @@ pub struct ChangeAccountArgs {
     pub account_id: u64,
     pub new_members: Vec<BlsPublicKey>,
     pub new_threshold: u32,
+    pub sigs: Vec<SignatureEntry>,
+}
+
+/// Raise or lower this account's `timelock_blocks`. Authorized by a quorum
+/// of *current* members over [`crate::set_timelock_digest_v1`].
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct SetTimelockArgs {
+    pub account_id: u64,
+    pub blocks: u64,
+    pub sigs: Vec<SignatureEntry>,
+}
+
+/// Cancel a scheduled registry change before `execute_at`. Bound to this
+/// pending (see [`crate::cancel_pending_digest_v1`]).
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct CancelPendingArgs {
+    pub account_id: u64,
+    pub sigs: Vec<SignatureEntry>,
+}
+
+/// Cancel a queued proposal before `execute`. Bound to proposal id + digest
+/// (see [`crate::cancel_proposal_digest_v1`]).
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct CancelProposalArgs {
+    pub proposal_id: u64,
     pub sigs: Vec<SignatureEntry>,
 }
 
@@ -121,6 +181,9 @@ pub struct AccountMeta {
     pub threshold: u32,
     pub nonce: u64,
     pub members_len: u32,
+    pub timelock_blocks: u64,
+    /// `execute_at` of the pending change, or `0` if none.
+    pub pending_execute_at: u64,
 }
 
 /// Per-signature breakdown from `diagnose_quorum` — no host verify is
@@ -158,6 +221,10 @@ pub enum ProposalStatus {
     Executed = 1,
     /// Consumed / blocked from immediate re-propose (`tombstone` true, or wiped).
     Tombstoned = 2,
+    /// Quorum met; waiting until `execute_at` before `call_raw`.
+    Queued = 3,
+    /// Queued proposal cancelled by current-member quorum (immediate).
+    Cancelled = 4,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -203,4 +270,6 @@ pub struct ProposalView {
     pub approvals: Vec<BlsPublicKey>,
     pub approval_sigs: Vec<BlsSignature>,
     pub status: ProposalStatus,
+    /// Block height when `execute` may `call_raw`. `0` when not queued.
+    pub execute_at: u64,
 }
