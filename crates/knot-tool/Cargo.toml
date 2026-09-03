@@ -24,13 +24,13 @@ path = "src/lib.rs"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 dusk-bls12_381 = { version = "=0.14.2", default-features = false }
-dusk-bytes = "=0.1.7"
+dusk-bytes = "=0.1.8"
 dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }
-rkyv = { version = "=0.7.39", features = ["size_32", "validation"] }
-bytecheck = "=0.6.12"
+rkyv = { version = "=0.7.46", features = ["size_32", "validation"] }
+bytecheck = "=0.8.3"
 tiny-keccak = { version = "2", features = ["keccak"] }
 hex = "0.4"
-rand = "0.8"
+rand = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
@@ -38,16 +38,16 @@ url = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util"] }
 axum = "0.8"
 bs58 = "0.5"
-aes-gcm = "0.10"
-pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
-sha2 = "0.10"
+aes-gcm = "0.11"
+pbkdf2 = { version = "0.13", default-features = false, features = ["hmac"] }
+sha2 = "0.11"
 rpassword = "7"
 knot-encoding = { path = "../knot-encoding", features = ["call-types"] }
 zeroize = "1"
 subtle = "2"
 libc = "0.2"
-argon2 = "0.5"
-directories = "5"
+argon2 = "0.6"
+directories = "6"
 nocturne-deployments = { git = "https://github.com/Nocturne-Standards/nocturne-deployments", rev = "5811377f39f152f51878eee87985062acfdad0b8", package = "nocturne-deployments", optional = true }
 
 [dev-dependencies]
