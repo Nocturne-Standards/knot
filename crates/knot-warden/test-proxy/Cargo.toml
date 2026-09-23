@@ -1,0 +1,27 @@
+[workspace]
+
+[package]
+name = "knot-warden-test-proxy"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "Apache-2.0"
+publish = false
+description = "Test-only proxy that cross-calls warden so abi::caller() is this contract."
+
+[dependencies]
+knot-warden-encoding = { path = "../../knot-warden-encoding" }
+rkyv = { version = "=0.7.39", default-features = false, features = ["size_32"] }
+bytecheck = { version = "=0.6.12", default-features = false }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+dusk-core = { version = "=1.6.0" }
+dusk-forge = "0.3.0"
+
+[features]
+contract = ["dusk-core/abi-dlmalloc"]
+# dusk_forge::contract check-cfg expects this feature name (unused here).
+data-driver = []
+
+[lib]
+crate-type = ["cdylib", "rlib"]

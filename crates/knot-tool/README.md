@@ -267,10 +267,11 @@ our preimage shape. **No follow-up work in the current suite plan.**
 
 ### Monitoring note
 
-Atlas is optional. It is another layer (named services, roles, admin gate) on
-a Knot council, not a second M-of-N. Pairing both delays: leave Atlas
-`timelock_blocks` at 0 so Knot's per-account delay is the only wait. Knot
-membership and proposal execution delay when the registry account's delay is
+Atlas is outside this repo. On Atlas 0.3, `set_service` is immediate. A
+service delay lives in [warden](../../docs/warden.md) (`knot-warden` 0.1.1,
+testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb`).
+Replacing the guardian waits `timelock_blocks` inside Atlas. Knot membership
+and proposal execution still delay when the registry account's delay is
 greater than 0. Operators should alarm on the change *and* on unexpected
 silence. Registry `change_account` remains the membership path with built-in
 nonce replay protection.

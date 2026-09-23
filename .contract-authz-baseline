@@ -35,3 +35,23 @@ crates/knot-registry/src/state.rs:create_account	PUBLIC — anyone may register 
 crates/knot-registry/src/state.rs:next_account_id	PUBLIC — read-only scalar
 crates/knot-registry/src/state.rs:verify_quorum	PUBLIC — read-only BLS verify helper
 crates/knot-registry/src/state.rs:verify_quorum_aggregate	PUBLIC — read-only aggregate BLS verify helper
+crates/knot-warden/src/state.rs:atlas	PUBLIC — read-only; None before init_warden
+crates/knot-warden/src/state.rs:cancel_admin	scheduler only
+crates/knot-warden/src/state.rs:cancel_atlas_pending	scheduler only; forwards to Atlas cancel_pending in this transaction
+crates/knot-warden/src/state.rs:cancel_service	scheduler only
+crates/knot-warden/src/state.rs:delay_blocks	PUBLIC — read-only scalar; 0 before init_warden
+crates/knot-warden/src/state.rs:execute_admin	PUBLIC — permissionless after execute_at
+crates/knot-warden/src/state.rs:execute_service	PUBLIC — permissionless after execute_at
+crates/knot-warden/src/state.rs:init_warden	deploy owner, direct call, once
+crates/knot-warden/src/state.rs:pending_admin	PUBLIC — read-only view
+crates/knot-warden/src/state.rs:pending_service	PUBLIC — read-only view
+crates/knot-warden/src/state.rs:schedule_service	scheduler only
+crates/knot-warden/src/state.rs:scheduler	PUBLIC — read-only; None before init_warden
+crates/knot-warden/src/state.rs:set_delay	scheduler only; waits out the current delay
+crates/knot-warden/src/state.rs:set_guardian	scheduler only; forwards to Atlas set_guardian in this transaction
+crates/knot-warden/src/state.rs:set_scheduler	scheduler only; waits out the current delay
+crates/knot-warden/src/state.rs:set_timelock	scheduler only; forwards to Atlas set_timelock in this transaction
+crates/knot-warden/test-proxy/src/lib.rs:call_cancel_service	PUBLIC — test-only cross-call fixture
+crates/knot-warden/test-proxy/src/lib.rs:call_init_warden	PUBLIC — test-only cross-call fixture
+crates/knot-warden/test-proxy/src/lib.rs:call_schedule_service	PUBLIC — test-only cross-call fixture
+crates/knot-warden/test-proxy/src/lib.rs:call_set_guardian	PUBLIC — test-only cross-call fixture
