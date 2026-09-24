@@ -10,6 +10,8 @@ details live in each crate's `CHANGELOG.md`. Semver policy:
 
 ### Added
 
+- `knot-warden` 0.1.1 and `knot-warden-encoding` 0.1.0: delaying guardian in front of Atlas. Own workspaces; need a sibling atlas 0.3 checkout. Spec: `docs/warden.md`. 0.1.1 treats the genesis transfer contract as a direct account caller, so a Moonlight wallet can `init_warden`. Testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb`.
+
 - Public repo hygiene: `SECURITY.md`, `CONTRIBUTING.md`, GitHub templates,
   `docs/design-notes.md`.
 

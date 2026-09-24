@@ -12,6 +12,10 @@ members = [
 # local loader (NOCTURNE_DEPLOYMENTS / walk-up). Optional feature
 # `deployments-crate` uses the public Nocturne-Standards/nocturne-deployments crate.
 
+# knot-warden and knot-warden-encoding are separate workspaces (each Cargo.toml
+# has [workspace]). They path-depend on a sibling atlas 0.3 checkout, which
+# public CI does not have. Build with `make -C crates/knot-warden test`.
+
 [workspace.package]
 edition = "2024"
 rust-version = "1.94"

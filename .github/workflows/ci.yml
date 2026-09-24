@@ -63,6 +63,16 @@ jobs:
           make -C crates/knot-proposals wasm
           make -C crates/knot-proposals/test-target wasm
         timeout-minutes: 30
+      - name: warden contract tests
+        # Sibling atlas 0.3 is not on this runner. Local checkouts that have
+        # aichbindas/atlas next to knot run the suite; GitHub skips it.
+        run: |
+          if [ -f ../atlas/crates/atlas-encoding/Cargo.toml ]; then
+            make -C crates/knot-warden test
+          else
+            echo "skip warden: sibling atlas 0.3 checkout not present"
+          fi
+        timeout-minutes: 30
       - name: cargo test (workspace)
         run: cargo test
         timeout-minutes: 45

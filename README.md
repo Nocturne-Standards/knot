@@ -16,14 +16,18 @@ Architecture and long-form docs:
 [docs.nocturne-standards.org — Knot](https://docs.nocturne-standards.org/v1/knot/)
 · [GitHub — Nocturne-Standards/knot](https://github.com/Nocturne-Standards/knot)
 
-`atlas/` (per-project service registry) stays **outside** this repo — it
-consumes `knot-proposals` / `knot-registry` as a client. Knot is complete
-without Atlas.
+`atlas/` (per-project service registry) stays **outside** this repo. Knot
+does not link it. Knot is complete without Atlas.
 
-Atlas is another layer: named services, roles, and a consistent admin gate on
-top of a Knot council. Each product can delay. Two delays on one intent means
-two waits. When both exist, leave Atlas `timelock_blocks` at 0 so Knot’s
-per-account delay is the only wait.
+The delaying guardian in front of Atlas is [warden](docs/warden.md)
+(`knot-warden` 0.1.1, testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb`).
+Proposals `call_raw` into warden, and warden calls Atlas. Pointing Atlas's
+guardian straight at the proposals contract still works; `finalize` then
+applies `set_service` in that same transaction.
+
+Knot's per-account delay covers registry writes. Warden's `delay_blocks`
+covers an Atlas service repoint. Stacking both on one intent waits twice.
+Atlas `timelock_blocks` covers replacing the guardian.
 
 ## Crates
 
@@ -34,6 +38,8 @@ per-account delay is the only wait.
 | `knot-proposals` | Apache-2.0 | 0.3.3 | On-chain propose → approve → finalize `call_raw` |
 | `knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
 | `knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
+| `knot-warden-encoding` | Apache-2.0 | 0.1.0 | Warden call types and events. Own workspace; needs sibling atlas 0.3 |
+| `knot-warden` | Apache-2.0 | 0.1.1 | Delaying guardian in front of Atlas. Testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` |
 
 The Apache suite and **AGPL collector** are intentionally split. Self-host
 `knot-collector` only if you accept AGPL (or purchase a commercial
@@ -59,12 +65,15 @@ how crate semvers relate to git tags.
 │   ├── README.md
 │   ├── security-model.md
 │   ├── versioning.md
-│   └── design-notes.md
+│   ├── design-notes.md
+│   └── warden.md
 ├── crates/knot-encoding/
 ├── crates/knot-registry/
 ├── crates/knot-proposals/
 ├── crates/knot-tool/
-└── crates/knot-collector/
+├── crates/knot-collector/
+├── crates/knot-warden-encoding/
+└── crates/knot-warden/
 ```
 
 ## Deploy
