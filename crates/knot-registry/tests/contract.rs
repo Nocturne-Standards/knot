@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use dusk_bytes::Serializable;
@@ -29,25 +30,63 @@ use call_types::{
 
 const REGISTRY_BYTECODE: &[u8] =
     include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm");
+const REGISTRY_DATA_BYTECODE: &[u8] = include_bytes!(
+    "../../../target/contract/wasm32-unknown-unknown/release/knot_registry_data.wasm"
+);
+const ATLAS_BYTECODE: &[u8] =
+    include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_mock_atlas.wasm");
 
 const REGISTRY_ID: ContractId = ContractId::from_bytes([0xa1; 32]);
+const REGISTRY_DATA_ID: ContractId = ContractId::from_bytes([0xa2; 32]);
+const ATLAS_ID: ContractId = ContractId::from_bytes([0xc1; 32]);
 const CHAIN_ID: u8 = 0xCA;
 const POINT_LIMIT: u64 = 0x10000000;
 
+fn owner_key() -> BlsPublicKey {
+    let rng = &mut StdRng::seed_from_u64(0xA11A5);
+    BlsPublicKey::from(&BlsSecretKey::random(rng))
+}
+
+fn set_sender(session: &mut Session, sender: Option<&BlsPublicKey>) {
+    session
+        .set_meta(Metadata::PUBLIC_SENDER, sender.copied())
+        .expect("setting public_sender metadata should succeed");
+}
+
 fn initialize() -> Session {
+    let owner_pk = owner_key();
     let vm = VM::ephemeral().expect("Creating ephemeral VM should work");
     let mut session = vm.genesis_session(CHAIN_ID);
 
+    for (bytecode, id) in [
+        (ATLAS_BYTECODE, ATLAS_ID),
+        (REGISTRY_DATA_BYTECODE, REGISTRY_DATA_ID),
+        (REGISTRY_BYTECODE, REGISTRY_ID),
+    ] {
+        session
+            .deploy(
+                bytecode,
+                ContractData::builder()
+                    .owner(owner_pk.to_bytes().to_vec())
+                    .contract_id(id),
+                POINT_LIMIT,
+            )
+            .expect("deploy");
+    }
+
     session
-        .deploy(
-            REGISTRY_BYTECODE,
-            ContractData::builder()
-                .owner([0; 32])
-                .contract_id(REGISTRY_ID),
+        .call::<(String, ContractId), ()>(
+            ATLAS_ID,
+            "set_service",
+            &(String::from("knot-registry"), REGISTRY_ID),
             POINT_LIMIT,
         )
-        .expect("Deploying knot-registry should succeed");
-
+        .expect("set_service");
+    set_sender(&mut session, Some(&owner_pk));
+    session
+        .call::<ContractId, ()>(REGISTRY_ID, "init_data", &REGISTRY_DATA_ID, POINT_LIMIT)
+        .expect("init_data");
+    set_sender(&mut session, None);
     session
 }
 
@@ -885,4 +924,32 @@ fn cancel_pending_is_immediate_and_bound_to_this_pending() {
         .unwrap();
     assert!(view.pending.is_none());
     assert_eq!(view.timelock_blocks, 3);
+}
+
+#[test]
+fn data_rejects_create_when_atlas_points_elsewhere() {
+    let rng = &mut StdRng::seed_from_u64(90);
+    let mut session = initialize();
+    let (_sk, pk) = keypair(rng);
+    session
+        .call::<(String, ContractId), ()>(
+            ATLAS_ID,
+            "set_service",
+            &(String::from("knot-registry"), REGISTRY_DATA_ID),
+            POINT_LIMIT,
+        )
+        .expect("retarget service");
+    let rejected = session.call::<CreateAccountArgs, u64>(
+        REGISTRY_ID,
+        "create_account",
+        &CreateAccountArgs {
+            members: alloc::vec![pk],
+            threshold: 1,
+        },
+        POINT_LIMIT,
+    );
+    assert!(
+        rejected.is_err(),
+        "data must reject a caller Atlas does not name"
+    );
 }

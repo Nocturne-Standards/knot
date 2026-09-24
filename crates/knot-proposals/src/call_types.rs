@@ -6,6 +6,6 @@
 
 #[allow(unused_imports)]
 pub use knot_encoding::call_types::{
-    ApproveArgs, CancelProposalArgs, MultisigAccountView, ProposalStatus, ProposalView,
-    ProposeArgs, SignatureEntry, VerifyQuorumArgs,
+    ApproveArgs, CancelProposalArgs, DigestView, MultisigAccountView, OpenProposal,
+    ProposalStatus, ProposalView, ProposalsConfig, ProposeArgs, SignatureEntry, VerifyQuorumArgs,
 };

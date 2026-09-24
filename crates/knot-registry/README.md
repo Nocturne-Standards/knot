@@ -4,6 +4,13 @@ BLS M-of-N quorum verification registry — a shared primitive other contracts
 in this repo can point at instead of each re-implementing committee/
 threshold logic themselves.
 
+## Book
+
+`knot-registry` is the API. The accounts live on `knot-registry-data`.
+A write lands only when `abi::caller()` is the id Atlas `resolve`s for
+`knot-registry`. `init_data` is owner-only and a direct account call.
+Callers use the logic id. The book holds no DUSK.
+
 ## Scope
 
 This is a **verification** registry, not a custody wallet. It never holds

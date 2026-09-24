@@ -7,6 +7,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Added
 
+- Split into `knot-proposals` (logic) and `knot-proposals-data` (book).
+  `call_raw` stays on the logic contract. Logic version 0.4.0. Book version 0.1.0.
+- `set_authorized_account`: only that registry account may propose, finalize,
+  or execute. Rebinding blocks open and queued proposals from the previous account.
+- Owner configuration (`init_data`, `init_registry`, `set_proposal_ttl`,
+  `set_tombstone`, `set_authorized_account`) requires a direct account call.
+- `finalize` sends only approvals that are still members.
+- `prune(0)` removes nothing. Each call examines a bounded prefix of both maps.
+  Consumed digests stay until their deadline.
 - Queue/execute/cancel: `finalize` queues when account delay > 0; `execute`
   after `execute_at`; `cancel` immediate. **PINNED-DIFFERENT-REDEPLOYED**.
 

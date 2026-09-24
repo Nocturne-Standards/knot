@@ -10,7 +10,10 @@ use dusk_bytes::Serializable;
 use dusk_core::abi::{ContractId, Metadata};
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
 use dusk_vm::{ContractData, Session, VM};
-use knot_encoding::{cancel_proposal_message_v1, proposal_digest_v3, set_timelock_message_v1};
+use knot_encoding::{
+    cancel_proposal_message_v1, change_account_message_v3, proposal_digest_v3,
+    set_timelock_message_v1,
+};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rkyv::Serialize;
@@ -23,19 +26,32 @@ use call_types::{ApproveArgs, CancelProposalArgs, ProposalStatus, ProposalView, 
 
 #[path = "../../knot-registry/src/call_types.rs"]
 mod registry_call_types;
-use registry_call_types::{CreateAccountArgs, SetTimelockArgs, SignatureEntry};
+use registry_call_types::{
+    ChangeAccountArgs, CreateAccountArgs, SetTimelockArgs, SignatureEntry,
+};
 
 const PROPOSALS_BYTECODE: &[u8] =
     include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_proposals.wasm");
+const PROPOSALS_DATA_BYTECODE: &[u8] = include_bytes!(
+    "../../../target/contract/wasm32-unknown-unknown/release/knot_proposals_data.wasm"
+);
 const REGISTRY_BYTECODE: &[u8] =
     include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm");
+const REGISTRY_DATA_BYTECODE: &[u8] = include_bytes!(
+    "../../../target/contract/wasm32-unknown-unknown/release/knot_registry_data.wasm"
+);
+const ATLAS_BYTECODE: &[u8] =
+    include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_mock_atlas.wasm");
 const TARGET_BYTECODE: &[u8] = include_bytes!(
     "../test-target/target/contract/wasm32-unknown-unknown/release/proposals_test_target.wasm"
 );
 
 const PROPOSALS_ID: ContractId = ContractId::from_bytes([0xb2; 32]);
 const PROPOSALS_ID_B: ContractId = ContractId::from_bytes([0xb4; 32]);
+const PROPOSALS_DATA_ID: ContractId = ContractId::from_bytes([0xb5; 32]);
 const REGISTRY_ID: ContractId = ContractId::from_bytes([0xa1; 32]);
+const REGISTRY_DATA_ID: ContractId = ContractId::from_bytes([0xa2; 32]);
+const ATLAS_ID: ContractId = ContractId::from_bytes([0xc1; 32]);
 const TARGET_ID: ContractId = ContractId::from_bytes([0xb3; 32]);
 const CHAIN_ID: u8 = 0xCA;
 const POINT_LIMIT: u64 = 0x10000000;
@@ -75,37 +91,51 @@ fn deadline_at_height(height: u64) -> u64 {
 fn initialize(owner_pk: &BlsPublicKey) -> Session {
     let vm = VM::ephemeral().expect("Creating ephemeral VM should work");
     let mut session = vm.genesis_session(CHAIN_ID);
+    let owner = owner_pk.to_bytes().to_vec();
+
+    for (bytecode, id) in [
+        (ATLAS_BYTECODE, ATLAS_ID),
+        (REGISTRY_DATA_BYTECODE, REGISTRY_DATA_ID),
+        (REGISTRY_BYTECODE, REGISTRY_ID),
+        (PROPOSALS_DATA_BYTECODE, PROPOSALS_DATA_ID),
+        (PROPOSALS_BYTECODE, PROPOSALS_ID),
+        (TARGET_BYTECODE, TARGET_ID),
+    ] {
+        session
+            .deploy(
+                bytecode,
+                ContractData::builder()
+                    .owner(owner.clone())
+                    .contract_id(id),
+                POINT_LIMIT,
+            )
+            .expect("deploy");
+    }
 
     session
-        .deploy(
-            REGISTRY_BYTECODE,
-            ContractData::builder()
-                .owner([0; 32])
-                .contract_id(REGISTRY_ID),
+        .call::<(String, ContractId), ()>(
+            ATLAS_ID,
+            "set_service",
+            &(String::from("knot-registry"), REGISTRY_ID),
             POINT_LIMIT,
         )
-        .expect("Deploying knot-registry should succeed");
-
+        .expect("set_service registry");
     session
-        .deploy(
-            PROPOSALS_BYTECODE,
-            ContractData::builder()
-                .owner(owner_pk.to_bytes().to_vec())
-                .contract_id(PROPOSALS_ID),
+        .call::<(String, ContractId), ()>(
+            ATLAS_ID,
+            "set_service",
+            &(String::from("knot-proposals"), PROPOSALS_ID),
             POINT_LIMIT,
         )
-        .expect("Deploying knot-proposals should succeed");
-
+        .expect("set_service proposals");
+    set_sender(&mut session, Some(owner_pk));
     session
-        .deploy(
-            TARGET_BYTECODE,
-            ContractData::builder()
-                .owner([0; 32])
-                .contract_id(TARGET_ID),
-            POINT_LIMIT,
-        )
-        .expect("Deploying test target should succeed");
-
+        .call::<ContractId, ()>(REGISTRY_ID, "init_data", &REGISTRY_DATA_ID, POINT_LIMIT)
+        .expect("registry init_data");
+    session
+        .call::<ContractId, ()>(PROPOSALS_ID, "init_data", &PROPOSALS_DATA_ID, POINT_LIMIT)
+        .expect("proposals init_data");
+    set_sender(&mut session, None);
     session
 }
 
@@ -120,7 +150,34 @@ fn init_proposals(session: &mut Session, owner_pk: &BlsPublicKey) {
     set_sender(session, None);
 }
 
-fn create_account(session: &mut Session, members: Vec<BlsPublicKey>, threshold: u32) -> u64 {
+fn create_account(
+    session: &mut Session,
+    owner_pk: &BlsPublicKey,
+    members: Vec<BlsPublicKey>,
+    threshold: u32,
+) -> u64 {
+    let id = session
+        .call::<CreateAccountArgs, u64>(
+            REGISTRY_ID,
+            "create_account",
+            &CreateAccountArgs { members, threshold },
+            POINT_LIMIT,
+        )
+        .expect("create_account should succeed")
+        .data;
+    set_sender(session, Some(owner_pk));
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "set_authorized_account", &id, POINT_LIMIT)
+        .expect("set_authorized_account");
+    set_sender(session, None);
+    id
+}
+
+fn create_unbound_account(
+    session: &mut Session,
+    members: Vec<BlsPublicKey>,
+    threshold: u32,
+) -> u64 {
     session
         .call::<CreateAccountArgs, u64>(
             REGISTRY_ID,
@@ -232,7 +289,7 @@ fn propose_approve_finalize_executes_target() {
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
 
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2, pk3], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2, pk3], 2);
     let (proposal_id, digest) = propose_set_value(&mut session, account_id, 42, 1);
 
     let status = session
@@ -272,7 +329,7 @@ fn three_parallel_proposals_one_finalizes_others_still_finalizable() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
 
     let (p1, d1) = propose_set_value(&mut session, account_id, 1, 1);
     let (p2, d2) = propose_set_value(&mut session, account_id, 2, 2);
@@ -305,7 +362,7 @@ fn re_propose_executed_digest_panics() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
 
     let (proposal_id, digest) = propose_set_value(&mut session, account_id, 9, 7);
     approve(&mut session, proposal_id, &sk1, &pk1, &digest);
@@ -337,7 +394,7 @@ fn deadline_eq_block_height_accepted() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
 
     set_block_height(&mut session, 100);
     let args = ProposeArgs {
@@ -361,7 +418,7 @@ fn propose_rejects_deadline_exceeds_ttl() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
 
     let args = ProposeArgs {
         registry_account_id: account_id,
@@ -387,7 +444,7 @@ fn propose_rejects_zero_deadline() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
 
     let args = ProposeArgs {
         registry_account_id: account_id,
@@ -436,7 +493,7 @@ fn epoch_bump_invalidates_old_proposals() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
     let (proposal_id, digest) = propose_set_value(&mut session, account_id, 1, 1);
 
     set_sender(&mut session, Some(&owner_pk));
@@ -467,7 +524,7 @@ fn prune_retains_consumed_digest_before_deadline() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
     let (proposal_id, digest) = propose_set_value(&mut session, account_id, 5, 11);
     approve(&mut session, proposal_id, &sk1, &pk1, &digest);
     session
@@ -504,7 +561,7 @@ fn finalize_targeting_self_panics() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
 
     let args = ProposeArgs {
         registry_account_id: account_id,
@@ -541,7 +598,7 @@ fn init_registry_after_many_proposals_succeeds() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
 
     for n in 0..200u64 {
         let _ = propose_set_value(&mut session, account_id, n, n + 1);
@@ -563,7 +620,7 @@ fn identical_open_digest_merges() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
 
     let (id1, _) = propose_set_value(&mut session, account_id, 3, 5);
     let (id2, _) = propose_set_value(&mut session, account_id, 3, 5);
@@ -634,7 +691,7 @@ fn approve_rejects_non_member_and_bad_signature() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
     let (proposal_id, digest) = propose_set_value(&mut session, account_id, 7, 1);
 
     let bad = ApproveArgs {
@@ -692,7 +749,7 @@ fn propose_rejects_past_deadline() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1], 1);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
 
     set_block_height(&mut session, 100);
     let args = ProposeArgs {
@@ -719,7 +776,7 @@ fn finalize_reentrancy_runs_target_once() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
 
     let (proposal_id, digest) = propose_fn(
         &mut session,
@@ -762,7 +819,7 @@ fn finalize_failed_call_raw_leaves_proposal_open() {
 
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
 
     let (proposal_id, digest) = propose_fn(
         &mut session,
@@ -836,7 +893,7 @@ fn delay_zero_finalize_still_call_raw() {
     let (sk2, pk2) = keypair(rng);
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
     let (proposal_id, digest) = propose_set_value(&mut session, account_id, 7, 1);
     approve(&mut session, proposal_id, &sk1, &pk1, &digest);
     approve(&mut session, proposal_id, &sk2, &pk2, &digest);
@@ -858,7 +915,7 @@ fn delay_queues_then_execute_after_eta() {
     let (sk2, pk2) = keypair(rng);
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
     raise_delay(
         &mut session,
         account_id,
@@ -912,7 +969,7 @@ fn finalize_panics_if_delay_exceeds_deadline() {
     let (sk2, pk2) = keypair(rng);
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
     raise_delay(
         &mut session,
         account_id,
@@ -940,7 +997,7 @@ fn cancel_queued_is_immediate_and_digest_stays_consumed() {
     let (sk2, pk2) = keypair(rng);
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
     raise_delay(
         &mut session,
         account_id,
@@ -1004,7 +1061,7 @@ fn prune_keeps_queued_until_deadline() {
     let (sk2, pk2) = keypair(rng);
     let mut session = initialize(&owner_pk);
     init_proposals(&mut session, &owner_pk);
-    let account_id = create_account(&mut session, alloc::vec![pk1, pk2], 2);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2], 2);
     raise_delay(
         &mut session,
         account_id,
@@ -1029,4 +1086,264 @@ fn prune_keeps_queued_until_deadline() {
         .data
         .unwrap();
     assert_eq!(view.status, ProposalStatus::Queued);
+}
+
+#[test]
+fn owner_config_rejects_contract_forwarding() {
+    let rng = &mut StdRng::seed_from_u64(50);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+
+    set_sender(&mut session, Some(&owner_pk));
+    let forwarded = session.call::<(ContractId, u64), ()>(
+        TARGET_ID,
+        "forward_set_ttl",
+        &(PROPOSALS_ID, 50u64),
+        POINT_LIMIT,
+    );
+    assert!(forwarded.is_err(), "foreign contract must not configure");
+    let ttl = session
+        .call::<(), u64>(PROPOSALS_ID, "proposal_ttl", &(), POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(ttl, DEFAULT_TTL);
+
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "set_proposal_ttl", &50u64, POINT_LIMIT)
+        .expect("direct owner set_proposal_ttl");
+    let ttl = session
+        .call::<(), u64>(PROPOSALS_ID, "proposal_ttl", &(), POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(ttl, 50);
+}
+
+#[test]
+fn unrelated_committee_cannot_drive_executor() {
+    let rng = &mut StdRng::seed_from_u64(51);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk_a, pk_a) = keypair(rng);
+    let (_sk_b, pk_b) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let intended = create_account(&mut session, &owner_pk, alloc::vec![pk_a], 1);
+    let other = create_unbound_account(&mut session, alloc::vec![pk_b], 1);
+
+    session
+        .call::<(ContractId, u64), ()>(TARGET_ID, "configure_reenter", &(PROPOSALS_ID, 0), POINT_LIMIT)
+        .expect("gate target");
+
+    let rejected = session.call::<ProposeArgs, u64>(
+        PROPOSALS_ID,
+        "propose",
+        &ProposeArgs {
+            registry_account_id: other,
+            target: TARGET_ID,
+            function_name: String::from("gated_set"),
+            call_args: rkyv_bytes(&9u64),
+            nonce: 1,
+            deadline: deadline_at_height(0),
+        },
+        POINT_LIMIT,
+    );
+    assert!(rejected.is_err(), "unrelated committee must not propose");
+
+    let (proposal_id, digest) = propose_fn(
+        &mut session,
+        intended,
+        "gated_set",
+        9,
+        1,
+        deadline_at_height(0),
+    );
+    approve(&mut session, proposal_id, &sk_a, &pk_a, &digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .expect("intended committee finalizes");
+    let value = session
+        .call::<(), u64>(TARGET_ID, "value", &(), POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(value, 9);
+}
+
+#[test]
+fn rebind_blocks_open_proposal_from_previous_account() {
+    let rng = &mut StdRng::seed_from_u64(52);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk_a, pk_a) = keypair(rng);
+    let (_sk_b, pk_b) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let intended = create_account(&mut session, &owner_pk, alloc::vec![pk_a], 1);
+    let other = create_unbound_account(&mut session, alloc::vec![pk_b], 1);
+    let (proposal_id, digest) = propose_set_value(&mut session, intended, 4, 1);
+    approve(&mut session, proposal_id, &sk_a, &pk_a, &digest);
+
+    set_sender(&mut session, Some(&owner_pk));
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "set_authorized_account", &other, POINT_LIMIT)
+        .expect("rebind");
+    set_sender(&mut session, None);
+
+    let finalized =
+        session.call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT);
+    assert!(finalized.is_err(), "open proposal from the old account must not run");
+}
+
+#[test]
+fn finalize_drops_retired_member_approvals() {
+    let rng = &mut StdRng::seed_from_u64(53);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let (sk3, pk3) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1, pk2, pk3], 2);
+    let (proposal_id, digest) = propose_set_value(&mut session, account_id, 6, 1);
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    approve(&mut session, proposal_id, &sk2, &pk2, &digest);
+    approve(&mut session, proposal_id, &sk3, &pk3, &digest);
+
+    let new_members = alloc::vec![pk1, pk2];
+    let msg = change_account_message_v3(
+        u64::from(CHAIN_ID),
+        &REGISTRY_ID.to_bytes(),
+        account_id,
+        0,
+        &new_members.iter().map(|pk| pk.to_bytes()).collect::<Vec<_>>(),
+        2,
+    )
+    .unwrap();
+    session
+        .call::<ChangeAccountArgs, ()>(
+            REGISTRY_ID,
+            "change_account",
+            &ChangeAccountArgs {
+                account_id,
+                new_members,
+                new_threshold: 2,
+                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .expect("shrink committee");
+
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .expect("surviving quorum finalizes");
+    let value = session
+        .call::<(), u64>(TARGET_ID, "value", &(), POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(value, 6);
+}
+
+#[test]
+fn prune_zero_removes_nothing() {
+    let rng = &mut StdRng::seed_from_u64(54);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
+    let (proposal_id, digest) = propose_set_value(&mut session, account_id, 1, 1);
+    approve(&mut session, proposal_id, &sk1, &pk1, &digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .unwrap();
+
+    let pruned = session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &0u32, POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(pruned, 0);
+    let again = session.call::<ProposeArgs, u64>(
+        PROPOSALS_ID,
+        "propose",
+        &ProposeArgs {
+            registry_account_id: account_id,
+            target: TARGET_ID,
+            function_name: String::from("set_value"),
+            call_args: rkyv_bytes(&1u64),
+            nonce: 1,
+            deadline: deadline_at_height(0),
+        },
+        POINT_LIMIT,
+    );
+    assert!(again.is_err(), "consumed digest stays through prune(0)");
+}
+
+#[test]
+fn prune_examines_a_bounded_prefix() {
+    let rng = &mut StdRng::seed_from_u64(55);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    set_block_height(&mut session, 0);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
+    let (expired_id, _) = propose_fn(&mut session, account_id, "set_value", 1, 1, 10);
+    let (live_id, _) = propose_fn(&mut session, account_id, "set_value", 2, 2, 1000);
+    set_block_height(&mut session, 11);
+
+    let first = session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(first, 1, "one examined record, the expired proposal");
+    let gone = session
+        .call::<u64, Option<ProposalView>>(PROPOSALS_ID, "proposal", &expired_id, POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert!(gone.is_none());
+
+    let second = session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(second, 0, "next record is still live");
+    let live = session
+        .call::<u64, Option<ProposalView>>(PROPOSALS_ID, "proposal", &live_id, POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert!(live.is_some());
+    let _ = sk1;
+}
+
+#[test]
+fn data_rejects_propose_when_atlas_points_elsewhere() {
+    let rng = &mut StdRng::seed_from_u64(56);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (_sk, pk) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk], 1);
+    session
+        .call::<(String, ContractId), ()>(
+            ATLAS_ID,
+            "set_service",
+            &(String::from("knot-proposals"), PROPOSALS_DATA_ID),
+            POINT_LIMIT,
+        )
+        .expect("retarget service");
+    let rejected = session.call::<ProposeArgs, u64>(
+        PROPOSALS_ID,
+        "propose",
+        &ProposeArgs {
+            registry_account_id: account_id,
+            target: TARGET_ID,
+            function_name: String::from("set_value"),
+            call_args: rkyv_bytes(&1u64),
+            nonce: 1,
+            deadline: deadline_at_height(0),
+        },
+        POINT_LIMIT,
+    );
+    assert!(
+        rejected.is_err(),
+        "data must reject a caller Atlas does not name"
+    );
 }

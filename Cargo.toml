@@ -3,7 +3,10 @@ resolver = "2"
 members = [
     "crates/knot-encoding",
     "crates/knot-registry",
+    "crates/knot-registry-data",
     "crates/knot-proposals",
+    "crates/knot-proposals-data",
+    "crates/knot-mock-atlas",
     "crates/knot-tool",
     "crates/knot-collector",
 ]

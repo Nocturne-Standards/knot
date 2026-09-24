@@ -34,8 +34,10 @@ Atlas `timelock_blocks` covers replacing the guardian.
 | Crate | License | Version | Role |
 |---|---|---|---|
 | `knot-encoding` | Apache-2.0 | 0.1.2 | Canonical proposal preimage + blob helpers + M3 fingerprint |
-| `knot-registry` | Apache-2.0 | 0.1.6 | On-chain BLS M-of-N quorum registry |
-| `knot-proposals` | Apache-2.0 | 0.3.3 | On-chain propose → approve → finalize `call_raw` |
+| `knot-registry` | Apache-2.0 | 0.2.0 | On-chain BLS M-of-N quorum API |
+| `knot-registry-data` | Apache-2.0 | 0.1.0 | Account book; writes only from the Atlas-resolved registry logic |
+| `knot-proposals` | Apache-2.0 | 0.4.0 | On-chain propose → approve → finalize `call_raw` |
+| `knot-proposals-data` | Apache-2.0 | 0.1.0 | Proposal book; writes only from the Atlas-resolved proposals logic |
 | `knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
 | `knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
 | `knot-warden-encoding` | Apache-2.0 | 0.1.0 | Warden call types and events. Own workspace; needs sibling atlas 0.3 |

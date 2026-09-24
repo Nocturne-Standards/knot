@@ -7,6 +7,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Added
 
+- Split into `knot-registry` (logic) and `knot-registry-data` (book).
+  Writes on the book require `abi::caller()` to be the contract Atlas
+  `resolve`s for `knot-registry`. `init_data` is a direct owner call.
+  Logic version 0.2.0. Book version 0.1.0.
 - Per-account timelock: `set_timelock`, `cancel_pending`, `execute_pending`.
   Delay 0 keeps `change_account` in-call. **PINNED-DIFFERENT-REDEPLOYED**.
 

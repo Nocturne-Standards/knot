@@ -273,3 +273,58 @@ pub struct ProposalView {
     /// Block height when `execute` may `call_raw`. `0` when not queued.
     pub execute_at: u64,
 }
+
+/// What a registry book write did. Logic emits; the book does not.
+///
+/// Data-carrying enum, same pin rule as [`RegistryPendingChange`].
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub enum RegistryBookEffect {
+    /// Waiting until this block height.
+    Scheduled(u64),
+    AccountChanged,
+    TimelockSet,
+}
+
+/// Proposals book configuration. Reads are open.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct ProposalsConfig {
+    pub registry: Option<ContractId>,
+    pub epoch: u64,
+    pub tombstone: bool,
+    pub proposal_ttl: u64,
+    /// Registry account allowed to drive this executor. `None` until the owner sets it.
+    pub authorized_account: Option<u64>,
+}
+
+/// One `by_digest` row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct DigestView {
+    pub proposal_id: u64,
+    pub deadline: u64,
+    pub epoch: u64,
+    pub consumed: bool,
+}
+
+/// Insert an `Open` proposal. Epoch must match the book.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct OpenProposal {
+    pub registry_account_id: u64,
+    pub nonce: u64,
+    pub epoch: u64,
+    pub target: ContractId,
+    pub function_name: String,
+    pub call_args: Vec<u8>,
+    pub deadline: u64,
+    pub signed_digest: [u8; 32],
+}

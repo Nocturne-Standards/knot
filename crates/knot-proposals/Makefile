@@ -137,9 +137,18 @@ $(DD_WASM_FILE): wasm-dd
 # Test target
 # -----------------------------------------------------------------------------
 
+LAB_ATLAS := c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1
+
+.PHONY: wasm-books
+wasm-books:
+	@CARGO_TARGET_DIR=$(CONTRACT_TARGET_DIR) \
+		ATLAS_PIN_HEX=$(LAB_ATLAS) \
+		RUSTFLAGS="$(RUSTFLAGS) --remap-path-prefix $(HOME)= -C link-args=-zstack-size=$(STACK_SIZE)" \
+		cargo build --release --features contract --target $(WASM_TARGET) \
+			-p knot-registry -p knot-registry-data -p knot-proposals-data -p knot-mock-atlas
+
 .PHONY: test
-test: $(CONTRACT_WASM_FILE) ## Build contract WASM and run tests
-	@$(MAKE) -C ../knot-registry wasm
+test: $(CONTRACT_WASM_FILE) wasm-books ## Build contract WASM and run tests
 	@$(MAKE) -C test-target wasm
 	@cargo test --release
 

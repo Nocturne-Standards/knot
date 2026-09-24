@@ -161,9 +161,10 @@ Atlas still emits `service_updated` when the directory actually changes, and `pe
 
 Bootstrap, after the contracts are deployed:
 
-1. Init the knot registry and proposals the way those contracts already require.
-2. Deploy owner calls `init_warden` with the Atlas id, `Account::Contract(proposals_id)`, and the service delay. Direct call.
-3. Atlas deploy owner calls `init_guardian` with `Account::Contract(warden_id)` and the kernel delay. Direct call.
+1. Deploy `knot-registry-data` and `knot-registry`. Atlas `knot-registry` names the logic id. Owner calls `init_data`. Direct call.
+2. Deploy `knot-proposals-data` and `knot-proposals`. Atlas `knot-proposals` names the logic id. Owner calls `init_data`, then `init_registry` with the registry logic id, then `set_authorized_account` for the governance account. Direct calls. Warden's delay does not choose that account.
+3. Deploy owner calls `init_warden` with the Atlas id, `Account::Contract(proposals_logic_id)`, and the service delay. Direct call. The scheduler id is the proposals logic contract. Any other registry account is rejected by proposals before `call_raw`.
+4. Atlas deploy owner calls `init_guardian` with `Account::Contract(warden_id)` and the kernel delay. Direct call.
 
 A lab can skip proposals: `init_warden` with `Account::External(operator)` and `delay_blocks` `0`, and `init_guardian` with the warden id and `timelock_blocks` `0`.
 
