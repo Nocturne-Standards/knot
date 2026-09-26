@@ -67,7 +67,7 @@ pub const GOLDEN_PROPOSE_ARGS_HEX: &str = "7365745f76616c75652a00000000000000000
 
 /// `ProposalView` — open proposal with one approval over `SIGNED_DIGEST`.
 /// Provenance: rustc 1.94.0 (4a4ef493e 2026-03-02); rkyv 0.7.39.
-/// Re-recorded 2026-09-02: `execute_at` field (PINNED-DIFFERENT-REDEPLOYED).
+/// Re-recorded 2026-09-26: `auth_generation` field. Not part of the signed digest.
 pub const GOLDEN_PROPOSAL_VIEW_HEX: &str = concat!(
     "7365745f76616c75652a0000000000000000000000000000e3a945bd7dbd5136",
     "5c255b3a7851432419f20ddb7bc948f5b60d677c5b02ff9e6255228ee75c9dd8",
@@ -83,7 +83,7 @@ pub const GOLDEN_PROPOSAL_VIEW_HEX: &str = concat!(
     "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d",
     "0900000080feffff81feffff0800000000000000000000001111111111111111",
     "11111111111111111111111111111111111111111111111160feffff01000000",
-    "20ffffff0100000000000000000000000000000000000000"
+    "20ffffff01000000000000000000000000000000000000000000000000000000"
 );
 
 fn archive_hex<T>(v: &T) -> String
@@ -202,6 +202,7 @@ fn proposal_view_golden() {
         approval_sigs: vec![keys[0].0.sign_insecure(&SIGNED_DIGEST)],
         status: ProposalStatus::Open,
         execute_at: 0,
+        auth_generation: 0,
     };
     assert_eq!(archive_hex(&view), GOLDEN_PROPOSAL_VIEW_HEX);
 }

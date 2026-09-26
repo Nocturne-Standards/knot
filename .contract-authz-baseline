@@ -7,8 +7,8 @@
 #
 crates/knot-proposals/src/state.rs:approve	PUBLIC — caller must be committee member with valid BLS sig over digest
 crates/knot-proposals/src/state.rs:epoch	PUBLIC — read-only scalar
-crates/knot-proposals/src/state.rs:finalize	PUBLIC — permissionless when the proposal account is still authorized (require_authorized) and quorum is met; delay 0 call_raw, else queue
-crates/knot-proposals/src/state.rs:execute	PUBLIC — permissionless when queued, still authorized (require_authorized), and execute_at reached
+crates/knot-proposals/src/state.rs:finalize	PUBLIC — permissionless when the proposal account is still authorized (require_authorized), the binding generation matches (require_generation), the digest was issued here (require_issued_here), and quorum is met; delay 0 call_raw, else queue
+crates/knot-proposals/src/state.rs:execute	PUBLIC — permissionless when queued, still authorized (require_authorized), the binding generation matches (require_generation), the digest was issued here (require_issued_here), and execute_at reached
 crates/knot-proposals/src/state.rs:cancel	PUBLIC — current committee quorum BLS over cancel_proposal_message_v1
 crates/knot-proposals/src/state.rs:init_data	contract owner, direct account call (require_direct_owner)
 crates/knot-proposals/src/state.rs:init_registry	contract owner, direct account call (require_direct_owner)
@@ -47,7 +47,7 @@ crates/knot-registry-data/src/state.rs:execute_pending	Atlas-resolved knot-regis
 crates/knot-registry-data/src/state.rs:next_account_id	PUBLIC — read-only scalar
 crates/knot-registry-data/src/state.rs:schedule	Atlas-resolved knot-registry logic only (require_logic_caller)
 crates/knot-proposals-data/src/state.rs:commit_cancelled	Atlas-resolved knot-proposals logic only (require_logic_caller)
-crates/knot-proposals-data/src/state.rs:commit_executed	Atlas-resolved knot-proposals logic only (require_logic_caller)
+crates/knot-proposals-data/src/state.rs:commit_executed	Atlas-resolved knot-proposals logic only (require_logic_caller); binding generation must match (require_generation); digest must name this caller (require_issued_by_caller)
 crates/knot-proposals-data/src/state.rs:config	PUBLIC — read-only view
 crates/knot-proposals-data/src/state.rs:digest	PUBLIC — read-only view
 crates/knot-proposals-data/src/state.rs:next_proposal_id	PUBLIC — read-only scalar
@@ -55,7 +55,7 @@ crates/knot-proposals-data/src/state.rs:open_proposal	Atlas-resolved knot-propos
 crates/knot-proposals-data/src/state.rs:proposal	PUBLIC — read-only view
 crates/knot-proposals-data/src/state.rs:prune	Atlas-resolved knot-proposals logic only (require_logic_caller)
 crates/knot-proposals-data/src/state.rs:push_approval	Atlas-resolved knot-proposals logic only (require_logic_caller)
-crates/knot-proposals-data/src/state.rs:queue	Atlas-resolved knot-proposals logic only (require_logic_caller)
+crates/knot-proposals-data/src/state.rs:queue	Atlas-resolved knot-proposals logic only (require_logic_caller); binding generation must match (require_generation); digest must name this caller (require_issued_by_caller)
 crates/knot-proposals-data/src/state.rs:set_authorized_account	Atlas-resolved knot-proposals logic only (require_logic_caller)
 crates/knot-proposals-data/src/state.rs:set_proposal_ttl	Atlas-resolved knot-proposals logic only (require_logic_caller)
 crates/knot-proposals-data/src/state.rs:set_registry	Atlas-resolved knot-proposals logic only (require_logic_caller)

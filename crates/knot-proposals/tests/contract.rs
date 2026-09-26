@@ -22,7 +22,9 @@ use rkyv::ser::serializers::AllocSerializer;
 
 #[path = "../src/call_types.rs"]
 mod call_types;
-use call_types::{ApproveArgs, CancelProposalArgs, ProposalStatus, ProposalView, ProposeArgs};
+use call_types::{
+    ApproveArgs, CancelProposalArgs, DigestView, ProposalStatus, ProposalView, ProposeArgs,
+};
 
 #[path = "../../knot-registry/src/call_types.rs"]
 mod registry_call_types;
@@ -1241,6 +1243,206 @@ fn finalize_drops_retired_member_approvals() {
     assert_eq!(value, 6);
 }
 
+fn read_proposal(session: &mut Session, id: u64) -> Option<ProposalView> {
+    session
+        .call::<u64, Option<ProposalView>>(PROPOSALS_ID, "proposal", &id, POINT_LIMIT)
+        .expect("proposal query")
+        .data
+}
+
+fn read_digest(session: &mut Session, key: [u8; 32]) -> Option<DigestView> {
+    session
+        .call::<[u8; 32], Option<DigestView>>(PROPOSALS_DATA_ID, "digest", &key, POINT_LIMIT)
+        .expect("digest query")
+        .data
+}
+
+fn signed_digest(account: u64, nonce: u64, value: u64, deadline: u64) -> [u8; 32] {
+    proposal_digest_v3(
+        u64::from(CHAIN_ID),
+        &PROPOSALS_ID.to_bytes(),
+        1,
+        account,
+        nonce,
+        &TARGET_ID.to_bytes(),
+        b"set_value",
+        &rkyv_bytes(&value),
+        deadline,
+    )
+    .unwrap()
+}
+
+/// Smaller digest key stays live (`deadline` 1000). Larger key expires at height 11.
+fn live_before_expired_digests(account: u64) -> ((u64, u64, u64), (u64, u64, u64)) {
+    for n in 1..80 {
+        let live = signed_digest(account, n, n, 1000);
+        let expired = signed_digest(account, n + 80, n + 80, 10);
+        if live < expired {
+            return ((n, n, 1000), (n + 80, n + 80, 10));
+        }
+    }
+    panic!("no digest pair with the live key first");
+}
+
+/// Smaller digest key expires at height 31. Larger key stays live.
+fn short_before_long_digests(account: u64) -> ((u64, u64, u64), (u64, u64, u64)) {
+    for n in 1..80 {
+        let short = signed_digest(account, n, n, 30);
+        let long = signed_digest(account, n + 80, n + 80, 1000);
+        if short < long {
+            return ((n, n, 30), (n + 80, n + 80, 1000));
+        }
+    }
+    panic!("no digest pair with the short key first");
+}
+
+fn hand_over(session: &mut Session, owner: &BlsPublicKey) {
+    session
+        .deploy(
+            PROPOSALS_BYTECODE,
+            ContractData::builder()
+                .owner(owner.to_bytes().to_vec())
+                .contract_id(PROPOSALS_ID_B),
+            POINT_LIMIT,
+        )
+        .expect("deploy replacement logic");
+    session
+        .call::<(String, ContractId), ()>(
+            ATLAS_ID,
+            "set_service",
+            &(String::from("knot-proposals"), PROPOSALS_ID_B),
+            POINT_LIMIT,
+        )
+        .expect("retarget proposals");
+    set_sender(session, Some(owner));
+    session
+        .call::<ContractId, ()>(PROPOSALS_ID_B, "init_data", &PROPOSALS_DATA_ID, POINT_LIMIT)
+        .expect("replacement init_data");
+    set_sender(session, None);
+}
+
+#[test]
+fn init_data_same_book_is_idempotent_and_other_book_panics() {
+    let rng = &mut StdRng::seed_from_u64(57);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    set_sender(&mut session, Some(&owner_pk));
+    session
+        .call::<ContractId, ()>(PROPOSALS_ID, "init_data", &PROPOSALS_DATA_ID, POINT_LIMIT)
+        .expect("same book may be retried");
+    let other = ContractId::from_bytes([0xff; 32]);
+    let rejected =
+        session.call::<ContractId, ()>(PROPOSALS_ID, "init_data", &other, POINT_LIMIT);
+    assert!(rejected.is_err(), "a second book must panic");
+}
+
+#[test]
+fn rebind_round_trip_does_not_revive_open_or_queued() {
+    let rng = &mut StdRng::seed_from_u64(58);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk_a, pk_a) = keypair(rng);
+    let (_sk_b, pk_b) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account = create_account(&mut session, &owner_pk, alloc::vec![pk_a], 1);
+    raise_delay(&mut session, account, 0, 5, &[(&sk_a, &pk_a)]);
+    let other = create_unbound_account(&mut session, alloc::vec![pk_b], 1);
+
+    let (open_id, open_digest) = propose_set_value(&mut session, account, 3, 1);
+    approve(&mut session, open_id, &sk_a, &pk_a, &open_digest);
+    let (queued_id, queued_digest) = propose_set_value(&mut session, account, 4, 2);
+    approve(&mut session, queued_id, &sk_a, &pk_a, &queued_digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &queued_id, POINT_LIMIT)
+        .expect("queue");
+    assert_eq!(
+        read_proposal(&mut session, queued_id).unwrap().status,
+        ProposalStatus::Queued
+    );
+
+    set_sender(&mut session, Some(&owner_pk));
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "set_authorized_account", &other, POINT_LIMIT)
+        .expect("rebind away");
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "set_authorized_account", &account, POINT_LIMIT)
+        .expect("rebind back");
+    set_sender(&mut session, None);
+
+    assert!(
+        session
+            .call::<u64, ()>(PROPOSALS_ID, "finalize", &open_id, POINT_LIMIT)
+            .is_err(),
+        "open proposal stays dead after the round trip"
+    );
+    set_block_height(&mut session, 5);
+    assert!(
+        session
+            .call::<u64, ()>(PROPOSALS_ID, "execute", &queued_id, POINT_LIMIT)
+            .is_err(),
+        "queued proposal stays dead after the round trip"
+    );
+    assert_eq!(
+        read_proposal(&mut session, queued_id).unwrap().status,
+        ProposalStatus::Queued
+    );
+
+    let (fresh_id, fresh_digest) = propose_set_value(&mut session, account, 8, 3);
+    approve(&mut session, fresh_id, &sk_a, &pk_a, &fresh_digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &fresh_id, POINT_LIMIT)
+        .expect("a new proposal after the rebind can queue");
+}
+
+#[test]
+fn replacement_logic_cannot_finalize_or_execute() {
+    let rng = &mut StdRng::seed_from_u64(59);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk_a, pk_a) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    let account = create_account(&mut session, &owner_pk, alloc::vec![pk_a], 1);
+
+    let (open_id, open_digest) = propose_set_value(&mut session, account, 5, 1);
+    approve(&mut session, open_id, &sk_a, &pk_a, &open_digest);
+
+    raise_delay(&mut session, account, 0, 4, &[(&sk_a, &pk_a)]);
+    let (queued_id, queued_digest) = propose_set_value(&mut session, account, 6, 2);
+    approve(&mut session, queued_id, &sk_a, &pk_a, &queued_digest);
+    session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &queued_id, POINT_LIMIT)
+        .expect("queue before handover");
+
+    hand_over(&mut session, &owner_pk);
+
+    assert!(
+        session
+            .call::<u64, ()>(PROPOSALS_ID_B, "finalize", &open_id, POINT_LIMIT)
+            .is_err(),
+        "replacement logic must not finalize"
+    );
+    set_block_height(&mut session, 4);
+    assert!(
+        session
+            .call::<u64, ()>(PROPOSALS_ID_B, "execute", &queued_id, POINT_LIMIT)
+            .is_err(),
+        "replacement logic must not execute"
+    );
+    let value = session
+        .call::<(), u64>(TARGET_ID, "value", &(), POINT_LIMIT)
+        .unwrap()
+        .data;
+    assert_eq!(value, 0);
+    assert_eq!(
+        read_proposal(&mut session, queued_id).unwrap().status,
+        ProposalStatus::Queued
+    );
+    assert_eq!(
+        read_proposal(&mut session, open_id).unwrap().status,
+        ProposalStatus::Open
+    );
+}
+
 #[test]
 fn prune_zero_removes_nothing() {
     let rng = &mut StdRng::seed_from_u64(54);
@@ -1255,25 +1457,18 @@ fn prune_zero_removes_nothing() {
         .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
         .unwrap();
 
+    set_block_height(&mut session, 1001);
     let pruned = session
         .call::<u32, u32>(PROPOSALS_ID, "prune", &0u32, POINT_LIMIT)
         .unwrap()
         .data;
     assert_eq!(pruned, 0);
-    let again = session.call::<ProposeArgs, u64>(
-        PROPOSALS_ID,
-        "propose",
-        &ProposeArgs {
-            registry_account_id: account_id,
-            target: TARGET_ID,
-            function_name: String::from("set_value"),
-            call_args: rkyv_bytes(&1u64),
-            nonce: 1,
-            deadline: deadline_at_height(0),
-        },
-        POINT_LIMIT,
+    assert!(
+        read_proposal(&mut session, proposal_id).is_some(),
+        "expired proposal stays"
     );
-    assert!(again.is_err(), "consumed digest stays through prune(0)");
+    let rec = read_digest(&mut session, digest).expect("expired digest stays");
+    assert!(rec.consumed);
 }
 
 #[test]
@@ -1285,32 +1480,108 @@ fn prune_examines_a_bounded_prefix() {
     init_proposals(&mut session, &owner_pk);
     set_block_height(&mut session, 0);
     let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
-    let (expired_id, _) = propose_fn(&mut session, account_id, "set_value", 1, 1, 10);
-    let (live_id, _) = propose_fn(&mut session, account_id, "set_value", 2, 2, 1000);
+    let (live_id, _) = propose_fn(&mut session, account_id, "set_value", 1, 1, 1000);
+    let (expired_id, _) = propose_fn(&mut session, account_id, "set_value", 2, 2, 10);
     set_block_height(&mut session, 11);
 
     let first = session
         .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
         .unwrap()
         .data;
-    assert_eq!(first, 1, "one examined record, the expired proposal");
-    let gone = session
-        .call::<u64, Option<ProposalView>>(PROPOSALS_ID, "proposal", &expired_id, POINT_LIMIT)
-        .unwrap()
-        .data;
-    assert!(gone.is_none());
+    assert_eq!(first, 0, "the live prefix is examined and kept");
+    assert!(
+        read_proposal(&mut session, expired_id).is_some(),
+        "expired proposal is past the budget"
+    );
 
     let second = session
         .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
         .unwrap()
         .data;
-    assert_eq!(second, 0, "next record is still live");
-    let live = session
-        .call::<u64, Option<ProposalView>>(PROPOSALS_ID, "proposal", &live_id, POINT_LIMIT)
+    assert_eq!(second, 1, "the next call reaches the expired proposal");
+    assert!(read_proposal(&mut session, expired_id).is_none());
+    assert!(read_proposal(&mut session, live_id).is_some());
+    let _ = sk1;
+}
+
+#[test]
+fn prune_digest_examines_a_bounded_prefix() {
+    let rng = &mut StdRng::seed_from_u64(60);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (_sk1, pk1) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    set_block_height(&mut session, 0);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
+    let ((n0, v0, d0), (n1, v1, d1)) = live_before_expired_digests(account_id);
+    let (_, live_key) = propose_fn(&mut session, account_id, "set_value", v0, n0, d0);
+    let (_, expired_key) = propose_fn(&mut session, account_id, "set_value", v1, n1, d1);
+    assert!(live_key < expired_key);
+    set_block_height(&mut session, 11);
+
+    session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
+        .unwrap();
+    assert!(read_digest(&mut session, expired_key).is_some());
+    assert!(read_digest(&mut session, live_key).is_some());
+
+    session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
+        .unwrap();
+    assert!(read_digest(&mut session, expired_key).is_none());
+    assert!(read_digest(&mut session, live_key).is_some());
+}
+
+#[test]
+fn prune_cursor_wraps_on_both_maps() {
+    let rng = &mut StdRng::seed_from_u64(61);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (_sk1, pk1) = keypair(rng);
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    set_block_height(&mut session, 0);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
+
+    let (first_id, _) = propose_fn(&mut session, account_id, "set_value", 1, 1, 20);
+    let (second_id, _) = propose_fn(&mut session, account_id, "set_value", 2, 2, 1000);
+    session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
+        .unwrap();
+    session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
+        .unwrap();
+    set_block_height(&mut session, 21);
+    let removed = session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
         .unwrap()
         .data;
-    assert!(live.is_some());
-    let _ = sk1;
+    assert_eq!(removed, 1, "wrap examines the first proposal");
+    assert!(read_proposal(&mut session, first_id).is_none());
+    assert!(read_proposal(&mut session, second_id).is_some());
+
+    let mut session = initialize(&owner_pk);
+    init_proposals(&mut session, &owner_pk);
+    set_block_height(&mut session, 0);
+    let account_id = create_account(&mut session, &owner_pk, alloc::vec![pk1], 1);
+    let ((n0, v0, d0), (n1, v1, d1)) = short_before_long_digests(account_id);
+    let (_, short_key) = propose_fn(&mut session, account_id, "set_value", v0, n0, d0);
+    let (_, long_key) = propose_fn(&mut session, account_id, "set_value", v1, n1, d1);
+    assert!(short_key < long_key);
+    session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
+        .unwrap();
+    session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
+        .unwrap();
+    set_block_height(&mut session, 31);
+    session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &1u32, POINT_LIMIT)
+        .unwrap();
+    assert!(
+        read_digest(&mut session, short_key).is_none(),
+        "wrap removes the expired first digest"
+    );
+    assert!(read_digest(&mut session, long_key).is_some());
 }
 
 #[test]

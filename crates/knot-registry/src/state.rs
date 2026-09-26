@@ -32,9 +32,14 @@ mod knot_registry {
         }
 
         /// Owner-only, direct account call. Points this contract at its book.
+        /// One-shot: the same id may be retried; a different book panics.
         pub fn init_data(&mut self, data: ContractId) {
             require_direct_owner();
-            self.data = Some(data);
+            match self.data {
+                Some(current) if current == data => {}
+                Some(_) => panic!("knot-registry data already set"),
+                None => self.data = Some(data),
+            }
         }
 
         pub fn create_account(&mut self, args: CreateAccountArgs) -> u64 {

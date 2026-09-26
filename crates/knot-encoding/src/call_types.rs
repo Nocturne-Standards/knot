@@ -272,6 +272,9 @@ pub struct ProposalView {
     pub status: ProposalStatus,
     /// Block height when `execute` may `call_raw`. `0` when not queued.
     pub execute_at: u64,
+    /// `auth_generation` on the book when this proposal was opened.
+    /// A later `set_authorized_account` bumps the book and this row cannot run.
+    pub auth_generation: u64,
 }
 
 /// What a registry book write did. Logic emits; the book does not.
@@ -299,6 +302,8 @@ pub struct ProposalsConfig {
     pub proposal_ttl: u64,
     /// Registry account allowed to drive this executor. `None` until the owner sets it.
     pub authorized_account: Option<u64>,
+    /// Bumped on every `set_authorized_account`, including a repeat of the same id.
+    pub auth_generation: u64,
 }
 
 /// One `by_digest` row.

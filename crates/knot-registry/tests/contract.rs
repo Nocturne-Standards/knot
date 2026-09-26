@@ -927,6 +927,19 @@ fn cancel_pending_is_immediate_and_bound_to_this_pending() {
 }
 
 #[test]
+fn init_data_same_book_is_idempotent_and_other_book_panics() {
+    let owner_pk = owner_key();
+    let mut session = initialize();
+    set_sender(&mut session, Some(&owner_pk));
+    session
+        .call::<ContractId, ()>(REGISTRY_ID, "init_data", &REGISTRY_DATA_ID, POINT_LIMIT)
+        .expect("same book may be retried");
+    let other = ContractId::from_bytes([0xff; 32]);
+    let rejected = session.call::<ContractId, ()>(REGISTRY_ID, "init_data", &other, POINT_LIMIT);
+    assert!(rejected.is_err(), "a second book must panic");
+}
+
+#[test]
 fn data_rejects_create_when_atlas_points_elsewhere() {
     let rng = &mut StdRng::seed_from_u64(90);
     let mut session = initialize();

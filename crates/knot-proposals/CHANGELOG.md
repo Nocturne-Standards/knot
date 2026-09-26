@@ -16,6 +16,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 - `finalize` sends only approvals that are still members.
 - `prune(0)` removes nothing. Each call examines a bounded prefix of both maps.
   Consumed digests stay until their deadline.
+- `init_data` is one-shot. The same book id may be retried. A different book panics.
+- `set_authorized_account` bumps `auth_generation`. Switching back to a previous
+  account does not make that binding's open or queued proposals executable.
+- `finalize` and `execute` recompute the v3 digest for this contract. A
+  replacement logic contract on the same book cannot run proposals signed for
+  the previous contract. Open and queued rows stay until cancel or prune.
 - Queue/execute/cancel: `finalize` queues when account delay > 0; `execute`
   after `execute_at`; `cancel` immediate. **PINNED-DIFFERENT-REDEPLOYED**.
 

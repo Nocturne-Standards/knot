@@ -30,9 +30,14 @@ mod knot_proposals {
         }
 
         /// Owner-only, direct account call. Points this contract at its book.
+        /// One-shot: the same id may be retried; a different book panics.
         pub fn init_data(&mut self, data: ContractId) {
             Self::require_direct_owner();
-            self.data = Some(data);
+            match self.data {
+                Some(current) if current == data => {}
+                Some(_) => panic!("knot-proposals data already set"),
+                None => self.data = Some(data),
+            }
         }
 
         /// Owner-only, direct account call. Bumps epoch and clears the
@@ -61,8 +66,8 @@ mod knot_proposals {
 
         /// Owner-only, direct account call. Only this registry account may
         /// `propose`, `finalize`, or `execute` through this contract.
-        /// Checked again at finalize and execute, so an open or queued
-        /// proposal from a previous account cannot run after a rebind.
+        /// Each call bumps `auth_generation`, so open and queued proposals
+        /// from the previous binding cannot run, including after a switch back.
         pub fn set_authorized_account(&mut self, account_id: u64) {
             Self::require_direct_owner();
             let _: () = abi::call(self.data_id(), "set_authorized_account", &account_id)
@@ -232,6 +237,8 @@ mod knot_proposals {
                 panic!("proposal deadline passed");
             }
             require_authorized(&book, proposal.registry_account_id);
+            require_generation(&book, &proposal);
+            require_issued_here(&proposal);
 
             let view: Option<MultisigAccountView> =
                 abi::call(registry, "account", &proposal.registry_account_id)
@@ -309,6 +316,8 @@ mod knot_proposals {
                 panic!("proposal deadline passed");
             }
             require_authorized(&book, proposal.registry_account_id);
+            require_generation(&book, &proposal);
+            require_issued_here(&proposal);
             self.refuse_target(proposal.target);
 
             let digest = proposal.signed_digest;
@@ -415,6 +424,32 @@ mod knot_proposals {
         match book.authorized_account {
             Some(id) if id == account_id => {}
             _ => panic!("proposal account is not the authorized registry account"),
+        }
+    }
+
+    fn require_generation(book: &ProposalsConfig, proposal: &ProposalView) {
+        if proposal.auth_generation != book.auth_generation {
+            panic!("proposal belongs to a retired account binding");
+        }
+    }
+
+    /// Stored digest must be the v3 digest of this contract. A replacement
+    /// logic contract sharing the book fails here, before `call_raw`.
+    fn require_issued_here(proposal: &ProposalView) {
+        let digest = proposal_digest_v3(
+            u64::from(chain_id()),
+            &abi::self_id().to_bytes(),
+            proposal.epoch,
+            proposal.registry_account_id,
+            proposal.nonce,
+            &proposal.target.to_bytes(),
+            proposal.function_name.as_bytes(),
+            &proposal.call_args,
+            proposal.deadline,
+        )
+        .expect("proposal digest encoding");
+        if digest != proposal.signed_digest {
+            panic!("proposal was not issued by this contract");
         }
     }
 

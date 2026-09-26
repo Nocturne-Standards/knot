@@ -8,7 +8,7 @@ threshold logic themselves.
 
 `knot-registry` is the API. The accounts live on `knot-registry-data`.
 A write lands only when `abi::caller()` is the id Atlas `resolve`s for
-`knot-registry`. `init_data` is owner-only and a direct account call.
+`knot-registry`. `init_data` is owner-only, a direct account call, and one-shot. The same book id may be retried. A different book panics.
 Callers use the logic id. The book holds no DUSK.
 
 ## Scope

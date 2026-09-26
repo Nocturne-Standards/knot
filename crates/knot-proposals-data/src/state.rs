@@ -4,11 +4,12 @@ mod knot_proposals_data {
     use alloc::string::String;
     use alloc::vec::Vec;
 
-    use dusk_core::abi::{self, block_height, ContractId};
+    use dusk_core::abi::{self, block_height, chain_id, ContractId};
     use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, Signature as BlsSignature};
     use knot_encoding::call_types::{
         DigestView, OpenProposal, ProposalStatus, ProposalView, ProposalsConfig,
     };
+    use knot_encoding::proposal_digest_v3;
 
     include!(concat!(env!("OUT_DIR"), "/atlas_pin.rs"));
 
@@ -37,6 +38,7 @@ mod knot_proposals_data {
         approval_sigs: Vec<BlsSignature>,
         status: ProposalStatus,
         execute_at: u64,
+        auth_generation: u64,
     }
 
     pub struct ProposalsDataState {
@@ -45,6 +47,7 @@ mod knot_proposals_data {
         tombstone: bool,
         proposal_ttl: u64,
         authorized_account: Option<u64>,
+        auth_generation: u64,
         by_digest: BTreeMap<[u8; 32], DigestRecord>,
         proposals: BTreeMap<u64, Proposal>,
         next_id: u64,
@@ -60,6 +63,7 @@ mod knot_proposals_data {
                 tombstone: false,
                 proposal_ttl: 1000,
                 authorized_account: None,
+                auth_generation: 0,
                 by_digest: BTreeMap::new(),
                 proposals: BTreeMap::new(),
                 next_id: 0,
@@ -75,6 +79,7 @@ mod knot_proposals_data {
                 tombstone: self.tombstone,
                 proposal_ttl: self.proposal_ttl,
                 authorized_account: self.authorized_account,
+                auth_generation: self.auth_generation,
             }
         }
 
@@ -102,6 +107,10 @@ mod knot_proposals_data {
         pub fn set_authorized_account(&mut self, account_id: u64) {
             self.require_logic_caller();
             self.authorized_account = Some(account_id);
+            self.auth_generation = self
+                .auth_generation
+                .checked_add(1)
+                .expect("auth_generation overflow");
         }
 
         pub fn digest(&self, key: [u8; 32]) -> Option<DigestView> {
@@ -127,6 +136,7 @@ mod knot_proposals_data {
                 approval_sigs: p.approval_sigs.clone(),
                 status: p.status,
                 execute_at: p.execute_at,
+                auth_generation: p.auth_generation,
             })
         }
 
@@ -160,6 +170,7 @@ mod knot_proposals_data {
                     approval_sigs: Vec::new(),
                     status: ProposalStatus::Open,
                     execute_at: 0,
+                    auth_generation: self.auth_generation,
                 },
             );
             self.by_digest.insert(
@@ -208,6 +219,8 @@ mod knot_proposals_data {
                 if proposal.registry_account_id != authorized {
                     panic!("proposal account is not the authorized registry account");
                 }
+                require_generation(self.auth_generation, proposal.auth_generation);
+                require_issued_by_caller(proposal);
                 if proposal.status != ProposalStatus::Open {
                     panic!("proposal is not open");
                 }
@@ -243,6 +256,8 @@ mod knot_proposals_data {
                 if proposal.registry_account_id != authorized {
                     panic!("proposal account is not the authorized registry account");
                 }
+                require_generation(self.auth_generation, proposal.auth_generation);
+                require_issued_by_caller(proposal);
                 if proposal.epoch != epoch {
                     panic!("proposal belongs to a retired epoch");
                 }
@@ -405,6 +420,32 @@ mod knot_proposals_data {
             if abi::caller() != Some(logic) {
                 panic!("caller is not the knot-proposals logic contract");
             }
+        }
+    }
+
+    fn require_generation(current: u64, stamped: u64) {
+        if stamped != current {
+            panic!("proposal belongs to a retired account binding");
+        }
+    }
+
+    /// Digest must have been signed for the logic contract that is calling.
+    fn require_issued_by_caller(proposal: &Proposal) {
+        let logic = abi::caller().expect("direct call");
+        let digest = proposal_digest_v3(
+            u64::from(chain_id()),
+            &logic.to_bytes(),
+            proposal.epoch,
+            proposal.registry_account_id,
+            proposal.nonce,
+            &proposal.target.to_bytes(),
+            proposal.function_name.as_bytes(),
+            &proposal.call_args,
+            proposal.deadline,
+        )
+        .expect("proposal digest encoding");
+        if digest != proposal.signed_digest {
+            panic!("proposal was not issued by this contract");
         }
     }
 }

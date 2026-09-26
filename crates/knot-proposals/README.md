@@ -9,11 +9,16 @@ Signed bytes are the v3 digest from [`knot-encoding`](../knot-encoding/).
 
 `knot-proposals` is the API and the `call_raw` caller. The rows live on
 `knot-proposals-data`. Atlas service `knot-proposals`. `init_data` wires the
-book. `set_authorized_account` binds this executor to one registry account;
-`propose`, `finalize`, and `execute` reject every other account, including
-proposals opened before a rebind. Owner configuration is a direct account
-call. `prune(0)` is a no-op. Each prune examines a bounded prefix of the
-proposal map and of the digest map. Consumed digests stay until `deadline`.
+book once; the same id may be retried, a different book panics. A new logic
+contract may `init_data` onto that book, but `finalize` and `execute` recompute
+the v3 digest and reject proposals signed for the previous contract. Those
+rows stay until cancel or prune.
+`set_authorized_account` binds this executor to one registry account and bumps
+`auth_generation`. Open and queued proposals from the previous binding cannot
+run, including after a switch back to that account. Owner configuration is a
+direct account call. `prune(0)` is a no-op. Each prune examines a bounded
+prefix of the proposal map and of the digest map. Consumed digests stay until
+`deadline`.
 
 ## Status
 
@@ -29,9 +34,9 @@ proposal map and of the digest map. Consumed digests stay until `deadline`.
 
 | Method | Notes |
 |--------|--------|
-| `init_data` | Owner, direct call; book contract |
+| `init_data` | Owner, direct call; one-shot book contract (same id may be retried) |
 | `init_registry` | Owner, direct call; bumps `epoch` and clears the authorized account |
-| `set_authorized_account` | Owner, direct call; the only account that may drive this executor |
+| `set_authorized_account` | Owner, direct call; bumps `auth_generation`, so the previous binding's open and queued proposals cannot run |
 | `set_proposal_ttl` | Owner; ceiling only, no wipe (`> 0`, `≤ MAX_PROPOSAL_TTL`) |
 | `set_tombstone(bool)` | Owner; no invalidation |
 | `propose(ProposeArgs) -> id` | Explicit non-zero `deadline`; caller `nonce`; merge identical open digests |
