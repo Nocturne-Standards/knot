@@ -13,7 +13,7 @@ dusk-bls12_381 = { version = "=0.14.2", default-features = false }
 rkyv = { version = "=0.7.39", default-features = false, features = ["size_32"] }
 bytecheck = { version = "=0.6.12", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
-knot-encoding = { path = "../knot-encoding", features = ["call-types"] }
+knot-encoding = { path = "../knot-encoding", features = ["call-types", "contract-events"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }

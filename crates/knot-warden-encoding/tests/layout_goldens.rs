@@ -28,8 +28,8 @@ use knot_warden_encoding::call_types::{
     Account, InitWardenArgs, PendingAdmin, PendingAdminView, PendingServiceView,
 };
 use knot_warden_encoding::events::{
-    AdminCancelled, AdminScheduled, DelaySet, SchedulerSet, ServiceCancelled, ServiceExecuted,
-    ServiceScheduled,
+    AdminCancelled, AdminScheduled, AtlasCancelForwarded, AtlasSet, DelaySet, GuardianForwarded,
+    SchedulerSet, ServiceCancelled, ServiceExecuted, ServiceScheduled, TimelockForwarded,
 };
 
 const SERVICE_ID: ContractId = ContractId::from_bytes([0x0d; 32]);
@@ -103,6 +103,16 @@ pub const GOLDEN_ADMIN_SCHEDULED_HEX: &str = "0000000000000000805101000000000000
 /// `AdminCancelled { change: Delay(86400) }`.
 /// Provenance: rustc 1.94.0; rkyv 0.7.39; post-`repr(C)`.
 pub const GOLDEN_ADMIN_CANCELLED_HEX: &str = "000000000000000080510100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+
+/// `AtlasSet { atlas: SERVICE_ID }`. Re-recorded 2026-09-26.
+pub const GOLDEN_ATLAS_SET_HEX: &str =
+    "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d";
+/// `GuardianForwarded { guardian: External(pk0) }`.
+pub const GOLDEN_GUARDIAN_FORWARDED_HEX: &str = "0000000000000000e3a945bd7dbd51365c255b3a7851432419f20ddb7bc948f5b60d677c5b02ff9e6255228ee75c9dd8a3bd4a86751e9b14cf501c89e69b4b2a2169c189accff3afc07b7ff80a0acfc75a4e073ee006624f722dd52ef90ae1828d8bfdcb6c1e260aad4c44e90e1b5e5c2067d4363ee978a0db41fdba0f29829a1263e43f33f231a9dc20fc5acafc235d9c920f2772cbd716ddb84cca39704625b55a01a011e7eeae177ef0949bce380f2d64afd6038e15ff70e7aaf4d9b92e8bf4188696e1264e090000000000000000";
+/// `TimelockForwarded { blocks: 86400 }`.
+pub const GOLDEN_TIMELOCK_FORWARDED_HEX: &str = "8051010000000000";
+/// Unit struct. The archive is empty. A field added here changes this pin.
+pub const GOLDEN_ATLAS_CANCEL_FORWARDED_HEX: &str = "";
 
 fn samples() -> Vec<(&'static str, String, &'static str)> {
     let pk = pk0();
@@ -202,6 +212,42 @@ fn samples() -> Vec<(&'static str, String, &'static str)> {
             GOLDEN_ADMIN_CANCELLED_HEX,
         ),
     ]
+}
+
+#[test]
+fn forward_event_goldens() {
+    let pk = pk0();
+    let rows = [
+        ("AtlasSet", archive_hex(&AtlasSet { atlas: SERVICE_ID })),
+        (
+            "GuardianForwarded",
+            archive_hex(&GuardianForwarded {
+                guardian: Account::External(pk),
+            }),
+        ),
+        (
+            "TimelockForwarded",
+            archive_hex(&TimelockForwarded { blocks: 86400 }),
+        ),
+        ("AtlasCancelForwarded", archive_hex(&AtlasCancelForwarded)),
+    ];
+    let mut mismatches = String::new();
+    for (name, actual) in rows {
+        let expected = match name {
+            "AtlasSet" => GOLDEN_ATLAS_SET_HEX,
+            "GuardianForwarded" => GOLDEN_GUARDIAN_FORWARDED_HEX,
+            "TimelockForwarded" => GOLDEN_TIMELOCK_FORWARDED_HEX,
+            "AtlasCancelForwarded" => GOLDEN_ATLAS_CANCEL_FORWARDED_HEX,
+            _ => "",
+        };
+        if actual != expected {
+            mismatches.push_str(name);
+            mismatches.push('\n');
+            mismatches.push_str(&actual);
+            mismatches.push_str("\n\n");
+        }
+    }
+    assert!(mismatches.is_empty(), "{mismatches}");
 }
 
 #[test]

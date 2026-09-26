@@ -4,10 +4,10 @@ mod knot_proposals_data {
     use alloc::string::String;
     use alloc::vec::Vec;
 
-    use dusk_core::abi::{self, block_height, chain_id, ContractId};
+    use dusk_core::abi::{self, ContractId, block_height, chain_id};
     use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, Signature as BlsSignature};
     use knot_encoding::call_types::{
-        DigestView, OpenProposal, ProposalStatus, ProposalView, ProposalsConfig,
+        DigestView, OpenProposal, ProposalStatus, ProposalView, ProposalsConfig, PruneReport,
     };
     use knot_encoding::proposal_digest_v3;
 
@@ -208,9 +208,7 @@ mod knot_proposals_data {
 
         pub fn queue(&mut self, proposal_id: u64, execute_at: u64) {
             self.require_logic_caller();
-            let authorized = self
-                .authorized_account
-                .expect("authorized account not set");
+            let authorized = self.authorized_account.expect("authorized account not set");
             let digest = {
                 let proposal = self
                     .proposals
@@ -244,9 +242,7 @@ mod knot_proposals_data {
             self.require_logic_caller();
             let epoch = self.epoch;
             let tombstone = self.tombstone;
-            let authorized = self
-                .authorized_account
-                .expect("authorized account not set");
+            let authorized = self.authorized_account.expect("authorized account not set");
             let now = block_height();
             let digest = {
                 let proposal = self
@@ -311,20 +307,24 @@ mod knot_proposals_data {
         /// `limit == 0` examines nothing. Each map examines at most
         /// `min(limit, MAX_PRUNE_BATCH)` records, continuing from a cursor.
         /// Consumed digests stay until `deadline`.
-        pub fn prune(&mut self, limit: u32) -> u32 {
+        pub fn prune(&mut self, limit: u32) -> PruneReport {
             self.require_logic_caller();
             if limit == 0 {
-                return 0;
+                return PruneReport {
+                    proposal_ids: Vec::new(),
+                    digest_keys: Vec::new(),
+                };
             }
             let batch = limit.min(MAX_PRUNE_BATCH);
             let now = block_height();
-            let removed = self.examine_proposals(batch, now);
-            self.examine_digests(batch, now);
-            removed
+            PruneReport {
+                proposal_ids: self.examine_proposals(batch, now),
+                digest_keys: self.examine_digests(batch, now),
+            }
         }
 
-        fn examine_proposals(&mut self, budget: u32, now: u64) -> u32 {
-            let mut removed = 0u32;
+        fn examine_proposals(&mut self, budget: u32, now: u64) -> Vec<u64> {
+            let mut removed = Vec::new();
             let mut left = budget;
             let mut origin: Option<u64> = None;
             while left > 0 {
@@ -360,14 +360,15 @@ mod knot_proposals_data {
                 };
                 if drop {
                     self.proposals.remove(&id);
-                    removed += 1;
+                    removed.push(id);
                 }
                 self.proposal_cursor = id.saturating_add(1);
             }
             removed
         }
 
-        fn examine_digests(&mut self, budget: u32, now: u64) {
+        fn examine_digests(&mut self, budget: u32, now: u64) -> Vec<[u8; 32]> {
+            let mut removed = Vec::new();
             let mut left = budget;
             let mut origin: Option<[u8; 32]> = None;
             while left > 0 {
@@ -395,6 +396,7 @@ mod knot_proposals_data {
                     .unwrap_or(false);
                 if expired {
                     self.by_digest.remove(&key);
+                    removed.push(key);
                 }
                 self.digest_cursor = self
                     .by_digest
@@ -403,6 +405,7 @@ mod knot_proposals_data {
                     .map(|(next, _)| *next)
                     .unwrap_or([0u8; 32]);
             }
+            removed
         }
 
         fn require_authorized(&self, account_id: u64) {

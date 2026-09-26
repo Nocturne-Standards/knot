@@ -7,6 +7,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Added
 
+- Logic emits a named payload for every book write, including `init_data`,
+  `init_registry`, `set_proposal_ttl`, `set_tombstone`, and
+  `set_authorized_account`. `propose`, `approve`, `finalize`, `execute`, and
+  `cancel` carry the call fields. `prune` emits the removed proposal ids and
+  digest keys, including a digest-only batch whose proposal count is 0.
+  The public `prune` return stays that proposal count.
 - Split into `knot-proposals` (logic) and `knot-proposals-data` (book).
   `call_raw` stays on the logic contract. Logic version 0.4.0. Book version 0.1.0.
 - `set_authorized_account`: only that registry account may propose, finalize,

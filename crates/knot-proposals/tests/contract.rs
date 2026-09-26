@@ -9,7 +9,11 @@ use alloc::vec::Vec;
 use dusk_bytes::Serializable;
 use dusk_core::abi::{ContractId, Metadata};
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
-use dusk_vm::{ContractData, Session, VM};
+use dusk_vm::{CallReceipt, ContractData, Session, VM};
+use knot_encoding::events::{
+    AuthorizedAccountSet, DataSet, ProposalApproved, ProposalCreated, ProposalFinalized, Pruned,
+    ProposalTtlSet, RegistrySet, TombstoneSet,
+};
 use knot_encoding::{
     cancel_proposal_message_v1, change_account_message_v3, proposal_digest_v3,
     set_timelock_message_v1,
@@ -28,9 +32,7 @@ use call_types::{
 
 #[path = "../../knot-registry/src/call_types.rs"]
 mod registry_call_types;
-use registry_call_types::{
-    ChangeAccountArgs, CreateAccountArgs, SetTimelockArgs, SignatureEntry,
-};
+use registry_call_types::{ChangeAccountArgs, CreateAccountArgs, SetTimelockArgs, SignatureEntry};
 
 const PROPOSALS_BYTECODE: &[u8] =
     include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_proposals.wasm");
@@ -90,7 +92,7 @@ fn deadline_at_height(height: u64) -> u64 {
     height + DEFAULT_TTL
 }
 
-fn initialize(owner_pk: &BlsPublicKey) -> Session {
+fn deploy_stack(owner_pk: &BlsPublicKey) -> Session {
     let vm = VM::ephemeral().expect("Creating ephemeral VM should work");
     let mut session = vm.genesis_session(CHAIN_ID);
     let owner = owner_pk.to_bytes().to_vec();
@@ -106,9 +108,7 @@ fn initialize(owner_pk: &BlsPublicKey) -> Session {
         session
             .deploy(
                 bytecode,
-                ContractData::builder()
-                    .owner(owner.clone())
-                    .contract_id(id),
+                ContractData::builder().owner(owner.clone()).contract_id(id),
                 POINT_LIMIT,
             )
             .expect("deploy");
@@ -130,6 +130,11 @@ fn initialize(owner_pk: &BlsPublicKey) -> Session {
             POINT_LIMIT,
         )
         .expect("set_service proposals");
+    session
+}
+
+fn initialize(owner_pk: &BlsPublicKey) -> Session {
+    let mut session = deploy_stack(owner_pk);
     set_sender(&mut session, Some(owner_pk));
     session
         .call::<ContractId, ()>(REGISTRY_ID, "init_data", &REGISTRY_DATA_ID, POINT_LIMIT)
@@ -1133,7 +1138,12 @@ fn unrelated_committee_cannot_drive_executor() {
     let other = create_unbound_account(&mut session, alloc::vec![pk_b], 1);
 
     session
-        .call::<(ContractId, u64), ()>(TARGET_ID, "configure_reenter", &(PROPOSALS_ID, 0), POINT_LIMIT)
+        .call::<(ContractId, u64), ()>(
+            TARGET_ID,
+            "configure_reenter",
+            &(PROPOSALS_ID, 0),
+            POINT_LIMIT,
+        )
         .expect("gate target");
 
     let rejected = session.call::<ProposeArgs, u64>(
@@ -1189,9 +1199,11 @@ fn rebind_blocks_open_proposal_from_previous_account() {
         .expect("rebind");
     set_sender(&mut session, None);
 
-    let finalized =
-        session.call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT);
-    assert!(finalized.is_err(), "open proposal from the old account must not run");
+    let finalized = session.call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT);
+    assert!(
+        finalized.is_err(),
+        "open proposal from the old account must not run"
+    );
 }
 
 #[test]
@@ -1215,7 +1227,10 @@ fn finalize_drops_retired_member_approvals() {
         &REGISTRY_ID.to_bytes(),
         account_id,
         0,
-        &new_members.iter().map(|pk| pk.to_bytes()).collect::<Vec<_>>(),
+        &new_members
+            .iter()
+            .map(|pk| pk.to_bytes())
+            .collect::<Vec<_>>(),
         2,
     )
     .unwrap();
@@ -1331,8 +1346,7 @@ fn init_data_same_book_is_idempotent_and_other_book_panics() {
         .call::<ContractId, ()>(PROPOSALS_ID, "init_data", &PROPOSALS_DATA_ID, POINT_LIMIT)
         .expect("same book may be retried");
     let other = ContractId::from_bytes([0xff; 32]);
-    let rejected =
-        session.call::<ContractId, ()>(PROPOSALS_ID, "init_data", &other, POINT_LIMIT);
+    let rejected = session.call::<ContractId, ()>(PROPOSALS_ID, "init_data", &other, POINT_LIMIT);
     assert!(rejected.is_err(), "a second book must panic");
 }
 
@@ -1365,7 +1379,12 @@ fn rebind_round_trip_does_not_revive_open_or_queued() {
         .call::<u64, ()>(PROPOSALS_ID, "set_authorized_account", &other, POINT_LIMIT)
         .expect("rebind away");
     session
-        .call::<u64, ()>(PROPOSALS_ID, "set_authorized_account", &account, POINT_LIMIT)
+        .call::<u64, ()>(
+            PROPOSALS_ID,
+            "set_authorized_account",
+            &account,
+            POINT_LIMIT,
+        )
         .expect("rebind back");
     set_sender(&mut session, None);
 
@@ -1616,5 +1635,212 @@ fn data_rejects_propose_when_atlas_points_elsewhere() {
     assert!(
         rejected.is_err(),
         "data must reject a caller Atlas does not name"
+    );
+}
+
+fn archived<T>(value: &T) -> Vec<u8>
+where
+    T: Serialize<AllocSerializer<4096>>,
+{
+    rkyv::to_bytes::<_, 4096>(value)
+        .expect("archive")
+        .into_vec()
+}
+
+fn proposals_event<'a, T>(receipt: &'a CallReceipt<T>, topic: &str) -> &'a [u8] {
+    let hits: Vec<_> = receipt
+        .events
+        .iter()
+        .filter(|event| event.source == PROPOSALS_ID && event.topic == topic)
+        .collect();
+    assert_eq!(hits.len(), 1, "{topic}");
+    hits[0].data.as_slice()
+}
+
+#[test]
+fn events_carry_the_written_value() {
+    let rng = &mut StdRng::seed_from_u64(80);
+    let (_owner_sk, owner_pk) = keypair(rng);
+    let (sk1, pk1) = keypair(rng);
+    let mut session = deploy_stack(&owner_pk);
+    set_sender(&mut session, Some(&owner_pk));
+    session
+        .call::<ContractId, ()>(REGISTRY_ID, "init_data", &REGISTRY_DATA_ID, POINT_LIMIT)
+        .expect("registry init_data");
+    let init = session
+        .call::<ContractId, ()>(PROPOSALS_ID, "init_data", &PROPOSALS_DATA_ID, POINT_LIMIT)
+        .expect("proposals init_data");
+    assert_eq!(
+        proposals_event(&init, "data_set"),
+        archived(&DataSet {
+            data: PROPOSALS_DATA_ID,
+        })
+        .as_slice()
+    );
+    let same = session
+        .call::<ContractId, ()>(PROPOSALS_ID, "init_data", &PROPOSALS_DATA_ID, POINT_LIMIT)
+        .expect("same book");
+    assert!(same.events.iter().all(|event| event.source != PROPOSALS_ID));
+
+    let bound = session
+        .call::<ContractId, ()>(PROPOSALS_ID, "init_registry", &REGISTRY_ID, POINT_LIMIT)
+        .unwrap();
+    assert_eq!(
+        proposals_event(&bound, "registry_set"),
+        archived(&RegistrySet {
+            registry: REGISTRY_ID,
+            epoch: 1,
+        })
+        .as_slice()
+    );
+    let tomb = session
+        .call::<bool, ()>(PROPOSALS_ID, "set_tombstone", &true, POINT_LIMIT)
+        .unwrap();
+    assert_eq!(
+        proposals_event(&tomb, "tombstone_set"),
+        archived(&TombstoneSet { tombstone: true }).as_slice()
+    );
+    let ttl = session
+        .call::<u64, ()>(PROPOSALS_ID, "set_proposal_ttl", &2000u64, POINT_LIMIT)
+        .unwrap();
+    assert_eq!(
+        proposals_event(&ttl, "proposal_ttl_set"),
+        archived(&ProposalTtlSet { blocks: 2000 }).as_slice()
+    );
+
+    let account_id = session
+        .call::<CreateAccountArgs, u64>(
+            REGISTRY_ID,
+            "create_account",
+            &CreateAccountArgs {
+                members: alloc::vec![pk1],
+                threshold: 1,
+            },
+            POINT_LIMIT,
+        )
+        .unwrap()
+        .data;
+    let authorized = session
+        .call::<u64, ()>(
+            PROPOSALS_ID,
+            "set_authorized_account",
+            &account_id,
+            POINT_LIMIT,
+        )
+        .unwrap();
+    assert_eq!(
+        proposals_event(&authorized, "authorized_account_set"),
+        archived(&AuthorizedAccountSet {
+            account_id,
+            auth_generation: 1,
+        })
+        .as_slice()
+    );
+    set_sender(&mut session, None);
+
+    let value = 5u64;
+    let call_args = rkyv_bytes(&value);
+    let deadline = deadline_at_height(0);
+    let args = ProposeArgs {
+        registry_account_id: account_id,
+        target: TARGET_ID,
+        function_name: String::from("set_value"),
+        call_args: call_args.clone(),
+        nonce: 3,
+        deadline,
+    };
+    let created = session
+        .call::<ProposeArgs, u64>(PROPOSALS_ID, "propose", &args, POINT_LIMIT)
+        .unwrap();
+    let proposal_id = created.data;
+    let digest = session
+        .call::<u64, Option<ProposalView>>(PROPOSALS_ID, "proposal", &proposal_id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap()
+        .signed_digest;
+    assert_eq!(
+        proposals_event(&created, "proposal_created"),
+        archived(&ProposalCreated {
+            proposal_id,
+            signed_digest: digest,
+            registry_account_id: account_id,
+            deadline,
+            epoch: 1,
+            nonce: 3,
+            auth_generation: 1,
+            target: TARGET_ID,
+            function_name: String::from("set_value"),
+            call_args: call_args.clone(),
+        })
+        .as_slice()
+    );
+
+    // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
+    let signature = sk1.sign_insecure(&digest);
+    let approved = session
+        .call::<ApproveArgs, ()>(
+            PROPOSALS_ID,
+            "approve",
+            &ApproveArgs {
+                proposal_id,
+                signer: pk1,
+                signature,
+            },
+            POINT_LIMIT,
+        )
+        .unwrap();
+    assert_eq!(
+        proposals_event(&approved, "proposal_approved"),
+        archived(&ProposalApproved {
+            proposal_id,
+            signed_digest: digest,
+            signer: pk1,
+            signature,
+        })
+        .as_slice()
+    );
+
+    let finalized = session
+        .call::<u64, ()>(PROPOSALS_ID, "finalize", &proposal_id, POINT_LIMIT)
+        .unwrap();
+    assert_eq!(
+        proposals_event(&finalized, "proposal_finalized"),
+        archived(&ProposalFinalized {
+            proposal_id,
+            signed_digest: digest,
+            registry_account_id: account_id,
+            target: TARGET_ID,
+            function_name: String::from("set_value"),
+            call_args,
+        })
+        .as_slice()
+    );
+
+    let pruned = session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &128u32, POINT_LIMIT)
+        .unwrap();
+    assert_eq!(pruned.data, 1);
+    assert_eq!(
+        proposals_event(&pruned, "pruned"),
+        archived(&Pruned {
+            proposal_ids: alloc::vec![proposal_id],
+            digest_keys: Vec::new(),
+        })
+        .as_slice()
+    );
+
+    set_block_height(&mut session, deadline + 1);
+    let digests = session
+        .call::<u32, u32>(PROPOSALS_ID, "prune", &128u32, POINT_LIMIT)
+        .unwrap();
+    assert_eq!(digests.data, 0);
+    assert_eq!(
+        proposals_event(&digests, "pruned"),
+        archived(&Pruned {
+            proposal_ids: Vec::new(),
+            digest_keys: alloc::vec![digest],
+        })
+        .as_slice()
     );
 }

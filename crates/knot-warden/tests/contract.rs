@@ -21,7 +21,10 @@ use atlas_encoding::call_types::{Account, InitArgs, PendingChange, PendingView};
 use knot_warden_encoding::call_types::{
     InitWardenArgs, PendingAdmin, PendingAdminView, PendingServiceView, SetServiceArgs,
 };
-use knot_warden_encoding::events::{DelaySet, SchedulerSet, ServiceExecuted, ServiceScheduled};
+use knot_warden_encoding::events::{
+    AtlasCancelForwarded, AtlasSet, DelaySet, GuardianForwarded, SchedulerSet, ServiceExecuted,
+    ServiceScheduled, TimelockForwarded,
+};
 
 const ATLAS_BYTECODE: &[u8] =
     include_bytes!("../../../../atlas/target/contract/wasm32-unknown-unknown/release/atlas.wasm");
@@ -315,7 +318,12 @@ fn init_emits_scheduler_and_delay() {
             POINT_LIMIT,
         )
         .unwrap();
-    assert_eq!(warden_topics(&receipt), ["scheduler_set", "delay_set"]);
+    assert_eq!(
+        warden_topics(&receipt),
+        ["atlas_set", "scheduler_set", "delay_set"]
+    );
+    let atlas: AtlasSet = decode_event(event(&receipt, WARDEN_ID, "atlas_set"));
+    assert_eq!(atlas.atlas, ATLAS_ID);
     let scheduler: SchedulerSet = decode_event(event(&receipt, WARDEN_ID, "scheduler_set"));
     assert_eq!(scheduler.scheduler, Account::External(op));
     let delay: DelaySet = decode_event(event(&receipt, WARDEN_ID, "delay_set"));
@@ -816,7 +824,10 @@ fn set_guardian_forwards_without_touching_warden_maps() {
             POINT_LIMIT,
         )
         .expect("forward set_guardian");
-    assert!(warden_topics(&receipt).is_empty());
+    assert_eq!(warden_topics(&receipt), ["guardian_forwarded"]);
+    let forwarded: GuardianForwarded =
+        decode_event(event(&receipt, WARDEN_ID, "guardian_forwarded"));
+    assert_eq!(forwarded.guardian, Account::External(next));
     assert!(pending_admin(session).is_none());
     assert!(pending_service(session, "treasury").is_none());
     let atlas_pending = session
@@ -835,9 +846,11 @@ fn set_guardian_forwards_without_touching_warden_maps() {
     assert!(blocked.is_err(), "atlas slot is already taken");
 
     set_sender(session, Some(&op));
-    session
+    let cancel = session
         .call::<(), ()>(WARDEN_ID, "cancel_atlas_pending", &(), POINT_LIMIT)
         .expect("cancel_atlas_pending");
+    assert_eq!(warden_topics(&cancel), ["atlas_cancel_forwarded"]);
+    let _: AtlasCancelForwarded = decode_event(event(&cancel, WARDEN_ID, "atlas_cancel_forwarded"));
     assert!(
         session
             .call::<(), Option<PendingView>>(ATLAS_ID, "pending", &(), POINT_LIMIT)
@@ -847,9 +860,13 @@ fn set_guardian_forwards_without_touching_warden_maps() {
     );
 
     set_sender(session, Some(&op));
-    session
+    let timelock = session
         .call::<u64, ()>(WARDEN_ID, "set_timelock", &3, POINT_LIMIT)
         .expect("forward set_timelock");
+    assert_eq!(warden_topics(&timelock), ["timelock_forwarded"]);
+    let forwarded: TimelockForwarded =
+        decode_event(event(&timelock, WARDEN_ID, "timelock_forwarded"));
+    assert_eq!(forwarded.blocks, 3);
     let atlas_pending = session
         .call::<(), Option<PendingView>>(ATLAS_ID, "pending", &(), POINT_LIMIT)
         .unwrap()

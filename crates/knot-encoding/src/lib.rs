@@ -29,6 +29,9 @@ pub use fingerprint::{digest_hex, digest_mnemonic, digest_safety_number};
 #[cfg(feature = "call-types")]
 pub mod call_types;
 
+#[cfg(feature = "call-types")]
+pub mod events;
+
 // Goldens are a `pub mod`, not `#[cfg(test)]` — consumers assert against these
 // consts rather than hand-copying hex.
 #[cfg(feature = "call-types")]

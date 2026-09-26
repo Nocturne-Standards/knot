@@ -141,10 +141,11 @@ While an Atlas guardian rotation is pending, warden remains the caller Atlas acc
 
 ## Events
 
-Typed rkyv payloads, `contract-events` feature, topic string equal to the emit name. Payloads carry the whole value so an indexer does not need a follow-up read. `init_warden` emits `scheduler_set` and `delay_set`.
+Typed rkyv payloads, `contract-events` feature, topic string equal to the emit name. Payloads carry the whole value so an indexer does not need a follow-up read. `init_warden` emits `atlas_set`, `scheduler_set`, and `delay_set`.
 
 | Topic | When |
 |---|---|
+| `atlas_set` | `init_warden` |
 | `scheduler_set` | `init_warden`, `execute_admin(Scheduler)` including the zero-delay path |
 | `delay_set` | `init_warden`, `execute_admin(Delay)` including the zero-delay path |
 | `service_scheduled` | `schedule_service`, including the zero-delay path, before apply |
@@ -152,6 +153,9 @@ Typed rkyv payloads, `contract-events` feature, topic string equal to the emit n
 | `service_cancelled` | `cancel_service` |
 | `admin_scheduled` | `set_delay` / `set_scheduler`, including the zero-delay path, before apply |
 | `admin_cancelled` | `cancel_admin` |
+| `guardian_forwarded` | `set_guardian`, after the Atlas call. The wait stays on Atlas |
+| `timelock_forwarded` | `set_timelock`, after the Atlas call. The wait stays on Atlas |
+| `atlas_cancel_forwarded` | `cancel_atlas_pending`, after the Atlas call. Payload is empty |
 
 Atlas still emits `service_updated` when the directory actually changes, and `pending_scheduled` / `guardian_set` / `timelock_set` / `pending_cancelled` for the forwarded calls. Indexers that care about the directory subscribe to Atlas. Indexers that care about the wait subscribe to warden.
 

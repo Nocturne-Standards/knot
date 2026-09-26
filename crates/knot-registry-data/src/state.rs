@@ -4,7 +4,7 @@ mod knot_registry_data {
     use alloc::string::String;
     use alloc::vec::Vec;
 
-    use dusk_core::abi::{self, block_height, ContractId};
+    use dusk_core::abi::{self, ContractId, block_height};
     use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
     use knot_encoding::call_types::{
         CreateAccountArgs, MultisigAccountView, RegistryBookEffect, RegistryPendingChange,
@@ -107,15 +107,14 @@ mod knot_registry_data {
                 delay
             };
             if delay != 0 {
-                let execute_at = self
+                let (change, execute_at) = self
                     .accounts
                     .get(&account_id)
                     .unwrap()
                     .pending
-                    .as_ref()
-                    .unwrap()
-                    .1;
-                return RegistryBookEffect::Scheduled(execute_at);
+                    .clone()
+                    .unwrap();
+                return RegistryBookEffect::Scheduled { execute_at, change };
             }
             self.apply(account_id)
         }
@@ -159,21 +158,24 @@ mod knot_registry_data {
                     new_members,
                     new_threshold,
                 } => {
-                    account.members = new_members;
+                    account.members = new_members.clone();
                     account.threshold = new_threshold;
-                    RegistryBookEffect::AccountChanged
+                    RegistryBookEffect::AccountChanged {
+                        members: new_members,
+                        threshold: new_threshold,
+                    }
                 }
                 RegistryPendingChange::SetTimelock(blocks) => {
                     account.timelock_blocks = blocks;
-                    RegistryBookEffect::TimelockSet
+                    RegistryBookEffect::TimelockSet { blocks }
                 }
             }
         }
 
         fn require_logic_caller(&self) {
             let name = String::from(SERVICE);
-            let logic: Option<ContractId> = abi::call(ATLAS_ID, "resolve", &name)
-                .expect("atlas resolve(knot-registry) failed");
+            let logic: Option<ContractId> =
+                abi::call(ATLAS_ID, "resolve", &name).expect("atlas resolve(knot-registry) failed");
             let logic = logic.unwrap_or_else(|| panic!("atlas has no knot-registry service"));
             if abi::caller() != Some(logic) {
                 panic!("caller is not the knot-registry logic contract");

@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+### Added
+
+- `init_warden` emits `atlas_set`. `set_guardian`, `set_timelock`, and
+  `cancel_atlas_pending` emit the forwarded value. They still do not wait
+  `delay_blocks`. A deployment that wants these payloads is a new contract id.
+
 ## [0.1.1]
 
 ### Fixed

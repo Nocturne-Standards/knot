@@ -1,15 +1,30 @@
-#[dusk_forge::contract]
+#[dusk_forge::contract(events = [
+    DataSet,
+    RegistrySet,
+    ProposalTtlSet,
+    TombstoneSet,
+    AuthorizedAccountSet,
+    ProposalCreated,
+    ProposalApproved,
+    ProposalFinalized,
+    ProposalQueued,
+    ProposalCancelled,
+    Pruned,
+])]
 mod knot_proposals {
     use alloc::vec::Vec;
 
-    use dusk_bytes::Serializable;
     use dusk_core::abi::{self, ContractId, block_height, chain_id};
     use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
 
+    use knot_encoding::events::{
+        AuthorizedAccountSet, DataSet, ProposalApproved, ProposalCancelled, ProposalCreated,
+        ProposalFinalized, ProposalQueued, ProposalTtlSet, Pruned, RegistrySet, TombstoneSet,
+    };
     use knot_encoding::{cancel_proposal_message_v1, proposal_digest_v3};
     use knot_proposals::call_types::{
         ApproveArgs, CancelProposalArgs, DigestView, MultisigAccountView, OpenProposal,
-        ProposalStatus, ProposalView, ProposalsConfig, ProposeArgs, SignatureEntry,
+        ProposalStatus, ProposalView, ProposalsConfig, ProposeArgs, PruneReport, SignatureEntry,
         VerifyQuorumArgs,
     };
 
@@ -36,7 +51,10 @@ mod knot_proposals {
             match self.data {
                 Some(current) if current == data => {}
                 Some(_) => panic!("knot-proposals data already set"),
-                None => self.data = Some(data),
+                None => {
+                    self.data = Some(data);
+                    abi::emit("data_set", DataSet { data });
+                }
             }
         }
 
@@ -44,9 +62,9 @@ mod knot_proposals {
         /// authorized account so the binding is the new registry pair.
         pub fn init_registry(&mut self, registry: ContractId) {
             Self::require_direct_owner();
-            let _: u64 = abi::call(self.data_id(), "set_registry", &registry)
+            let epoch: u64 = abi::call(self.data_id(), "set_registry", &registry)
                 .expect("knot-proposals-data set_registry failed");
-            abi::emit("registry_set", ());
+            abi::emit("registry_set", RegistrySet { registry, epoch });
         }
 
         pub fn set_proposal_ttl(&mut self, blocks: u64) {
@@ -56,12 +74,14 @@ mod knot_proposals {
             }
             let _: () = abi::call(self.data_id(), "set_proposal_ttl", &blocks)
                 .expect("knot-proposals-data set_proposal_ttl failed");
+            abi::emit("proposal_ttl_set", ProposalTtlSet { blocks });
         }
 
         pub fn set_tombstone(&mut self, tombstone: bool) {
             Self::require_direct_owner();
             let _: () = abi::call(self.data_id(), "set_tombstone", &tombstone)
                 .expect("knot-proposals-data set_tombstone failed");
+            abi::emit("tombstone_set", TombstoneSet { tombstone });
         }
 
         /// Owner-only, direct account call. Only this registry account may
@@ -72,6 +92,14 @@ mod knot_proposals {
             Self::require_direct_owner();
             let _: () = abi::call(self.data_id(), "set_authorized_account", &account_id)
                 .expect("knot-proposals-data set_authorized_account failed");
+            let auth_generation = self.book().auth_generation;
+            abi::emit(
+                "authorized_account_set",
+                AuthorizedAccountSet {
+                    account_id,
+                    auth_generation,
+                },
+            );
         }
 
         pub fn epoch(&self) -> u64 {
@@ -102,9 +130,7 @@ mod knot_proposals {
             }
 
             let now = block_height();
-            let max_deadline = now
-                .checked_add(book.proposal_ttl)
-                .expect("ttl overflow");
+            let max_deadline = now.checked_add(book.proposal_ttl).expect("ttl overflow");
             let deadline = args.deadline;
             if deadline < now {
                 panic!("proposal deadline is in the past");
@@ -156,7 +182,18 @@ mod knot_proposals {
             .expect("knot-proposals-data open_proposal failed");
             abi::emit(
                 "proposal_created",
-                (id, digest, args.registry_account_id, deadline),
+                ProposalCreated {
+                    proposal_id: id,
+                    signed_digest: digest,
+                    registry_account_id: args.registry_account_id,
+                    deadline,
+                    epoch: book.epoch,
+                    nonce: args.nonce,
+                    auth_generation: book.auth_generation,
+                    target: args.target,
+                    function_name: args.function_name,
+                    call_args: args.call_args,
+                },
             );
             id
         }
@@ -201,13 +238,17 @@ mod knot_proposals {
             .expect("knot-proposals-data push_approval failed");
             abi::emit(
                 "proposal_approved",
-                (args.proposal_id, proposal.signed_digest, args.signer.to_bytes()),
+                ProposalApproved {
+                    proposal_id: args.proposal_id,
+                    signed_digest: proposal.signed_digest,
+                    signer: args.signer,
+                    signature: args.signature,
+                },
             );
         }
 
         pub fn proposal(&self, id: u64) -> Option<ProposalView> {
-            abi::call(self.data_id(), "proposal", &id)
-                .expect("knot-proposals-data proposal failed")
+            abi::call(self.data_id(), "proposal", &id).expect("knot-proposals-data proposal failed")
         }
 
         pub fn status(&self, id: u64) -> Option<ProposalStatus> {
@@ -277,7 +318,14 @@ mod knot_proposals {
                     .expect("knot-proposals-data commit_executed failed");
                 abi::emit(
                     "proposal_finalized",
-                    (proposal_id, digest, committee, target, fn_name.clone()),
+                    ProposalFinalized {
+                        proposal_id,
+                        signed_digest: digest,
+                        registry_account_id: committee,
+                        target,
+                        function_name: fn_name.clone(),
+                        call_args: call_args.clone(),
+                    },
                 );
                 let _ = abi::call_raw(target, &fn_name, &call_args)
                     .expect("finalize: call_raw to target failed");
@@ -294,7 +342,15 @@ mod knot_proposals {
                 .expect("knot-proposals-data queue failed");
             abi::emit(
                 "proposal_queued",
-                (proposal_id, digest, committee, execute_at),
+                ProposalQueued {
+                    proposal_id,
+                    signed_digest: digest,
+                    registry_account_id: committee,
+                    execute_at,
+                    target,
+                    function_name: fn_name,
+                    call_args,
+                },
             );
         }
 
@@ -329,7 +385,14 @@ mod knot_proposals {
                 .expect("knot-proposals-data commit_executed failed");
             abi::emit(
                 "proposal_finalized",
-                (proposal_id, digest, committee, target, fn_name.clone()),
+                ProposalFinalized {
+                    proposal_id,
+                    signed_digest: digest,
+                    registry_account_id: committee,
+                    target,
+                    function_name: fn_name.clone(),
+                    call_args: call_args.clone(),
+                },
             );
             let _ = abi::call_raw(target, &fn_name, &call_args)
                 .expect("execute: call_raw to target failed");
@@ -375,26 +438,38 @@ mod knot_proposals {
             let digest = proposal.signed_digest;
             let _: () = abi::call(self.data_id(), "commit_cancelled", &args.proposal_id)
                 .expect("knot-proposals-data commit_cancelled failed");
-            abi::emit("proposal_cancelled", (args.proposal_id, digest));
+            abi::emit(
+                "proposal_cancelled",
+                ProposalCancelled {
+                    proposal_id: args.proposal_id,
+                    signed_digest: digest,
+                    registry_account_id: proposal.registry_account_id,
+                },
+            );
         }
 
         pub fn prune(&mut self, limit: u32) -> u32 {
-            let pruned: u32 = abi::call(self.data_id(), "prune", &limit)
+            let report: PruneReport = abi::call(self.data_id(), "prune", &limit)
                 .expect("knot-proposals-data prune failed");
-            if pruned > 0 {
-                abi::emit("pruned", pruned);
+            let pruned = u32::try_from(report.proposal_ids.len()).expect("prune count");
+            if !report.proposal_ids.is_empty() || !report.digest_keys.is_empty() {
+                abi::emit(
+                    "pruned",
+                    Pruned {
+                        proposal_ids: report.proposal_ids.clone(),
+                        digest_keys: report.digest_keys.clone(),
+                    },
+                );
             }
             pruned
         }
 
         fn book(&self) -> ProposalsConfig {
-            abi::call(self.data_id(), "config", &())
-                .expect("knot-proposals-data config failed")
+            abi::call(self.data_id(), "config", &()).expect("knot-proposals-data config failed")
         }
 
         fn digest(&self, key: [u8; 32]) -> Option<DigestView> {
-            abi::call(self.data_id(), "digest", &key)
-                .expect("knot-proposals-data digest failed")
+            abi::call(self.data_id(), "digest", &key).expect("knot-proposals-data digest failed")
         }
 
         fn data_id(&self) -> ContractId {

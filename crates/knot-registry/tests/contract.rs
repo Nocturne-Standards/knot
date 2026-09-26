@@ -13,13 +13,19 @@ use dusk_core::abi::{ContractId, Metadata};
 use dusk_core::signatures::bls::{
     MultisigSignature, PublicKey as BlsPublicKey, SecretKey as BlsSecretKey,
 };
-use dusk_vm::{ContractData, Session, VM};
+use dusk_vm::{CallReceipt, ContractData, Session, VM};
+use knot_encoding::call_types::RegistryPendingChange;
+use knot_encoding::events::{
+    AccountChanged, AccountCreated, DataSet, PendingCancelled, PendingScheduled, TimelockSet,
+};
 use knot_encoding::{
     PENDING_KIND_SET_TIMELOCK, cancel_pending_message_v1, cancel_pending_set_timelock_payload,
     change_account_message_v3, set_timelock_message_v1,
 };
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use rkyv::Serialize;
+use rkyv::ser::serializers::AllocSerializer;
 
 #[path = "../src/call_types.rs"]
 mod call_types;
@@ -53,8 +59,7 @@ fn set_sender(session: &mut Session, sender: Option<&BlsPublicKey>) {
         .expect("setting public_sender metadata should succeed");
 }
 
-fn initialize() -> Session {
-    let owner_pk = owner_key();
+fn deploy_registry(owner_pk: &BlsPublicKey) -> Session {
     let vm = VM::ephemeral().expect("Creating ephemeral VM should work");
     let mut session = vm.genesis_session(CHAIN_ID);
 
@@ -82,6 +87,12 @@ fn initialize() -> Session {
             POINT_LIMIT,
         )
         .expect("set_service");
+    session
+}
+
+fn initialize() -> Session {
+    let owner_pk = owner_key();
+    let mut session = deploy_registry(&owner_pk);
     set_sender(&mut session, Some(&owner_pk));
     session
         .call::<ContractId, ()>(REGISTRY_ID, "init_data", &REGISTRY_DATA_ID, POINT_LIMIT)
@@ -964,5 +975,212 @@ fn data_rejects_create_when_atlas_points_elsewhere() {
     assert!(
         rejected.is_err(),
         "data must reject a caller Atlas does not name"
+    );
+}
+
+fn archived<T>(value: &T) -> Vec<u8>
+where
+    T: Serialize<AllocSerializer<4096>>,
+{
+    rkyv::to_bytes::<_, 4096>(value)
+        .expect("archive")
+        .into_vec()
+}
+
+fn registry_event<'a, T>(receipt: &'a CallReceipt<T>, topic: &str) -> &'a [u8] {
+    let hits: Vec<_> = receipt
+        .events
+        .iter()
+        .filter(|event| event.source == REGISTRY_ID && event.topic == topic)
+        .collect();
+    assert_eq!(hits.len(), 1, "{topic}");
+    hits[0].data.as_slice()
+}
+
+#[test]
+fn events_carry_the_written_value() {
+    let owner_pk = owner_key();
+    let mut session = deploy_registry(&owner_pk);
+    set_sender(&mut session, Some(&owner_pk));
+    let init = session
+        .call::<ContractId, ()>(REGISTRY_ID, "init_data", &REGISTRY_DATA_ID, POINT_LIMIT)
+        .expect("init_data");
+    assert_eq!(
+        registry_event(&init, "data_set"),
+        archived(&DataSet {
+            data: REGISTRY_DATA_ID,
+        })
+        .as_slice()
+    );
+    let retry = session
+        .call::<ContractId, ()>(REGISTRY_ID, "init_data", &REGISTRY_DATA_ID, POINT_LIMIT)
+        .expect("same book");
+    assert!(
+        retry.events.iter().all(|event| event.source != REGISTRY_ID),
+        "retrying the same book does not emit"
+    );
+    set_sender(&mut session, None);
+
+    let rng = &mut StdRng::seed_from_u64(70);
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let members = alloc::vec![pk1, pk2];
+    let created = session
+        .call::<CreateAccountArgs, u64>(
+            REGISTRY_ID,
+            "create_account",
+            &CreateAccountArgs {
+                members: members.clone(),
+                threshold: 2,
+            },
+            POINT_LIMIT,
+        )
+        .unwrap();
+    let id = created.data;
+    assert_eq!(
+        registry_event(&created, "account_created"),
+        archived(&AccountCreated {
+            id,
+            members: members.clone(),
+            threshold: 2,
+            timelock_blocks: 0,
+            nonce: 0,
+        })
+        .as_slice()
+    );
+
+    let msg = set_timelock_msg(id, 0, 5);
+    let raised = session
+        .call::<SetTimelockArgs, ()>(
+            REGISTRY_ID,
+            "set_timelock",
+            &SetTimelockArgs {
+                account_id: id,
+                blocks: 5,
+                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .unwrap();
+    assert_eq!(
+        registry_event(&raised, "timelock_set"),
+        archived(&TimelockSet {
+            account_id: id,
+            blocks: 5,
+        })
+        .as_slice()
+    );
+    assert!(
+        raised
+            .events
+            .iter()
+            .all(|event| event.topic != "pending_scheduled")
+    );
+
+    let new_members = alloc::vec![pk1];
+    let msg = change_message(id, 1, &new_members, 1);
+    let scheduled = session
+        .call::<ChangeAccountArgs, ()>(
+            REGISTRY_ID,
+            "change_account",
+            &ChangeAccountArgs {
+                account_id: id,
+                new_members: new_members.clone(),
+                new_threshold: 1,
+                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .unwrap();
+    assert_eq!(
+        registry_event(&scheduled, "pending_scheduled"),
+        archived(&PendingScheduled {
+            account_id: id,
+            execute_at: 5,
+            change: RegistryPendingChange::ChangeAccount {
+                new_members: new_members.clone(),
+                new_threshold: 1,
+            },
+        })
+        .as_slice()
+    );
+
+    let view = session
+        .call::<u64, Option<MultisigAccountView>>(REGISTRY_ID, "account", &id, POINT_LIMIT)
+        .unwrap()
+        .data
+        .unwrap();
+    let pending = view.pending.expect("pending");
+    let cancel_payload = match &pending.change {
+        RegistryPendingChange::ChangeAccount {
+            new_members,
+            new_threshold,
+        } => knot_encoding::cancel_pending_change_account_payload(
+            &new_members
+                .iter()
+                .map(|pk| pk.to_bytes())
+                .collect::<Vec<_>>(),
+            *new_threshold,
+        )
+        .expect("cancel payload"),
+        RegistryPendingChange::SetTimelock(_) => panic!("expected a membership change"),
+    };
+    let cancel_msg = cancel_pending_message_v1(
+        u64::from(CHAIN_ID),
+        &REGISTRY_ID.to_bytes(),
+        id,
+        pending.execute_at,
+        knot_encoding::PENDING_KIND_CHANGE_ACCOUNT,
+        &cancel_payload,
+    )
+    .unwrap();
+    let cancelled = session
+        .call::<CancelPendingArgs, ()>(
+            REGISTRY_ID,
+            "cancel_pending",
+            &CancelPendingArgs {
+                account_id: id,
+                sigs: sign_all(&cancel_msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .unwrap();
+    assert_eq!(
+        registry_event(&cancelled, "pending_cancelled"),
+        archived(&PendingCancelled {
+            account_id: id,
+            execute_at: pending.execute_at,
+            change: pending.change,
+        })
+        .as_slice()
+    );
+
+    let new_members = alloc::vec![pk1];
+    let msg = change_message(id, 2, &new_members, 1);
+    session
+        .call::<ChangeAccountArgs, ()>(
+            REGISTRY_ID,
+            "change_account",
+            &ChangeAccountArgs {
+                account_id: id,
+                new_members: new_members.clone(),
+                new_threshold: 1,
+                sigs: sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]),
+            },
+            POINT_LIMIT,
+        )
+        .unwrap();
+    set_block_height(&mut session, 5);
+    let executed = session
+        .call::<u64, ()>(REGISTRY_ID, "execute_pending", &id, POINT_LIMIT)
+        .unwrap();
+    assert_eq!(
+        registry_event(&executed, "account_changed"),
+        archived(&AccountChanged {
+            account_id: id,
+            members: new_members,
+            threshold: 1,
+        })
+        .as_slice()
     );
 }

@@ -7,6 +7,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Added
 
+- Logic emits a named payload for every book write: `data_set`, `account_created`,
+  `pending_scheduled`, `account_changed`, `timelock_set`, `pending_cancelled`.
+  A retried `init_data` of the same book emits nothing. Delay 0 emits the
+  applied event and does not also emit `pending_scheduled`.
 - Split into `knot-registry` (logic) and `knot-registry-data` (book).
   Writes on the book require `abi::caller()` to be the contract Atlas
   `resolve`s for `knot-registry`. `init_data` is a direct owner call and

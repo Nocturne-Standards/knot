@@ -2094,6 +2094,7 @@ version = "0.1.2"
 dependencies = [
  "bytecheck",
  "dusk-core",
+ "dusk-forge",
  "proptest",
  "rand 0.8.7",
  "rkyv",

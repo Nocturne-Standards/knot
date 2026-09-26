@@ -1,4 +1,11 @@
-#[dusk_forge::contract]
+#[dusk_forge::contract(events = [
+    DataSet,
+    AccountCreated,
+    PendingScheduled,
+    AccountChanged,
+    TimelockSet,
+    PendingCancelled,
+])]
 mod knot_registry {
     use alloc::vec::Vec;
 
@@ -11,6 +18,9 @@ mod knot_registry {
         cancel_pending_set_timelock_payload, change_account_message_v3, set_timelock_message_v1,
     };
 
+    use knot_encoding::events::{
+        AccountChanged, AccountCreated, DataSet, PendingCancelled, PendingScheduled, TimelockSet,
+    };
     use knot_registry::call_types::{
         CancelPendingArgs, ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
         RegistryBookEffect, RegistryPendingChange, SetTimelockArgs, SignatureEntry,
@@ -38,7 +48,10 @@ mod knot_registry {
             match self.data {
                 Some(current) if current == data => {}
                 Some(_) => panic!("knot-registry data already set"),
-                None => self.data = Some(data),
+                None => {
+                    self.data = Some(data);
+                    abi::emit("data_set", DataSet { data });
+                }
             }
         }
 
@@ -46,7 +59,16 @@ mod knot_registry {
             validate_committee(&args.members, args.threshold);
             let id: u64 = abi::call(self.data_id(), "create_account", &args)
                 .expect("knot-registry-data create_account failed");
-            abi::emit("account_created", id);
+            abi::emit(
+                "account_created",
+                AccountCreated {
+                    id,
+                    members: args.members,
+                    threshold: args.threshold,
+                    timelock_blocks: 0,
+                    nonce: 0,
+                },
+            );
             id
         }
 
@@ -164,7 +186,7 @@ mod knot_registry {
                 .unwrap_or_else(|| panic!("no such multisig account"));
             let pending = account
                 .pending
-                .as_ref()
+                .clone()
                 .unwrap_or_else(|| panic!("no pending change"));
             let (kind, payload) = pending_kind_and_payload(&pending.change);
             let msg = cancel_pending_message_v1(
@@ -185,12 +207,20 @@ mod knot_registry {
             );
             let _: () = abi::call(self.data_id(), "clear_pending", &args.account_id)
                 .expect("knot-registry-data clear_pending failed");
-            abi::emit("pending_cancelled", args.account_id);
+            abi::emit(
+                "pending_cancelled",
+                PendingCancelled {
+                    account_id: args.account_id,
+                    execute_at: pending.execute_at,
+                    change: pending.change,
+                },
+            );
         }
 
         pub fn execute_pending(&mut self, account_id: u64) {
-            let effect: RegistryBookEffect = abi::call(self.data_id(), "execute_pending", &account_id)
-                .expect("knot-registry-data execute_pending failed");
+            let effect: RegistryBookEffect =
+                abi::call(self.data_id(), "execute_pending", &account_id)
+                    .expect("knot-registry-data execute_pending failed");
             emit_effect(account_id, effect);
         }
 
@@ -202,14 +232,28 @@ mod knot_registry {
 
     fn emit_effect(account_id: u64, effect: RegistryBookEffect) {
         match effect {
-            RegistryBookEffect::Scheduled(execute_at) => {
-                abi::emit("pending_scheduled", (account_id, execute_at));
+            RegistryBookEffect::Scheduled { execute_at, change } => {
+                abi::emit(
+                    "pending_scheduled",
+                    PendingScheduled {
+                        account_id,
+                        execute_at,
+                        change,
+                    },
+                );
             }
-            RegistryBookEffect::AccountChanged => {
-                abi::emit("account_changed", account_id);
+            RegistryBookEffect::AccountChanged { members, threshold } => {
+                abi::emit(
+                    "account_changed",
+                    AccountChanged {
+                        account_id,
+                        members,
+                        threshold,
+                    },
+                );
             }
-            RegistryBookEffect::TimelockSet => {
-                abi::emit("timelock_set", account_id);
+            RegistryBookEffect::TimelockSet { blocks } => {
+                abi::emit("timelock_set", TimelockSet { account_id, blocks });
             }
         }
     }

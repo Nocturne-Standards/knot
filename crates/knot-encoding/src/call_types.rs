@@ -280,14 +280,34 @@ pub struct ProposalView {
 /// What a registry book write did. Logic emits; the book does not.
 ///
 /// Data-carrying enum, same pin rule as [`RegistryPendingChange`].
+/// Delay 0 is `AccountChanged` or `TimelockSet`. A non-zero delay is
+/// `Scheduled` and carries the change that is waiting.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]
 #[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
 pub enum RegistryBookEffect {
-    /// Waiting until this block height.
-    Scheduled(u64),
-    AccountChanged,
-    TimelockSet,
+    Scheduled {
+        execute_at: u64,
+        change: RegistryPendingChange,
+    },
+    AccountChanged {
+        members: Vec<BlsPublicKey>,
+        threshold: u32,
+    },
+    TimelockSet {
+        blocks: u64,
+    },
+}
+
+/// Keys removed by one `prune` call. Logic emits this and returns
+/// `proposal_ids.len()` as the public count.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct PruneReport {
+    pub proposal_ids: Vec<u64>,
+    pub digest_keys: Vec<[u8; 32]>,
 }
 
 /// Proposals book configuration. Reads are open.
