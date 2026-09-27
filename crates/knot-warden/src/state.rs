@@ -9,6 +9,10 @@
     ServiceCancelled,
     AdminScheduled,
     AdminCancelled,
+    AtlasSet,
+    GuardianForwarded,
+    TimelockForwarded,
+    AtlasCancelForwarded,
 ])]
 mod warden {
     use alloc::collections::BTreeMap;
@@ -20,8 +24,9 @@ mod warden {
         Account, InitWardenArgs, PendingAdmin, PendingAdminView, PendingServiceView, SetServiceArgs,
     };
     use knot_warden_encoding::events::{
-        AdminCancelled, AdminScheduled, DelaySet, SchedulerSet, ServiceCancelled, ServiceExecuted,
-        ServiceScheduled,
+        AdminCancelled, AdminScheduled, AtlasCancelForwarded, AtlasSet, DelaySet,
+        GuardianForwarded, SchedulerSet, ServiceCancelled, ServiceExecuted, ServiceScheduled,
+        TimelockForwarded,
     };
 
     /// Delaying guardian for one Atlas deployment. Never upgraded.
@@ -58,6 +63,7 @@ mod warden {
             self.atlas = Some(args.atlas);
             self.scheduler = Some(args.scheduler.clone());
             self.delay_blocks = args.delay_blocks;
+            abi::emit("atlas_set", AtlasSet { atlas: args.atlas });
             abi::emit(
                 "scheduler_set",
                 SchedulerSet {
@@ -226,6 +232,7 @@ mod warden {
             self.require_scheduler();
             let _: () = abi::call(self.atlas_id(), "set_guardian", &next)
                 .expect("warden: atlas set_guardian failed");
+            abi::emit("guardian_forwarded", GuardianForwarded { guardian: next });
         }
 
         /// Forward Atlas `set_timelock` in this transaction.
@@ -233,6 +240,7 @@ mod warden {
             self.require_scheduler();
             let _: () = abi::call(self.atlas_id(), "set_timelock", &blocks)
                 .expect("warden: atlas set_timelock failed");
+            abi::emit("timelock_forwarded", TimelockForwarded { blocks });
         }
 
         /// Forward Atlas `cancel_pending` in this transaction.
@@ -240,6 +248,7 @@ mod warden {
             self.require_scheduler();
             let _: () = abi::call(self.atlas_id(), "cancel_pending", &())
                 .expect("warden: atlas cancel_pending failed");
+            abi::emit("atlas_cancel_forwarded", AtlasCancelForwarded);
         }
 
         fn schedule_admin(&mut self, change: PendingAdmin) {

@@ -65,6 +65,20 @@ mod proposals_test_target {
             panic!("test-target: intentional call_raw failure");
         }
 
+        /// Owner transaction that forwards into proposals configuration.
+        pub fn forward_set_ttl(&mut self, proposals: ContractId, blocks: u64) {
+            let _: () = abi::call(proposals, "set_proposal_ttl", &blocks)
+                .expect("forward set_proposal_ttl");
+        }
+
+        /// Accepts `call_raw` only when `caller` is the proposals contract.
+        pub fn gated_set(&mut self, v: u64) {
+            if abi::caller() != self.proposals {
+                panic!("caller is not the proposals contract");
+            }
+            self.value = v;
+        }
+
         pub fn value(&self) -> u64 {
             self.value
         }

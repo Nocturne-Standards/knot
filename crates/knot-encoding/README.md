@@ -21,8 +21,9 @@ suite, plus shared call types behind a default-off feature. Shared by
   24-word over full 32-byte digest) / `digest_safety_number` for out-of-band
   co-signer compare. Never truncate.
 - **Call types (`call-types`, 2026-08-02)** — default-off feature holding
-  shared registry/proposals ABI types. Serde derives behind `data-driver`.
-  Both contracts re-export from `call_types`.
+  shared registry/proposals ABI types and event payloads (`events`). Serde
+  derives behind `data-driver`. Both contracts re-export call types from
+  `call_types`. Logic emits; the book does not.
 - Host `rlib` (`no_std` + `alloc`); path-dep from contracts and the tool.
   Default features stay free of `dusk-core` / `rkyv`.
 

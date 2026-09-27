@@ -1,0 +1,22 @@
+[package]
+name = "knot-mock-atlas"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "Apache-2.0"
+publish = false
+description = "Test Atlas: set_service + resolve. Not deployed."
+repository = "https://github.com/Nocturne-Standards/knot"
+
+[dependencies]
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }
+dusk-forge = "0.3.0"
+
+[features]
+contract = ["dusk-core/abi-dlmalloc"]
+data-driver = []
+
+[lib]
+crate-type = ["cdylib", "rlib"]

@@ -2094,6 +2094,7 @@ version = "0.1.2"
 dependencies = [
  "bytecheck",
  "dusk-core",
+ "dusk-forge",
  "proptest",
  "rand 0.8.7",
  "rkyv",
@@ -2103,8 +2104,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "knot-mock-atlas"
+version = "0.1.0"
+dependencies = [
+ "dusk-core",
+ "dusk-forge",
+]
+
+[[package]]
 name = "knot-proposals"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "bytecheck",
  "dusk-bls12_381",
@@ -2120,8 +2129,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "knot-proposals-data"
+version = "0.1.0"
+dependencies = [
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-forge",
+ "knot-encoding",
+]
+
+[[package]]
 name = "knot-registry"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "bytecheck",
  "dusk-bls12_381",
@@ -2134,6 +2153,16 @@ dependencies = [
  "rand 0.8.7",
  "rkyv",
  "serde",
+]
+
+[[package]]
+name = "knot-registry-data"
+version = "0.1.0"
+dependencies = [
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-forge",
+ "knot-encoding",
 ]
 
 [[package]]

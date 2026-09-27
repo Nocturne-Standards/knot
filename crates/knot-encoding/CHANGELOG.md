@@ -7,6 +7,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Added
 
+- Event payloads for registry and proposals logic (`events`). `RegistryBookEffect`
+  carries the new members, threshold, delay, or pending change. `PruneReport`
+  lists the proposal ids and digest keys one prune removed. Layout goldens
+  pin the structs. **PINNED-DIFFERENT** for the effect enum. Not deployed.
 - `set_timelock.v1`, `cancel_pending.v1`, `cancel_proposal.v1` signing domains
   (declared once here). `MultisigAccountView` / `AccountMeta` gain
   `timelock_blocks` + pending; `ProposalStatus::{Queued,Cancelled}`;

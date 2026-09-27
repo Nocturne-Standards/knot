@@ -7,6 +7,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Added
 
+- Logic emits a named payload for every book write, including `init_data`,
+  `init_registry`, `set_proposal_ttl`, `set_tombstone`, and
+  `set_authorized_account`. `propose`, `approve`, `finalize`, `execute`, and
+  `cancel` carry the call fields. `prune` emits the removed proposal ids and
+  digest keys, including a digest-only batch whose proposal count is 0.
+  The public `prune` return stays that proposal count.
+- Split into `knot-proposals` (logic) and `knot-proposals-data` (book).
+  `call_raw` stays on the logic contract. Logic version 0.4.0. Book version 0.1.0.
+- `set_authorized_account`: only that registry account may propose, finalize,
+  or execute. Rebinding blocks open and queued proposals from the previous account.
+- Owner configuration (`init_data`, `init_registry`, `set_proposal_ttl`,
+  `set_tombstone`, `set_authorized_account`) requires a direct account call.
+- `finalize` sends only approvals that are still members.
+- `prune(0)` removes nothing. Each call examines a bounded prefix of both maps.
+  Consumed digests stay until their deadline.
+- `init_data` is one-shot. The same book id may be retried. A different book panics.
+- `set_authorized_account` bumps `auth_generation`. Switching back to a previous
+  account does not make that binding's open or queued proposals executable.
+- `finalize` and `execute` recompute the v3 digest for this contract. A
+  replacement logic contract on the same book cannot run proposals signed for
+  the previous contract. Open and queued rows stay until cancel or prune.
 - Queue/execute/cancel: `finalize` queues when account delay > 0; `execute`
   after `execute_at`; `cancel` immediate. **PINNED-DIFFERENT-REDEPLOYED**.
 

@@ -7,7 +7,7 @@ extern crate alloc;
 use std::path::PathBuf;
 
 use dusk_bytes::Serializable;
-use dusk_core::abi::ContractId;
+use dusk_core::abi::{ContractId, Metadata};
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
 use dusk_vm::{ContractData, Session, VM};
 use knot_encoding::PartialSig;
@@ -23,7 +23,14 @@ use call_types::{CreateAccountArgs, VerifyQuorumAggregateArgs};
 
 const REGISTRY_BYTECODE: &[u8] =
     include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm");
+const REGISTRY_DATA_BYTECODE: &[u8] = include_bytes!(
+    "../../../target/contract/wasm32-unknown-unknown/release/knot_registry_data.wasm"
+);
+const ATLAS_BYTECODE: &[u8] =
+    include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_mock_atlas.wasm");
 const REGISTRY_ID: ContractId = ContractId::from_bytes([0xa1; 32]);
+const REGISTRY_DATA_ID: ContractId = ContractId::from_bytes([0xa2; 32]);
+const ATLAS_ID: ContractId = ContractId::from_bytes([0xc1; 32]);
 const CHAIN_ID: u8 = 0xCA;
 const POINT_LIMIT: u64 = 0x10000000;
 
@@ -33,18 +40,41 @@ fn keypair(rng: &mut StdRng) -> (BlsSecretKey, BlsPublicKey) {
     (sk, pk)
 }
 
-fn deploy() -> Session {
+fn deploy(owner_pk: &BlsPublicKey) -> Session {
     let vm = VM::ephemeral().expect("ephemeral");
     let mut session = vm.genesis_session(CHAIN_ID);
+    for (bytecode, id) in [
+        (ATLAS_BYTECODE, ATLAS_ID),
+        (REGISTRY_DATA_BYTECODE, REGISTRY_DATA_ID),
+        (REGISTRY_BYTECODE, REGISTRY_ID),
+    ] {
+        session
+            .deploy(
+                bytecode,
+                ContractData::builder()
+                    .owner(owner_pk.to_bytes().to_vec())
+                    .contract_id(id),
+                POINT_LIMIT,
+            )
+            .expect("deploy");
+    }
     session
-        .deploy(
-            REGISTRY_BYTECODE,
-            ContractData::builder()
-                .owner([0; 32])
-                .contract_id(REGISTRY_ID),
+        .call::<(String, ContractId), ()>(
+            ATLAS_ID,
+            "set_service",
+            &(String::from("knot-registry"), REGISTRY_ID),
             POINT_LIMIT,
         )
-        .expect("deploy registry");
+        .expect("set_service");
+    session
+        .set_meta(Metadata::PUBLIC_SENDER, Some(*owner_pk))
+        .expect("owner sender");
+    session
+        .call::<ContractId, ()>(REGISTRY_ID, "init_data", &REGISTRY_DATA_ID, POINT_LIMIT)
+        .expect("init_data");
+    session
+        .set_meta(Metadata::PUBLIC_SENDER, None::<BlsPublicKey>)
+        .expect("clear sender");
     session
 }
 
@@ -55,7 +85,8 @@ fn file_byo_two_of_three_aggregate_verifies_locally() {
     let (sk2, pk2) = keypair(rng);
     let (_sk3, pk3) = keypair(rng);
 
-    let mut session = deploy();
+    let owner_pk = BlsPublicKey::from(&BlsSecretKey::random(rng));
+    let mut session = deploy(&owner_pk);
     let account_id = session
         .call::<CreateAccountArgs, u64>(
             REGISTRY_ID,

@@ -75,6 +75,38 @@ pub struct AdminCancelled {
     pub change: PendingAdmin,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct AtlasSet {
+    pub atlas: ContractId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct GuardianForwarded {
+    pub guardian: Account,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct TimelockForwarded {
+    pub blocks: u64,
+}
+
+/// Warden holds none of the Atlas pending change. The topic is the record
+/// that `cancel_pending` was forwarded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct AtlasCancelForwarded;
+
 /// `ContractEvent` topic impls, needed only by the contract macro.
 /// Host consumers decoding events leave the `contract-events` feature off.
 #[cfg(feature = "contract-events")]
@@ -108,5 +140,21 @@ mod topics {
 
     impl ContractEvent for AdminCancelled {
         const TOPICS: &'static [&'static str] = &["admin_cancelled"];
+    }
+
+    impl ContractEvent for AtlasSet {
+        const TOPICS: &'static [&'static str] = &["atlas_set"];
+    }
+
+    impl ContractEvent for GuardianForwarded {
+        const TOPICS: &'static [&'static str] = &["guardian_forwarded"];
+    }
+
+    impl ContractEvent for TimelockForwarded {
+        const TOPICS: &'static [&'static str] = &["timelock_forwarded"];
+    }
+
+    impl ContractEvent for AtlasCancelForwarded {
+        const TOPICS: &'static [&'static str] = &["atlas_cancel_forwarded"];
     }
 }

@@ -272,4 +272,84 @@ pub struct ProposalView {
     pub status: ProposalStatus,
     /// Block height when `execute` may `call_raw`. `0` when not queued.
     pub execute_at: u64,
+    /// `auth_generation` on the book when this proposal was opened.
+    /// A later `set_authorized_account` bumps the book and this row cannot run.
+    pub auth_generation: u64,
+}
+
+/// What a registry book write did. Logic emits; the book does not.
+///
+/// Data-carrying enum, same pin rule as [`RegistryPendingChange`].
+/// Delay 0 is `AccountChanged` or `TimelockSet`. A non-zero delay is
+/// `Scheduled` and carries the change that is waiting.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub enum RegistryBookEffect {
+    Scheduled {
+        execute_at: u64,
+        change: RegistryPendingChange,
+    },
+    AccountChanged {
+        members: Vec<BlsPublicKey>,
+        threshold: u32,
+    },
+    TimelockSet {
+        blocks: u64,
+    },
+}
+
+/// Keys removed by one `prune` call. Logic emits this and returns
+/// `proposal_ids.len()` as the public count.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct PruneReport {
+    pub proposal_ids: Vec<u64>,
+    pub digest_keys: Vec<[u8; 32]>,
+}
+
+/// Proposals book configuration. Reads are open.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct ProposalsConfig {
+    pub registry: Option<ContractId>,
+    pub epoch: u64,
+    pub tombstone: bool,
+    pub proposal_ttl: u64,
+    /// Registry account allowed to drive this executor. `None` until the owner sets it.
+    pub authorized_account: Option<u64>,
+    /// Bumped on every `set_authorized_account`, including a repeat of the same id.
+    pub auth_generation: u64,
+}
+
+/// One `by_digest` row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct DigestView {
+    pub proposal_id: u64,
+    pub deadline: u64,
+    pub epoch: u64,
+    pub consumed: bool,
+}
+
+/// Insert an `Open` proposal. Epoch must match the book.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct OpenProposal {
+    pub registry_account_id: u64,
+    pub nonce: u64,
+    pub epoch: u64,
+    pub target: ContractId,
+    pub function_name: String,
+    pub call_args: Vec<u8>,
+    pub deadline: u64,
+    pub signed_digest: [u8; 32],
 }

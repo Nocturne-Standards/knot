@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+### Added
+
+- `AtlasSet`, `GuardianForwarded`, `TimelockForwarded`, `AtlasCancelForwarded`.
+  Layout goldens pin them.
+
 ## [0.1.0]
 
 ### Added

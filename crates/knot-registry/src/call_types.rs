@@ -7,6 +7,6 @@
 #[allow(unused_imports)]
 pub use knot_encoding::call_types::{
     CancelPendingArgs, ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
-    RegistryPendingChange, RegistryPendingView, SetTimelockArgs, SignatureEntry,
-    VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+    RegistryBookEffect, RegistryPendingChange, RegistryPendingView, SetTimelockArgs,
+    SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
 };
