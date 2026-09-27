@@ -9,7 +9,10 @@ const DEFAULT_ATLAS_PIN_HEX: &str =
 fn parse_atlas_pin_hex(s: &str) -> Result<[u8; 32], String> {
     let s = s.trim();
     if s.len() != 64 {
-        return Err(format!("ATLAS_PIN_HEX must be 64 hex chars, got {}", s.len()));
+        return Err(format!(
+            "ATLAS_PIN_HEX must be 64 hex chars, got {}",
+            s.len()
+        ));
     }
     let mut out = [0u8; 32];
     for i in 0..32 {

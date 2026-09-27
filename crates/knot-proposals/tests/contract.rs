@@ -11,8 +11,8 @@ use dusk_core::abi::{ContractId, Metadata};
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
 use dusk_vm::{CallReceipt, ContractData, Session, VM};
 use knot_encoding::events::{
-    AuthorizedAccountSet, DataSet, ProposalApproved, ProposalCreated, ProposalFinalized, Pruned,
-    ProposalTtlSet, RegistrySet, TombstoneSet,
+    AuthorizedAccountSet, DataSet, ProposalApproved, ProposalCreated, ProposalFinalized,
+    ProposalTtlSet, Pruned, RegistrySet, TombstoneSet,
 };
 use knot_encoding::{
     cancel_proposal_message_v1, change_account_message_v3, proposal_digest_v3,
