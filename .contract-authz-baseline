@@ -27,6 +27,8 @@ crates/knot-proposals/test-target/src/lib.rs:fail_set	PUBLIC — test-only inten
 crates/knot-proposals/test-target/src/lib.rs:forward_set_ttl	PUBLIC — test-only; forwards set_proposal_ttl so an owner transaction is not a direct call
 crates/knot-proposals/test-target/src/lib.rs:gated_set	PUBLIC — test-only; panics unless caller is the proposals contract
 crates/knot-proposals/test-target/src/lib.rs:hit_count	PUBLIC — test-only read-only counter
+crates/knot-proposals/test-target/src/lib.rs:messages	PUBLIC — test-only read-only view of recorded sendMessage calls
+crates/knot-proposals/test-target/src/lib.rs:sendMessage	PUBLIC — test-only L1-messenger stand-in; records (caller, target, payload, min_gas)
 crates/knot-proposals/test-target/src/lib.rs:set_value	PUBLIC — test-only mutator
 crates/knot-proposals/test-target/src/lib.rs:set_value_reenter_finalize	PUBLIC — test-only reentrancy mutator
 crates/knot-proposals/test-target/src/lib.rs:value	PUBLIC — test-only read-only scalar
@@ -37,14 +39,19 @@ crates/knot-registry/src/state.rs:cancel_pending	PUBLIC — current committee qu
 crates/knot-registry/src/state.rs:execute_pending	PUBLIC — permissionless after execute_at
 crates/knot-registry/src/state.rs:create_account	PUBLIC — anyone may register a committee
 crates/knot-registry/src/state.rs:init_data	contract owner, direct account call (require_direct_owner)
+crates/knot-registry/src/state.rs:init_evm_root_receiver	contract owner, direct account call (require_direct_owner); once-only; non-zero KnotEvmRoot address
+crates/knot-registry/src/state.rs:init_l1_messenger_contract	contract owner, direct account call (require_direct_owner); once-only
 crates/knot-registry/src/state.rs:next_account_id	PUBLIC — read-only scalar
+crates/knot-registry/src/state.rs:publish_bootstrap_root	PUBLIC — current committee quorum BLS over evm_bootstrap_message_v1; sends only registry-held members/threshold
 crates/knot-registry/src/state.rs:verify_quorum	PUBLIC — read-only BLS verify helper
 crates/knot-registry/src/state.rs:verify_quorum_aggregate	PUBLIC — read-only aggregate BLS verify helper
 crates/knot-registry-data/src/state.rs:account	PUBLIC — read-only view
 crates/knot-registry-data/src/state.rs:clear_pending	Atlas-resolved knot-registry logic only (require_logic_caller)
 crates/knot-registry-data/src/state.rs:create_account	Atlas-resolved knot-registry logic only (require_logic_caller)
 crates/knot-registry-data/src/state.rs:execute_pending	Atlas-resolved knot-registry logic only (require_logic_caller)
+crates/knot-registry-data/src/state.rs:mark_bootstrap_published	Atlas-resolved knot-registry logic only (require_logic_caller); nonce must match the account
 crates/knot-registry-data/src/state.rs:next_account_id	PUBLIC — read-only scalar
+crates/knot-registry-data/src/state.rs:published_bootstrap_nonce	PUBLIC — read-only scalar
 crates/knot-registry-data/src/state.rs:schedule	Atlas-resolved knot-registry logic only (require_logic_caller)
 crates/knot-proposals-data/src/state.rs:commit_cancelled	Atlas-resolved knot-proposals logic only (require_logic_caller)
 crates/knot-proposals-data/src/state.rs:commit_executed	Atlas-resolved knot-proposals logic only (require_logic_caller); binding generation must match (require_generation); digest must name this caller (require_issued_by_caller)

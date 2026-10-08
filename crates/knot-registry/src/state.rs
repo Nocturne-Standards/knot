@@ -13,9 +13,10 @@ mod knot_registry {
     use dusk_core::abi::{self, ContractId};
     use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
     use knot_encoding::{
-        PENDING_KIND_CHANGE_ACCOUNT, PENDING_KIND_SET_TIMELOCK,
+        PENDING_KIND_CHANGE_ACCOUNT, PENDING_KIND_SET_TIMELOCK, bootstrap_min_gas,
         cancel_pending_change_account_payload, cancel_pending_message_v1,
-        cancel_pending_set_timelock_payload, change_account_message_v3, set_timelock_message_v1,
+        cancel_pending_set_timelock_payload, change_account_message_v3, encode_bootstrap_calldata,
+        evm_bootstrap_message_v1, set_timelock_message_v1,
     };
 
     use knot_encoding::events::{
@@ -23,8 +24,8 @@ mod knot_registry {
     };
     use knot_registry::call_types::{
         CancelPendingArgs, ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
-        RegistryBookEffect, RegistryPendingChange, SetTimelockArgs, SignatureEntry,
-        VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+        PublishBootstrapRootArgs, RegistryBookEffect, RegistryPendingChange, SetTimelockArgs,
+        SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
     };
 
     const MAX_COMMITTEE_MEMBERS: usize = 16;
@@ -34,11 +35,19 @@ mod knot_registry {
         /// Book contract. Not cached from Atlas: this contract is the id
         /// Atlas resolves, and data checks `abi::caller()` against that.
         data: Option<ContractId>,
+        /// L1 `CrossDomainMessenger` for the EVM root bootstrap.
+        l1_messenger: Option<ContractId>,
+        /// `KnotEvmRoot` on DuskEVM (20 bytes, EVM wire shape).
+        evm_root_receiver: Option<[u8; 20]>,
     }
 
     impl MultisigRegistryState {
         pub const fn new() -> Self {
-            Self { data: None }
+            Self {
+                data: None,
+                l1_messenger: None,
+                evm_root_receiver: None,
+            }
         }
 
         /// Owner-only, direct account call. Points this contract at its book.
@@ -222,6 +231,98 @@ mod knot_registry {
                 abi::call(self.data_id(), "execute_pending", &account_id)
                     .expect("knot-registry-data execute_pending failed");
             emit_effect(account_id, effect);
+        }
+
+        /// Owner-only, direct account call. L1 `CrossDomainMessenger` for the
+        /// EVM root bootstrap. Once-only.
+        pub fn init_l1_messenger_contract(&mut self, messenger: ContractId) {
+            require_direct_owner();
+            if self.l1_messenger.is_some() {
+                panic!("l1 messenger already set");
+            }
+            self.l1_messenger = Some(messenger);
+        }
+
+        /// Owner-only, direct account call. `KnotEvmRoot` address on DuskEVM
+        /// (20 bytes, EVM wire shape). Once-only.
+        pub fn init_evm_root_receiver(&mut self, receiver: [u8; 20]) {
+            require_direct_owner();
+            if self.evm_root_receiver.is_some() {
+                panic!("evm root receiver already set");
+            }
+            if receiver == [0u8; 20] {
+                panic!("evm root receiver must be non-zero");
+            }
+            self.evm_root_receiver = Some(receiver);
+        }
+
+        /// Sends `account_id`'s current member set and threshold to
+        /// `KnotEvmRoot.bootstrap` through the L1 messenger. Authorized by a
+        /// quorum of the account's current members signing over
+        /// `evm_bootstrap_message_v1`. The book records the nonce that was
+        /// sent, so a second publish at the same nonce is refused. A later
+        /// `change_account` bumps that nonce and opens one new publish.
+        pub fn publish_bootstrap_root(&mut self, args: PublishBootstrapRootArgs) {
+            let l1_messenger = self.l1_messenger.expect(
+                "knot-registry XDM not configured: call init_l1_messenger_contract first",
+            );
+            let receiver = self.evm_root_receiver.expect(
+                "knot-registry XDM not configured: call init_evm_root_receiver first",
+            );
+            let account = self
+                .account(args.account_id)
+                .unwrap_or_else(|| panic!("no such multisig account"));
+            let published: Option<u64> = abi::call(
+                self.data_id(),
+                "published_bootstrap_nonce",
+                &args.account_id,
+            )
+            .expect("knot-registry-data published_bootstrap_nonce failed");
+            if published == Some(account.nonce) {
+                panic!("publish_bootstrap_root: already published at this nonce");
+            }
+
+            let member_pks: Vec<[u8; 96]> =
+                account.members.iter().map(|pk| pk.to_bytes()).collect();
+            let published_nonce = account.nonce;
+            let msg = evm_bootstrap_message_v1(
+                u64::from(abi::chain_id()),
+                &abi::self_id().to_bytes(),
+                args.account_id,
+                account.nonce,
+                &receiver,
+                &member_pks,
+                account.threshold,
+            )
+            .expect("member set within encoding caps");
+            require_quorum(
+                &account.members,
+                account.threshold,
+                &msg,
+                &args.sigs,
+                "publish_bootstrap_root",
+            );
+
+            let payload = encode_bootstrap_calldata(
+                args.account_id,
+                u64::from(abi::chain_id()),
+                &member_pks,
+                account.threshold,
+            );
+            let min_gas = bootstrap_min_gas(account.members.len() as u32);
+            abi::call::<([u8; 20], Vec<u8>, u32), ()>(
+                l1_messenger,
+                "sendMessage",
+                &(receiver, payload, min_gas),
+            )
+            .expect("cross-contract call to L1 messenger sendMessage failed");
+            let _: () = abi::call(
+                self.data_id(),
+                "mark_bootstrap_published",
+                &(args.account_id, published_nonce),
+            )
+            .expect("knot-registry-data mark_bootstrap_published failed");
+            abi::emit("evm_bootstrap_sent", args.account_id);
         }
 
         fn data_id(&self) -> ContractId {

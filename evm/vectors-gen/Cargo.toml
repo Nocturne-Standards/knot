@@ -1,0 +1,15 @@
+[package]
+name = "knot-evm-root-vectors"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone: not a member of the knot workspace.
+[workspace]
+
+[dependencies]
+bls12_381-bls = { version = "=0.6.0", default-features = false }
+dusk-bls12_381 = { version = "=0.14.2", default-features = false, features = ["alloc", "pairings"] }
+dusk-bytes = "0.1"
+rand = "0.8"
+tiny-keccak = { version = "2", features = ["keccak"] }
