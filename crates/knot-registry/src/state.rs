@@ -263,12 +263,12 @@ mod knot_registry {
         /// sent, so a second publish at the same nonce is refused. A later
         /// `change_account` bumps that nonce and opens one new publish.
         pub fn publish_bootstrap_root(&mut self, args: PublishBootstrapRootArgs) {
-            let l1_messenger = self.l1_messenger.expect(
-                "knot-registry XDM not configured: call init_l1_messenger_contract first",
-            );
-            let receiver = self.evm_root_receiver.expect(
-                "knot-registry XDM not configured: call init_evm_root_receiver first",
-            );
+            let l1_messenger = self
+                .l1_messenger
+                .expect("knot-registry XDM not configured: call init_l1_messenger_contract first");
+            let receiver = self
+                .evm_root_receiver
+                .expect("knot-registry XDM not configured: call init_evm_root_receiver first");
             let account = self
                 .account(args.account_id)
                 .unwrap_or_else(|| panic!("no such multisig account"));
