@@ -37,14 +37,30 @@ fi
 # Gates every adopting repo must carry a copy of, in scripts/.
 # Keep in sync with bin/ — a gate that exists in the kit but is required
 # nowhere is a gate nobody runs.
-REQUIRED="check-public-surface.sh
-check-audit-sha.sh
-check-repo-rules.sh
-check-gitleaks.sh
-check-bls-insecure.sh"
+# Arrays, not here-strings: a here-string needs a temp file, and the Cursor
+# sandbox denies that file. The loop then runs zero times and this gate
+# used to print ok. Bash 3.2 has no mapfile.
+REQUIRED=(
+  check-public-surface.sh
+  check-audit-sha.sh
+  check-repo-rules.sh
+  check-gitleaks.sh
+  check-bls-insecure.sh
+)
 
 # Gates required only when the repo ships Rust contracts.
-REQUIRED_IF_CONTRACTS="check-contract-authz.sh"
+REQUIRED_IF_CONTRACTS=(
+  check-contract-authz.sh
+  check-contract-authz-body.sh
+  check-contract-init.sh
+)
+
+# Test seam only. Empties the lists so the zero-count branch can be forced.
+# Unset in production; a real repo never sets this.
+if [[ -n "${NOCTURNE_COVERAGE_TEST_EMPTY:-}" ]]; then
+  REQUIRED=()
+  REQUIRED_IF_CONTRACTS=()
+fi
 
 # Opt out per repo, with a reason, in .gate-coverage-waivers:
 #   check-repo-rules.sh: no hand-copied mirrors in this repo (reviewed 2026-08-05)
@@ -52,6 +68,7 @@ WAIVERS=".gate-coverage-waivers"
 
 fail=0
 missing=""
+checked=0
 
 is_waived() {
   [[ -f "$WAIVERS" ]] || return 1
@@ -81,16 +98,27 @@ require() {
   fail=1
 }
 
-while IFS= read -r script; do
-  [[ -z "$script" ]] && continue
-  require "$script"
-done <<< "$REQUIRED"
-
-if has_contracts; then
-  while IFS= read -r script; do
+# Bash 3.2 + set -u treats "${empty[@]}" as unbound, so guard before expand.
+if [[ ${#REQUIRED[@]} -gt 0 ]]; then
+  for script in "${REQUIRED[@]}"; do
     [[ -z "$script" ]] && continue
     require "$script"
-  done <<< "$REQUIRED_IF_CONTRACTS"
+    checked=$((checked + 1))
+  done
+fi
+
+if has_contracts && [[ ${#REQUIRED_IF_CONTRACTS[@]} -gt 0 ]]; then
+  for script in "${REQUIRED_IF_CONTRACTS[@]}"; do
+    [[ -z "$script" ]] && continue
+    require "$script"
+    checked=$((checked + 1))
+  done
+fi
+
+# Zero iterations is an environment failure, not an empty requirement list.
+if [[ "$checked" -eq 0 ]]; then
+  echo "BLOCKED: check-gate-coverage checked 0 gates (environment error)" >&2
+  exit 1
 fi
 
 if [[ -n "$missing" ]]; then
@@ -106,17 +134,25 @@ if [[ -n "$missing" ]]; then
   echo "    <script>: <why this repo does not need it> (reviewed <date>)" >&2
 fi
 
-# A repo can carry the scripts and still not run them in CI.
-# Accept any workflow under .github/workflows/ (ci.yml, hygiene.yml, …).
-if [[ -d .github/workflows ]]; then
-  if ! grep -Rq 'scripts/check-' .github/workflows --include='*.yml' --include='*.yaml' 2>/dev/null; then
-    echo "BLOCKED: no scripts/check-* invoked in .github/workflows/*.yml" >&2
-    echo "  Hooks are bypassable with --no-verify; CI is the backstop that is not." >&2
+# CI costs money, and GitHub cannot require checks on private aichbindas
+# repos (plan returns 403). Private floor is the kit pre-commit hook.
+# Public marker: workflows must invoke scripts/check-* (job name kit-gates).
+# Missing .github/workflows is a miss, same as a workflow that never calls them.
+if [[ -f .nocturne-public ]]; then
+  ci_hit=0
+  if [[ -d .github/workflows ]]; then
+    if grep -Rq 'scripts/check-' .github/workflows --include='*.yml' --include='*.yaml' 2>/dev/null; then
+      ci_hit=1
+    fi
+  fi
+  if [[ "$ci_hit" -eq 0 ]]; then
+    echo "BLOCKED: public repo (.nocturne-public) does not invoke scripts/check-* in .github/workflows" >&2
+    echo "  Required job kit-gates: check-gate-coverage.sh, check-public-surface.sh (ALLOW_PRIVATE_TIER unset), check-gitleaks.sh." >&2
     fail=1
   fi
 fi
 
 if ((fail == 0)); then
-  echo "ok: check-gate-coverage — all required gates present and wired"
+  echo "ok: check-gate-coverage — $checked gates present and wired"
 fi
 exit "$fail"

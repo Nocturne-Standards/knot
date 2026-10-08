@@ -8,12 +8,10 @@
 # Local symlink / checkout of Nocturne-Standards/nocturne-deployments pin home.
 /deployments
 
-# Agent / private-tier tooling (lives outside the public carve)
+# Agent tooling stays local. The adoption marker is committed.
 .cursor/
 .worktrees/
 .pituitary/
-.nocturne-agent-kit-adopted
-.nocturne-product-root
 AGENTS.md
 FIELD_GUIDE/
 .superpowers/
