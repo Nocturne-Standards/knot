@@ -22,12 +22,14 @@ warn=0
 # Word-boundary patterns below use \\b. POSIX ERE (git grep -E) does not define
 # \\b, so those checks are silent no-ops on common Mac/Linux builds. PCRE (-P)
 # does. Fail loud if this git lacks PCRE rather than ship a dead gate.
-_pcre_probe="$(git ls-files | head -n1 || true)"
-if [[ -n "$_pcre_probe" ]] && ! git grep -qP '^' -- "$_pcre_probe" 2>/dev/null; then
+#
+# Probe pathless — do not use `git ls-files | head -1`. Adopt trees often list
+# `.cursor/agents/*` symlinks first; `git grep -P` on a symlink exits 1 and
+# falsely claims "no PCRE".
+if [[ -n "$(git ls-files | head -n1 || true)" ]] && ! git grep -qP '^' 2>/dev/null; then
   echo "check-public-surface: git grep -P (PCRE) required; \\b checks are no-ops under -E" >&2
   exit 1
 fi
-unset _pcre_probe
 
 is_allowlisted() {
   local line="$1"
