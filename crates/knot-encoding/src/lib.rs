@@ -26,6 +26,11 @@ use tiny_keccak::{Hasher, Keccak};
 pub mod fingerprint;
 pub use fingerprint::{digest_hex, digest_mnemonic, digest_safety_number};
 
+pub mod evm_bootstrap;
+pub use evm_bootstrap::{
+    DOMAIN_EVM_BOOTSTRAP_V1, bootstrap_min_gas, encode_bootstrap_calldata, evm_bootstrap_message_v1,
+};
+
 #[cfg(feature = "call-types")]
 pub mod call_types;
 
