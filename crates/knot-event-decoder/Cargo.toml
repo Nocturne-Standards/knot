@@ -1,0 +1,28 @@
+[workspace]
+
+[package]
+name = "knot-event-decoder"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+license = "Apache-2.0"
+repository = "https://github.com/Nocturne-Standards/knot"
+description = "Dispatch Knot named events by contract, topic, and version"
+
+# Own workspace: path-depends on knot-warden-encoding, which needs a sibling
+# atlas 0.3 checkout. Parent `cargo test` must not require that sibling.
+
+[dependencies]
+knot-encoding = { path = "../knot-encoding", features = ["data-driver"] }
+knot-warden-encoding = { path = "../knot-warden-encoding", features = ["data-driver"] }
+rkyv = { version = "=0.7.39", default-features = false, features = ["size_32", "alloc", "validation"] }
+serde_json = "1"
+
+[dev-dependencies]
+dusk-core = { version = "=1.6.0", features = ["zk"] }
+dusk-core-git = { package = "dusk-core", version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", features = ["zk"] }
+rand = { version = "0.8.6", default-features = false }
+rkyv = { version = "=0.7.39", default-features = false, features = ["size_32", "alloc"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
