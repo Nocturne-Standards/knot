@@ -17,6 +17,8 @@ bytecheck = { version = "=0.6.12", default-features = false, optional = true }
 dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false, optional = true }
 dusk-forge = { version = "0.3.0", optional = true }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+rand = { version = "0.8.6", default-features = false, optional = true }
 
 [features]
 default = []
@@ -27,6 +29,8 @@ contract-events = ["call-types", "dep:dusk-forge"]
 # serde derives on the layer-E structs. Named `data-driver` to match the
 # multisig contracts' feature (R4 — wrong name silently drops the derives).
 data-driver = ["call-types", "dep:serde", "dusk-core/serde"]
+# Bin-only. Writes decoder fixtures from the event structs. Not a default feature.
+fixture-gen = ["data-driver", "dep:rand", "dep:serde_json", "dusk-core/zk"]
 
 [dev-dependencies]
 proptest = "1"
@@ -35,3 +39,8 @@ dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag
 
 [lib]
 crate-type = ["rlib"]
+
+[[bin]]
+name = "generate-event-fixtures"
+path = "src/bin/generate_event_fixtures.rs"
+required-features = ["fixture-gen"]

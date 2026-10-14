@@ -1,0 +1,9 @@
+{
+  "contract": "knot-warden",
+  "hex": "0800000000000000",
+  "json": {
+    "blocks": 8
+  },
+  "topic": "timelock_forwarded",
+  "version": 1
+}

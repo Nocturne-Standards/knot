@@ -1,0 +1,9 @@
+{
+  "contract": "knot-warden",
+  "hex": "0500000000000000",
+  "json": {
+    "blocks": 5
+  },
+  "topic": "delay_set",
+  "version": 1
+}

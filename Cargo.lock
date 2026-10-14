@@ -2099,6 +2099,7 @@ dependencies = [
  "rand 0.8.7",
  "rkyv",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
  "tiny-keccak",
 ]

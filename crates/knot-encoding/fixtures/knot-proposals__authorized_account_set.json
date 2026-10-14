@@ -1,0 +1,10 @@
+{
+  "contract": "knot-proposals",
+  "hex": "07000000000000000300000000000000",
+  "json": {
+    "account_id": 7,
+    "auth_generation": 3
+  },
+  "topic": "authorized_account_set",
+  "version": 1
+}
