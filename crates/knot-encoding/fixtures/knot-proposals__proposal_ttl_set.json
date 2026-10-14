@@ -1,0 +1,9 @@
+{
+  "contract": "knot-proposals",
+  "hex": "6400000000000000",
+  "json": {
+    "blocks": 100
+  },
+  "topic": "proposal_ttl_set",
+  "version": 1
+}

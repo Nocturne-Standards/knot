@@ -1,0 +1,13 @@
+{
+  "contract": "knot-registry",
+  "hex": "b85bd29319880f7334ab3b77823322d250e63b19849f2c492109b66f799bdbbab4f713442fb98af8753442b85d3b7a04efb5fe9e35f0e92921f8a67c1e31eda9cdd7a38781e1a1cf898712f6a71abe1470950c4ff08cf12eb5a7cdc1a5373c13ba23f9b45650d735171f1ad765986c9b7c26aa604b491ee62d3195a22622f39c8b9f8a6e69246b8b66d6142516433800eb802948edcbfb7c14c900ce6da013cec5891da57737f816403fb00c01ebf1457c7476bbc2648898ee6888b90b3695170000000000000000070000000000000030ffffff010000000100000000000000",
+  "json": {
+    "account_id": 7,
+    "members": [
+      "25Xj5qjsG3yLZHLE2JNKmMYSo89tB2bk58jrG5z5DGQEgUUuh3cr1rcDMGD9bYtcAeojZpqy2Z7qduEwsXufciR4DyBg56xFz5FZpMKhDuq1KEbko9gRLVqtUtzi5dJuQrL7"
+    ],
+    "threshold": 1
+  },
+  "topic": "account_changed",
+  "version": 1
+}

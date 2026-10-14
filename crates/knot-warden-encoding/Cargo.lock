@@ -939,6 +939,7 @@ dependencies = [
  "rand",
  "rkyv",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

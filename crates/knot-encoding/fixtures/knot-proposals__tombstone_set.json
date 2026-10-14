@@ -1,0 +1,9 @@
+{
+  "contract": "knot-proposals",
+  "hex": "01",
+  "json": {
+    "tombstone": true
+  },
+  "topic": "tombstone_set",
+  "version": 1
+}
