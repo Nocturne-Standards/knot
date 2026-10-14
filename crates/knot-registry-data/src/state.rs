@@ -23,6 +23,10 @@ mod knot_registry_data {
         nonce: u64,
         timelock_blocks: u64,
         pending: Option<(RegistryPendingChange, u64)>,
+        /// Registry nonce last sent to `KnotEvmRoot.bootstrap`. A second
+        /// publish at the same nonce is refused. `schedule` bumps `nonce`,
+        /// which opens one new publish.
+        published_bootstrap_nonce: Option<u64>,
     }
 
     pub struct RegistryDataState {
@@ -51,6 +55,7 @@ mod knot_registry_data {
                     nonce: 0,
                     timelock_blocks: 0,
                     pending: None,
+                    published_bootstrap_nonce: None,
                 },
             );
             id
@@ -74,6 +79,31 @@ mod knot_registry_data {
 
         pub fn next_account_id(&self) -> u64 {
             self.next_id
+        }
+
+        /// Nonce last published for this account. `None` when the account
+        /// is missing or has never been published.
+        pub fn published_bootstrap_nonce(&self, account_id: u64) -> Option<u64> {
+            self.accounts
+                .get(&account_id)
+                .and_then(|account| account.published_bootstrap_nonce)
+        }
+
+        /// Records that `nonce` was sent to the EVM root. Logic-only.
+        /// Refuses a second mark at the account's current nonce.
+        pub fn mark_bootstrap_published(&mut self, account_id: u64, nonce: u64) {
+            self.require_logic_caller();
+            let account = self
+                .accounts
+                .get_mut(&account_id)
+                .unwrap_or_else(|| panic!("no such multisig account"));
+            if account.published_bootstrap_nonce == Some(account.nonce) {
+                panic!("publish_bootstrap_root: already published at this nonce");
+            }
+            if nonce != account.nonce {
+                panic!("publish_bootstrap_root: nonce mismatch");
+            }
+            account.published_bootstrap_nonce = Some(nonce);
         }
 
         /// One pending slot. Delay 0 applies before return. Nonce bumps here.
