@@ -144,6 +144,20 @@ pub struct CancelProposalArgs {
     pub sigs: Vec<SignatureEntry>,
 }
 
+/// Publishes an account's current member set and threshold to the configured
+/// `KnotEvmRoot` on DuskEVM through the L1 messenger (one-shot bootstrap).
+/// Authorized by a quorum of the account's current members signing over
+/// [`crate::evm_bootstrap_message_v1`]; the members and threshold sent are read
+/// from the registry, not taken from the caller.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(CheckBytes))]
+#[archive_attr(repr(C))]
+#[cfg_attr(feature = "data-driver", derive(serde::Serialize, serde::Deserialize))]
+pub struct PublishBootstrapRootArgs {
+    pub account_id: u64,
+    pub sigs: Vec<SignatureEntry>,
+}
+
 /// Aggregate-signature quorum check — same question as `VerifyQuorumArgs`
 /// ("did enough members authorize `msg`?"), verified with a single native
 /// pairing check instead of one `abi::verify_bls` per signer.
