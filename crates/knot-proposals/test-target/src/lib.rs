@@ -10,6 +10,7 @@ extern crate alloc;
 
 #[dusk_forge::contract]
 mod proposals_test_target {
+    use alloc::vec::Vec;
     use dusk_core::abi::{self, ContractId};
 
     pub struct TargetState {
@@ -18,6 +19,8 @@ mod proposals_test_target {
         hit_count: u64,
         proposals: Option<ContractId>,
         reenter_proposal_id: u64,
+        /// `sendMessage` calls received as L1-messenger stand-in: (caller, target, payload, min_gas).
+        messages: Vec<(ContractId, [u8; 20], Vec<u8>, u32)>,
     }
 
     impl TargetState {
@@ -27,6 +30,7 @@ mod proposals_test_target {
                 hit_count: 0,
                 proposals: None,
                 reenter_proposal_id: 0,
+                messages: Vec::new(),
             }
         }
 
@@ -85,6 +89,17 @@ mod proposals_test_target {
 
         pub fn hit_count(&self) -> u64 {
             self.hit_count
+        }
+
+        /// L1-messenger stand-in (same argument shape as the DuskDS messenger): records the call.
+        #[allow(non_snake_case)]
+        pub fn sendMessage(&mut self, target: [u8; 20], payload: Vec<u8>, min_gas: u32) {
+            let caller = abi::caller().expect("sendMessage: contract caller required");
+            self.messages.push((caller, target, payload, min_gas));
+        }
+
+        pub fn messages(&self) -> Vec<(ContractId, [u8; 20], Vec<u8>, u32)> {
+            self.messages.clone()
         }
 
         /// Host-metadata probe for phase-3a `abi::chain_id` gate.
