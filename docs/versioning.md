@@ -8,7 +8,7 @@ deployment claim in this repo.
 Each workspace crate carries its own `version` in `Cargo.toml`
 (`knot-encoding`, `knot-registry`, `knot-registry-data`, `knot-proposals`,
 `knot-proposals-data`, `knot-tool`, `knot-collector`, `knot-warden`,
-`knot-warden-encoding`).
+`knot-warden-encoding`, `knot-event-decoder`).
 That number is the **source of truth**
 for that crate's API and WASM artifact. Crates version independently — a
 registry bump does not force a tool bump unless the dependency edge requires it.

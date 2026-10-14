@@ -42,6 +42,7 @@ Atlas `timelock_blocks` covers replacing the guardian.
 | `knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
 | `knot-warden-encoding` | Apache-2.0 | 0.1.0 | Warden call types and events. Own workspace; needs sibling atlas 0.3 |
 | `knot-warden` | Apache-2.0 | 0.1.1 | Delaying guardian in front of Atlas. Testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` |
+| `knot-event-decoder` | Apache-2.0 | 0.1.0 | Named-event dispatch for registry, proposals, and warden. Needs sibling atlas 0.3 |
 
 The Apache suite and **AGPL collector** are intentionally split. Self-host
 `knot-collector` only if you accept AGPL (or purchase a commercial
@@ -75,7 +76,8 @@ how crate semvers relate to git tags.
 ├── crates/knot-tool/
 ├── crates/knot-collector/
 ├── crates/knot-warden-encoding/
-└── crates/knot-warden/
+├── crates/knot-warden/
+└── crates/knot-event-decoder/
 ```
 
 ## Deploy
