@@ -135,6 +135,16 @@ fn sign_all(msg: &[u8], sks: &[(&BlsSecretKey, &BlsPublicKey)]) -> Vec<Signature
         .collect()
 }
 
+fn sign_wrong(msg: &[u8], sk: &BlsSecretKey, pk: &BlsPublicKey) -> SignatureEntry {
+    let mut wrong = msg.to_vec();
+    wrong.push(0);
+    SignatureEntry {
+        signer: *pk,
+        // PreforkHostQuery: VM::ephemeral PreFork — dusk-vm-issue-1; live clients use sign()/sign_multisig() (F-001)
+        signature: sk.sign_insecure(&wrong),
+    }
+}
+
 #[test]
 fn create_account_rejects_out_of_range_threshold() {
     let rng = &mut StdRng::seed_from_u64(1);
@@ -294,6 +304,114 @@ fn verify_quorum_returns_false_for_unknown_account() {
         .expect("verify_quorum call should succeed even for an unknown account")
         .data;
     assert!(!passed);
+}
+
+fn create_threshold_two(session: &mut Session, members: Vec<BlsPublicKey>) -> u64 {
+    let args = CreateAccountArgs {
+        members,
+        threshold: 2,
+    };
+    session
+        .call::<CreateAccountArgs, u64>(REGISTRY_ID, "create_account", &args, POINT_LIMIT)
+        .expect("create_account should succeed")
+        .data
+}
+
+fn quorum_signers(
+    session: &mut Session,
+    account_id: u64,
+    msg: Vec<u8>,
+    sigs: Vec<SignatureEntry>,
+) -> Option<Vec<BlsPublicKey>> {
+    let args = VerifyQuorumArgs {
+        account_id,
+        msg,
+        sigs,
+    };
+    session
+        .call::<VerifyQuorumArgs, Option<Vec<BlsPublicKey>>>(
+            REGISTRY_ID,
+            "verify_quorum_signers",
+            &args,
+            POINT_LIMIT,
+        )
+        .expect("verify_quorum_signers call should succeed")
+        .data
+}
+
+#[test]
+fn verify_quorum_signers_returns_verified_members_when_threshold_met() {
+    let rng = &mut StdRng::seed_from_u64(40);
+    let mut session = initialize();
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let (sk3, pk3) = keypair(rng);
+    let id = create_threshold_two(&mut session, alloc::vec![pk1, pk2, pk3]);
+
+    let msg = b"authorize-signers".to_vec();
+    let mut sigs = sign_all(&msg, &[(&sk1, &pk1), (&sk2, &pk2)]);
+    sigs.push(sign_wrong(&msg, &sk3, &pk3));
+
+    let signers = quorum_signers(&mut session, id, msg, sigs);
+    assert_eq!(
+        signers,
+        Some(alloc::vec![pk1, pk2]),
+        "a failed signature must be left out, and the verified members returned"
+    );
+}
+
+#[test]
+fn verify_quorum_signers_returns_none_when_threshold_missed() {
+    let rng = &mut StdRng::seed_from_u64(41);
+    let mut session = initialize();
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let (_sk3, pk3) = keypair(rng);
+    let id = create_threshold_two(&mut session, alloc::vec![pk1, pk2, pk3]);
+
+    let msg = b"authorize-signers".to_vec();
+    let mut sigs = sign_all(&msg, &[(&sk1, &pk1)]);
+    sigs.push(sign_wrong(&msg, &sk2, &pk2));
+
+    let signers = quorum_signers(&mut session, id, msg, sigs);
+    assert_eq!(signers, None, "one verified member misses threshold 2");
+}
+
+#[test]
+fn verify_quorum_signers_returns_none_for_unknown_account() {
+    let mut session = initialize();
+    let signers = quorum_signers(&mut session, 999, b"anything".to_vec(), Vec::new());
+    assert_eq!(signers, None);
+}
+
+#[test]
+fn verify_quorum_signers_counts_duplicate_member_once() {
+    let rng = &mut StdRng::seed_from_u64(42);
+    let mut session = initialize();
+    let (sk1, pk1) = keypair(rng);
+    let (sk2, pk2) = keypair(rng);
+    let (_sk3, pk3) = keypair(rng);
+    let id = create_threshold_two(&mut session, alloc::vec![pk1, pk2, pk3]);
+
+    let msg = b"authorize-signers".to_vec();
+    let once = sign_all(&msg, &[(&sk1, &pk1)]);
+    let mut duplicated = once.clone();
+    duplicated.push(once[0].clone());
+    let signers = quorum_signers(&mut session, id, msg.clone(), duplicated);
+    assert_eq!(
+        signers, None,
+        "the same member signed twice still counts once and misses threshold 2"
+    );
+
+    let mut with_second = once;
+    with_second.push(with_second[0].clone());
+    with_second.extend(sign_all(&msg, &[(&sk2, &pk2)]));
+    let signers = quorum_signers(&mut session, id, msg, with_second);
+    assert_eq!(
+        signers,
+        Some(alloc::vec![pk1, pk2]),
+        "a repeated member appears once among the verified keys"
+    );
 }
 
 #[test]
