@@ -97,6 +97,23 @@ mod knot_registry {
             quorum_met(&account.members, account.threshold, &args.msg, &args.sigs)
         }
 
+        /// Same account, message, and signatures as `verify_quorum`.
+        /// Returns the distinct members whose signature verified, in
+        /// first-success order, and only when that count meets the
+        /// threshold. `None` for an unknown account or a missed threshold.
+        /// A key that was merely passed in — non-member, failed signature,
+        /// or a repeated member — is not returned.
+        pub fn verify_quorum_signers(&self, args: VerifyQuorumArgs) -> Option<Vec<BlsPublicKey>> {
+            let Some(account) = self.account(args.account_id) else {
+                return None;
+            };
+            let (_matched, signers) = quorum_scan(&account.members, &args.msg, &args.sigs);
+            if (signers.len() as u32) < account.threshold {
+                return None;
+            }
+            Some(signers)
+        }
+
         pub fn verify_quorum_aggregate(&self, args: VerifyQuorumAggregateArgs) -> bool {
             let Some(account) = self.account(args.account_id) else {
                 return false;
@@ -420,12 +437,22 @@ mod knot_registry {
     }
 
     fn quorum_counts(members: &[BlsPublicKey], msg: &[u8], sigs: &[SignatureEntry]) -> (u32, u32) {
+        let (matched, verified) = quorum_scan(members, msg, sigs);
+        (matched, verified.len() as u32)
+    }
+
+    /// `(member_matches, distinct keys that verified)`. Same early-reject,
+    /// duplicate skip, and `verify_bls` rule as the count `verify_quorum` uses.
+    fn quorum_scan(
+        members: &[BlsPublicKey],
+        msg: &[u8],
+        sigs: &[SignatureEntry],
+    ) -> (u32, Vec<BlsPublicKey>) {
         if sigs.len() > members.len() {
-            return (0, 0);
+            return (0, Vec::new());
         }
         let mut counted: Vec<BlsPublicKey> = Vec::new();
         let mut matched = 0u32;
-        let mut verified = 0u32;
         for entry in sigs {
             if !members.contains(&entry.signer) {
                 continue;
@@ -436,10 +463,9 @@ mod knot_registry {
             }
             if abi::verify_bls(msg.to_vec(), entry.signer, entry.signature) {
                 counted.push(entry.signer);
-                verified += 1;
             }
         }
-        (matched, verified)
+        (matched, counted)
     }
 
     fn require_quorum(
