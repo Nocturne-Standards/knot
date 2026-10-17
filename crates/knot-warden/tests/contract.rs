@@ -787,7 +787,7 @@ fn zero_delay_set_scheduler_applies() {
 }
 
 #[test]
-fn set_guardian_forwards_without_touching_warden_maps() {
+fn set_guardian_waits_delay_then_forwards() {
     let rng = &mut StdRng::seed_from_u64(15);
     let (_, owner) = keypair(rng);
     let (_, op) = keypair(rng);
@@ -823,13 +823,32 @@ fn set_guardian_forwards_without_touching_warden_maps() {
             &Account::External(next),
             POINT_LIMIT,
         )
+        .expect("queue set_guardian");
+    assert_eq!(warden_topics(&receipt), ["admin_scheduled"]);
+    assert!(pending_service(session, "treasury").is_none());
+    let queued = pending_admin(session).expect("warden admin slot");
+    assert_eq!(
+        queued.change,
+        PendingAdmin::AtlasGuardian(Account::External(next))
+    );
+    assert_eq!(queued.execute_at, 4);
+    assert!(
+        session
+            .call::<(), Option<PendingView>>(ATLAS_ID, "pending", &(), POINT_LIMIT)
+            .unwrap()
+            .data
+            .is_none()
+    );
+
+    set_height(session, 4);
+    let executed = session
+        .call::<(), ()>(WARDEN_ID, "execute_admin", &(), POINT_LIMIT)
         .expect("forward set_guardian");
-    assert_eq!(warden_topics(&receipt), ["guardian_forwarded"]);
+    assert_eq!(warden_topics(&executed), ["guardian_forwarded"]);
     let forwarded: GuardianForwarded =
-        decode_event(event(&receipt, WARDEN_ID, "guardian_forwarded"));
+        decode_event(event(&executed, WARDEN_ID, "guardian_forwarded"));
     assert_eq!(forwarded.guardian, Account::External(next));
     assert!(pending_admin(session).is_none());
-    assert!(pending_service(session, "treasury").is_none());
     let atlas_pending = session
         .call::<(), Option<PendingView>>(ATLAS_ID, "pending", &(), POINT_LIMIT)
         .unwrap()
@@ -839,7 +858,7 @@ fn set_guardian_forwards_without_touching_warden_maps() {
         atlas_pending.change,
         PendingChange::Guardian(Account::External(next))
     );
-    assert_eq!(atlas_pending.execute_at, 10);
+    assert_eq!(atlas_pending.execute_at, 14);
 
     set_sender(session, Some(&op));
     let blocked = session.call::<u64, ()>(WARDEN_ID, "set_timelock", &3, POINT_LIMIT);
@@ -882,8 +901,9 @@ fn delay_overflow_panics() {
     let (_, owner) = keypair(rng);
     let (_, op) = keypair(rng);
     let session = &mut deploy(&owner);
-    bootstrap(session, &owner, Account::External(op), u64::MAX, 0);
-    set_height(session, 1);
+    const MAX_DELAY: u64 = 777_600;
+    bootstrap(session, &owner, Account::External(op), MAX_DELAY, 0);
+    set_height(session, u64::MAX - MAX_DELAY + 1);
     set_sender(session, Some(&op));
     let err = session.call::<SetServiceArgs, ()>(
         WARDEN_ID,
@@ -893,4 +913,33 @@ fn delay_overflow_panics() {
     );
     assert_panics(err.expect_err("overflow"), "delay overflow");
     assert!(pending_service(session, "treasury").is_none());
+}
+
+#[test]
+fn delay_cap_rejects_init_and_schedule() {
+    let rng = &mut StdRng::seed_from_u64(17);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    const MAX_DELAY: u64 = 777_600;
+    init_atlas(session, &owner, 0);
+    set_sender(session, Some(&owner));
+    let over = session.call::<InitWardenArgs, ()>(
+        WARDEN_ID,
+        "init_warden",
+        &InitWardenArgs {
+            atlas: ATLAS_ID,
+            scheduler: Account::External(op),
+            delay_blocks: MAX_DELAY + 1,
+        },
+        POINT_LIMIT,
+    );
+    assert_panics(over.expect_err("cap"), "delay above maximum");
+
+    init_warden(session, &owner, Account::External(op), MAX_DELAY);
+    assert_eq!(delay_blocks(session), MAX_DELAY);
+    set_sender(session, Some(&op));
+    let scheduled = session.call::<u64, ()>(WARDEN_ID, "set_delay", &(MAX_DELAY + 1), POINT_LIMIT);
+    assert_panics(scheduled.expect_err("cap"), "delay above maximum");
+    assert!(pending_admin(session).is_none());
 }
