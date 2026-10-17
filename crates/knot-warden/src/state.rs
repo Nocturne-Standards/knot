@@ -34,6 +34,9 @@ mod warden {
     }
 
     impl WardenState {
+        /// 90 days of 10-second Dusk blocks. Same cap as Atlas `timelock_blocks`.
+        const MAX_DELAY_BLOCKS: u64 = 777_600;
+
         pub const fn new() -> Self {
             Self {
                 atlas: None,
@@ -55,6 +58,7 @@ mod warden {
             if self.scheduler.is_some() {
                 panic!("warden already initialized");
             }
+            Self::require_delay(args.delay_blocks);
             self.atlas = Some(args.atlas);
             self.scheduler = Some(args.scheduler.clone());
             self.delay_blocks = args.delay_blocks;
@@ -174,6 +178,7 @@ mod warden {
         /// the scheduler cannot zero the delay and repoint in one transaction.
         pub fn set_delay(&mut self, blocks: u64) {
             self.require_scheduler();
+            Self::require_delay(blocks);
             if self.delay_blocks == blocks {
                 panic!("delay unchanged");
             }
@@ -208,6 +213,10 @@ mod warden {
                     self.scheduler = Some(scheduler.clone());
                     abi::emit("scheduler_set", SchedulerSet { scheduler });
                 }
+                PendingAdmin::AtlasGuardian(guardian) => {
+                    let _: () = abi::call(self.atlas_id(), "set_guardian", &guardian)
+                        .expect("warden: atlas set_guardian failed");
+                }
             }
         }
 
@@ -220,12 +229,22 @@ mod warden {
             abi::emit("admin_cancelled", AdminCancelled { change });
         }
 
-        /// Forward Atlas `set_guardian` in this transaction. Does not wait
-        /// `delay_blocks` and does not touch warden's pending maps.
+        /// Queue Atlas `set_guardian` for `delay_blocks`. `execute_admin`
+        /// forwards it. The directory then waits its own timelock.
         pub fn set_guardian(&mut self, next: Account) {
             self.require_scheduler();
-            let _: () = abi::call(self.atlas_id(), "set_guardian", &next)
-                .expect("warden: atlas set_guardian failed");
+            let current: Option<Account> = abi::call(self.atlas_id(), "guardian", &())
+                .expect("warden: atlas guardian failed");
+            if current.as_ref() == Some(&next) {
+                panic!("guardian unchanged");
+            }
+            self.schedule_admin(PendingAdmin::AtlasGuardian(next));
+        }
+
+        fn require_delay(blocks: u64) {
+            if blocks > Self::MAX_DELAY_BLOCKS {
+                panic!("delay above maximum");
+            }
         }
 
         /// Forward Atlas `set_timelock` in this transaction.

@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+## [0.2.0]
+
+### Changed
+
+- `PendingAdmin::AtlasGuardian(Account)`. Existing `Delay` and `Scheduler` layouts stay pinned. Not deployed.
+
 ## [0.1.0]
 
 ### Added

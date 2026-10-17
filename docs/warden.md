@@ -1,6 +1,6 @@
 # Warden
 
-Implemented in `knot-warden` 0.1.1 and `knot-warden-encoding` 0.1.0. Testnet id `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` (tx `9b821f4a386126509aa4963dead608f63972af906b232b8916b7f0ed2f9e2952`), in front of Atlas 0.3.1 `21c653385e3b7cc8be32edd5e6df2e30b6464be867f39442171ba8ca8d089612`.
+Source is `knot-warden` 0.2.0 and `knot-warden-encoding` 0.2.0. Testnet runs 0.1.1 `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` (deploy tx `ebf2d30d449860949d44aeb904b01188a90d3853a95e84ffc8a71bce88676d0a`), in front of Atlas 0.3.1 `21c653385e3b7cc8be32edd5e6df2e30b6464be867f39442171ba8ca8d089612`. The first 0.1.1 was `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` (tx `9b821f4a386126509aa4963dead608f63972af906b232b8916b7f0ed2f9e2952`). The deployments record has no `init_warden` for the current id and no `set_guardian` for the move. 0.1.1 forwards `set_guardian` immediately. 0.2.0 does not.
 
 Warden is the contract an operator puts in Atlas's guardian slot when a service repoint must wait. Knot-proposals stays a generic `call_raw` executor and does not grow a delay. Atlas stays a registry: it does not call warden, and it does not delay `set_service`.
 
@@ -12,14 +12,14 @@ Warden is the only contract that should call Atlas writes in a production deploy
 
 - A service repoint waits `delay_blocks` inside warden, then warden calls Atlas `set_service`.
 - Replacing warden's scheduler, and changing `delay_blocks`, wait out the current `delay_blocks`.
-- `set_guardian`, `set_timelock`, and `cancel_pending` are forwarded to Atlas in the same transaction. Atlas applies its own delay to the first two. Warden does not add a second wait on that path.
+- `set_guardian` waits `delay_blocks` in the admin slot, then `execute_admin` calls Atlas `set_guardian`. Atlas applies its own timelock on top. `set_timelock` and `cancel_pending` are forwarded in the same transaction.
 
 Two numbers, two jobs:
 
 | Delay | Where it lives | What it covers |
 |---|---|---|
-| `delay_blocks` | warden | `schedule_service`, `set_delay`, `set_scheduler` |
-| `timelock_blocks` | Atlas | `set_guardian`, `set_timelock` |
+| `delay_blocks` | warden | `schedule_service`, `set_delay`, `set_scheduler`, `set_guardian` |
+| `timelock_blocks` | Atlas | `set_guardian` (after the warden delay), `set_timelock` |
 
 Atlas's delay is what a hostile warden cannot delete. Warden can call `set_guardian`, but the new guardian does not write until Atlas `execute_pending`. Until that call, warden is still the guardian and `delay_blocks` still applies to service repoints. After that call, warden's delay no longer matters. Operators alarm on Atlas `pending` for that reason.
 
@@ -31,7 +31,7 @@ Atlas's delay is what a hostile warden cannot delete. Warden can call `set_guard
 - Not a second Atlas. It does not store the directory and it does not answer `resolve` for consumers. Consumers keep baking the Atlas id.
 - Not a generic proxy. There is no method that takes a function name and raw bytes and forwards them to Atlas. A closed method list is the policy. An open forwarder would let the scheduler call Atlas `set_service` with no wait.
 - Not Vigil, and not a constants table. Bounds that used to be Atlas `constant(name)` belong in the service contract `resolve` returns (for Vigil, `vigil_policy`). Warden only decides when that name may point at a different id.
-- Not upgradeable. A new warden is a new `ContractId`, installed with Atlas `set_guardian`, which waits `timelock_blocks`.
+- Not upgradeable. A new warden is a new `ContractId`, installed with `set_guardian`, which waits `delay_blocks` and then Atlas `timelock_blocks`.
 
 ## Crates
 
@@ -54,7 +54,7 @@ pending_services: BTreeMap<String, (ContractId, u64)>   // name -> (id, execute_
 pending_admin: Option<(PendingAdmin, u64)>
 ```
 
-`PendingAdmin` is `Delay(u64)` or `Scheduler(Account)`. One admin slot. One pending id per service name. The service map and the admin slot do not block each other: a pending delay change does not freeze the directory, and a pending repoint does not freeze a scheduler rotation.
+`PendingAdmin` is `Delay(u64)`, `Scheduler(Account)`, or `AtlasGuardian(Account)`. One admin slot. `init_warden` and `set_delay` reject a delay above 777,600 blocks. One pending id per service name. The service map and the admin slot do not block each other: a pending delay change does not freeze the directory, and a pending repoint does not freeze a scheduler rotation.
 
 `execute_at` for either kind is `block_height().checked_add(delay_blocks)` at schedule time. Overflow panics `delay overflow`. Comparison matches Atlas: execute is allowed when `block_height() >= execute_at`.
 

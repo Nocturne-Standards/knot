@@ -20,14 +20,16 @@ Architecture and long-form docs:
 does not link it. Knot is complete without Atlas.
 
 The delaying guardian in front of Atlas is [warden](docs/warden.md)
-(`knot-warden` 0.1.1, testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb`).
+(`knot-warden` 0.2.0; testnet is still 0.1.1
+`113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3`).
 Proposals `call_raw` into warden, and warden calls Atlas. Pointing Atlas's
 guardian straight at the proposals contract still works; `finalize` then
 applies `set_service` in that same transaction.
 
 Knot's per-account delay covers registry writes. Warden's `delay_blocks`
-covers an Atlas service repoint. Stacking both on one intent waits twice.
-Atlas `timelock_blocks` covers replacing the guardian.
+covers an Atlas service repoint and, in 0.2.0, a guardian change.
+Stacking both on one intent waits twice. Atlas `timelock_blocks` covers
+`set_timelock` and the second half of a guardian change.
 
 ## Crates
 
@@ -38,8 +40,8 @@ Atlas `timelock_blocks` covers replacing the guardian.
 | `knot-proposals` | Apache-2.0 | 0.3.3 | On-chain propose → approve → finalize `call_raw` |
 | `knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
 | `knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
-| `knot-warden-encoding` | Apache-2.0 | 0.1.0 | Warden call types and events. Own workspace; needs sibling atlas 0.3 |
-| `knot-warden` | Apache-2.0 | 0.1.1 | Delaying guardian in front of Atlas. Testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` |
+| `knot-warden-encoding` | Apache-2.0 | 0.2.0 | Warden call types and events. Own workspace; needs sibling atlas 0.3 |
+| `knot-warden` | Apache-2.0 | 0.2.0 | Delaying guardian in front of Atlas. Testnet is still 0.1.1 `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` |
 
 The Apache suite and **AGPL collector** are intentionally split. Self-host
 `knot-collector` only if you accept AGPL (or purchase a commercial
