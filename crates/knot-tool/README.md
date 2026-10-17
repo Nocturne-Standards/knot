@@ -268,7 +268,7 @@ our preimage shape. **No follow-up work in the current suite plan.**
 ### Monitoring note
 
 Atlas is outside this repo. On Atlas 0.3, `set_service` is immediate. A
-service delay lives in [warden](../../docs/warden.md) (`knot-warden` 0.1.1,
+service delay lives in [warden](../../docs/warden.md) (`knot-warden` 0.2.0, testnet still 0.1.1,
 testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb`).
 Replacing the guardian waits `timelock_blocks` inside Atlas. Knot membership
 and proposal execution still delay when the registry account's delay is

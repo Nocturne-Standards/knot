@@ -4,10 +4,12 @@
 //! Warden: the delaying guardian in front of Atlas.
 //!
 //! Atlas's guardian slot points here. This contract calls Atlas. Atlas does
-//! not call it. `delay_blocks` waits on service repoints and on replacing
-//! the scheduler or the delay. `set_guardian`, `set_timelock`, and
-//! `cancel_atlas_pending` are forwarded in the same transaction; Atlas
-//! applies its own delay to the first two.
+//! not call it. `delay_blocks` waits on service repoints, on replacing the
+//! scheduler or the delay, and on forwarding `set_guardian`. `set_timelock`
+//! and `cancel_atlas_pending` are forwarded in the same transaction. Atlas
+//! applies its own delay to `set_guardian` and `set_timelock` after the
+//! forward. A guardian change therefore waits `delay_blocks` plus the Atlas
+//! timelock.
 //!
 //! Spec: `docs/warden.md`.
 
