@@ -2,7 +2,7 @@
 
 Delaying guardian in front of Atlas. Spec: [`docs/warden.md`](../../docs/warden.md).
 
-Testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb`. Version 0.1.1.
+Testnet `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` is 0.1.1. This crate is 0.2.0 and is not deployed.
 
 ## Build / test
 

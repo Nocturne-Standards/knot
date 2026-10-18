@@ -25,7 +25,9 @@ pub struct InitWardenArgs {
     pub delay_blocks: u64,
 }
 
-/// Scheduled replacement of the scheduler, or of `delay_blocks`.
+/// Scheduled replacement of the scheduler, of `delay_blocks`, or of the
+/// Atlas guardian. The Atlas guardian variant waits `delay_blocks` here
+/// before warden calls Atlas `set_guardian`.
 ///
 /// Data-carrying enum: no `repr(C)`. Pin is the layout golden.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -34,6 +36,7 @@ pub struct InitWardenArgs {
 pub enum PendingAdmin {
     Delay(u64),
     Scheduler(Account),
+    AtlasGuardian(Account),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
