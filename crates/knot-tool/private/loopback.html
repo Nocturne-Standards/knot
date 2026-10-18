@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Knot loopback</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      font: 16px/1.45 ui-sans-serif, system-ui, sans-serif;
+      max-width: 38rem;
+      margin: 2rem auto;
+      padding: 0 1rem 3rem;
+      color: #1c1917;
+      background: #fafaf9;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+    h2 { font-size: 1.05rem; margin: 1.6rem 0 0.4rem; }
+    p { margin: 0.4rem 0; }
+    button, input {
+      font: inherit;
+    }
+    button {
+      padding: 0.4rem 0.75rem;
+      background: #1c1917;
+      color: #fafaf9;
+      border: 0;
+      border-radius: 4px;
+    }
+    button:disabled { opacity: 0.4; }
+    label { display: block; margin-top: 0.75rem; }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 0.25rem;
+      padding: 0.35rem 0.5rem;
+    }
+    .row { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #fff;
+      border: 1px solid #e7e5e4;
+      padding: 0.75rem;
+      min-height: 2.5rem;
+    }
+    .warn { color: #9a3412; }
+  </style>
+</head>
+<body data-loopback-skin="1">
+  <h1>Loopback</h1>
+  <p>Private page for <code>knot-tool serve</code> on testnet. One account. One canonical quorum. Keys stay in this process. Gas is paid by <code>rusk-wallet</code>.</p>
+
+  <h2>Account</h2>
+  <p id="identity">Loading local signer…</p>
+  <div class="row">
+    <button id="new-signer" type="button" disabled>Create local signer</button>
+  </div>
+  <label>Account id
+    <input id="account-id" inputmode="numeric" autocomplete="off" spellcheck="false">
+  </label>
+  <div class="row">
+    <button id="load" type="button">Load</button>
+    <button id="create" type="button" disabled>Create 1-of-1</button>
+  </div>
+  <pre id="account-view">No account loaded.</pre>
+
+  <h2>Canonical quorum</h2>
+  <p>Preview asks the process for the 32-byte message. Confirm that fingerprint, then submit <code>verify_quorum</code>.</p>
+  <div class="row">
+    <button id="preview" type="button" disabled>Preview</button>
+    <button id="confirm" type="button" disabled>Confirm</button>
+    <button id="submit" type="button" disabled>Submit</button>
+  </div>
+  <pre id="preview-view">No preview.</pre>
+  <pre id="submit-view"></pre>
+
+  <script>
+    const identityEl = document.getElementById("identity");
+    const newSignerBtn = document.getElementById("new-signer");
+    const accountIdEl = document.getElementById("account-id");
+    const loadBtn = document.getElementById("load");
+    const createBtn = document.getElementById("create");
+    const accountView = document.getElementById("account-view");
+    const previewBtn = document.getElementById("preview");
+    const confirmBtn = document.getElementById("confirm");
+    const submitBtn = document.getElementById("submit");
+    const previewView = document.getElementById("preview-view");
+    const submitView = document.getElementById("submit-view");
+
+    let signer = null;
+    let account = null;
+    let preview = null;
+    let confirmedDigest = null;
+
+    function text(el, value) {
+      el.textContent = value;
+    }
+
+    async function api(path, body) {
+      const opts = { headers: {} };
+      if (body !== undefined) {
+        opts.method = "POST";
+        opts.headers["content-type"] = "application/json";
+        opts.body = JSON.stringify(body);
+      }
+      const resp = await fetch(path, opts);
+      const raw = await resp.text();
+      let data = null;
+      if (raw) {
+        try { data = JSON.parse(raw); } catch (_) { data = { message: raw }; }
+      }
+      if (!resp.ok) {
+        const message = (data && (data.message || data.code)) || resp.statusText;
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    function resetQuorum() {
+      preview = null;
+      confirmedDigest = null;
+      previewBtn.disabled = !account || !signer || !account.member;
+      confirmBtn.disabled = true;
+      submitBtn.disabled = true;
+      text(previewView, "No preview.");
+      text(submitView, "");
+    }
+
+    function renderAccount() {
+      if (!account) {
+        text(accountView, "No account loaded.");
+        resetQuorum();
+        return;
+      }
+      const lines = [
+        "id " + account.id,
+        "threshold " + account.threshold,
+        "nonce " + account.nonce,
+        "members " + account.members.length,
+        "local signer is a member: " + (account.member ? "yes" : "no"),
+      ];
+      text(accountView, lines.join("\n"));
+      resetQuorum();
+    }
+
+    async function refreshIdentities() {
+      const list = await api("/api/identities");
+      signer = list.find((row) => !row.pk_only) || null;
+      if (!signer) {
+        text(identityEl, "No local signer in this process.");
+        newSignerBtn.disabled = false;
+        createBtn.disabled = true;
+      } else {
+        text(identityEl, "Local signer: " + signer.name);
+        newSignerBtn.disabled = true;
+        createBtn.disabled = false;
+      }
+      renderAccount();
+    }
+
+    async function loadAccount(id) {
+      const view = await api("/api/account/" + id);
+      if (!view) {
+        account = null;
+        text(accountView, "Account " + id + " not found.");
+        resetQuorum();
+        return;
+      }
+      const member = !!(signer && view.members.indexOf(signer.pk_base58) !== -1);
+      account = {
+        id: id,
+        threshold: view.threshold,
+        nonce: view.nonce,
+        members: view.members,
+        member: member,
+      };
+      accountIdEl.value = String(id);
+      renderAccount();
+    }
+
+    newSignerBtn.addEventListener("click", async () => {
+      newSignerBtn.disabled = true;
+      try {
+        await api("/api/identities", { name: "loopback" });
+        await refreshIdentities();
+      } catch (err) {
+        text(identityEl, err.message);
+        newSignerBtn.disabled = false;
+      }
+    });
+
+    loadBtn.addEventListener("click", async () => {
+      const id = Number(accountIdEl.value);
+      if (!Number.isInteger(id) || id < 0) {
+        text(accountView, "Account id must be a non-negative integer.");
+        return;
+      }
+      try {
+        await loadAccount(id);
+      } catch (err) {
+        text(accountView, err.message);
+      }
+    });
+
+    createBtn.addEventListener("click", async () => {
+      if (!signer) return;
+      createBtn.disabled = true;
+      text(accountView, "Creating 1-of-1 account…");
+      try {
+        const nextId = await api("/api/account/next-id");
+        const created = await api("/api/account/create", {
+          members: [signer.name],
+          threshold: 1,
+        });
+        if (created.outcome && created.outcome !== "ok") {
+          throw new Error(created.outcome + (created.panic_line ? ": " + created.panic_line : ""));
+        }
+        text(accountView, "Waiting for account " + nextId + "…");
+        let found = false;
+        for (let i = 0; i < 45; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          try {
+            await loadAccount(nextId);
+          } catch (_) {
+            continue;
+          }
+          if (account && account.id === nextId) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          text(accountView, "Account " + nextId + " not readable yet. Load it again in a moment.");
+        }
+      } catch (err) {
+        text(accountView, err.message);
+      } finally {
+        createBtn.disabled = !signer;
+      }
+    });
+
+    previewBtn.addEventListener("click", async () => {
+      if (!account || !signer) return;
+      previewBtn.disabled = true;
+      confirmedDigest = null;
+      confirmBtn.disabled = true;
+      submitBtn.disabled = true;
+      text(previewView, "Preview…");
+      try {
+        preview = await api("/api/loopback/quorum/preview", {
+          account: account.id,
+          signers: [signer.name],
+        });
+        text(previewView, [
+          "account " + preview.account_id,
+          "digest " + preview.digest_hex,
+          "mnemonic " + preview.digest_mnemonic,
+          "safety " + preview.digest_safety_number,
+          preview.note || "",
+        ].filter(Boolean).join("\n"));
+        confirmBtn.disabled = false;
+      } catch (err) {
+        preview = null;
+        text(previewView, err.message);
+      } finally {
+        previewBtn.disabled = !account || !signer || !account.member;
+      }
+    });
+
+    confirmBtn.addEventListener("click", () => {
+      if (!preview || !preview.digest_hex) return;
+      confirmedDigest = preview.digest_hex;
+      confirmBtn.disabled = true;
+      submitBtn.disabled = false;
+      text(submitView, "Confirmed. Submit sends verify_quorum.");
+    });
+
+    submitBtn.addEventListener("click", async () => {
+      if (!account || !signer || !confirmedDigest) return;
+      submitBtn.disabled = true;
+      text(submitView, "Submitting…");
+      try {
+        const out = await api("/api/loopback/quorum/submit", {
+          account: account.id,
+          signers: [signer.name],
+          confirm: true,
+          digest_hex: confirmedDigest,
+        });
+        const lines = [
+          "outcome " + out.outcome,
+          "status " + out.tx_status,
+          out.tx_hash ? "tx " + out.tx_hash : "tx (none)",
+        ];
+        if (out.panic_line) lines.push(out.panic_line);
+        if (out.note) lines.push(out.note);
+        text(submitView, lines.join("\n"));
+        confirmedDigest = null;
+        confirmBtn.disabled = !preview;
+      } catch (err) {
+        text(submitView, err.message);
+        submitBtn.disabled = false;
+      }
+    });
+
+    refreshIdentities().catch((err) => {
+      text(identityEl, err.message);
+    });
+  </script>
+</body>
+</html>
