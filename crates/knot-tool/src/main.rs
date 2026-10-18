@@ -14,6 +14,7 @@ mod chain;
 #[cfg(not(feature = "deployments-crate"))]
 mod deployments;
 mod keystore;
+mod loopback;
 mod proposals_types;
 mod registry_types;
 mod rpc;

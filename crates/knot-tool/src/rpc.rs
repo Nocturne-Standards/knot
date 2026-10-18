@@ -428,7 +428,11 @@ async fn index(State(state): State<Arc<AppState>>, Query(q): Query<IndexQuery>) 
             .into_response();
     }
 
-    let template = include_str!("../static/index.html");
+    let template = if state.demo_mode == DemoMode::Testnet {
+        include_str!("../private/loopback.html")
+    } else {
+        include_str!("../static/index.html")
+    };
     (
         StatusCode::OK,
         [
@@ -2118,6 +2122,87 @@ async fn api_proposal_next_id(State(state): State<Arc<AppState>>) -> ApiResult<J
     Ok(Json(next))
 }
 
+#[derive(Deserialize)]
+struct LoopbackQuorumReq {
+    account: u64,
+    signers: Vec<String>,
+    /// Must be true on submit. Preview ignores it.
+    #[serde(default)]
+    confirm: bool,
+    /// Preview digest (`0x` + 64 hex). Submit recomputes and refuses a mismatch.
+    #[serde(default)]
+    digest_hex: String,
+}
+
+fn digests_match(got: &str, want: &str) -> bool {
+    let got = got.trim().trim_start_matches("0x").to_ascii_lowercase();
+    let want = want.trim().trim_start_matches("0x").to_ascii_lowercase();
+    constant_time_eq(&got, &want)
+}
+
+async fn loopback_quorum_message(state: &AppState, account_id: u64) -> ApiResult<Vec<u8>> {
+    mock_drawer_unavailable(state)?;
+    let view = fetch_registry_account(state, account_id).await?;
+    let self_id =
+        chain::contract_self_id_bytes(chain::Contract::Registry).map_err(RpcError::internal)?;
+    let msg = crate::loopback::canonical_quorum_message(
+        chain::digest_chain_id(),
+        &self_id,
+        account_id,
+        view.nonce,
+    );
+    Ok(msg.to_vec())
+}
+
+async fn api_loopback_quorum_preview(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<LoopbackQuorumReq>,
+) -> ApiResult<Json<QuorumSignPreviewOut>> {
+    mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
+    let msg = loopback_quorum_message(&state, req.account).await?;
+    Ok(Json(quorum_preview_out(req.account, &msg, &req.signers)))
+}
+
+async fn api_loopback_quorum_submit(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<LoopbackQuorumReq>,
+) -> ApiResult<Json<SubmitOut>> {
+    if !req.confirm {
+        return Err(RpcError::confirm_required());
+    }
+    mock_drawer_unavailable(&state)?;
+    ensure_signers_are_members(&state, req.account, &req.signers).await?;
+    let msg = loopback_quorum_message(&state, req.account).await?;
+    let (digest_hex, _, _) = bls::message_fingerprint_display(&msg);
+    if !digests_match(&req.digest_hex, &digest_hex) {
+        return Err(RpcError::digest_mismatch(
+            "loopback quorum digest does not match preview",
+        ));
+    }
+    let sigs = build_sigs_locked(&state, &req.signers, &msg).await?;
+    let args = VerifyQuorumArgs {
+        account_id: req.account,
+        msg,
+        sigs,
+    };
+    let bytes = chain::encode(&args).map_err(RpcError::internal)?;
+    let result = tokio::task::spawn_blocking(move || chain::submit_call("verify_quorum", &bytes))
+        .await
+        .map_err(RpcError::internal)?
+        .map_err(RpcError::internal)?;
+    let mut out = submit_from_log(result.stdout);
+    out.note = Some(
+        "verify_quorum returns bool with no event. Free-read follow-up may be untrusted on live testnet."
+            .into(),
+    );
+    if let Ok((d, c)) = free_read_quorum(&state, &args).await {
+        out.diagnose = d;
+        out.check = c;
+    }
+    Ok(Json(out))
+}
+
 fn build_router(state: Arc<AppState>) -> Router {
     let api = Router::new()
         .route("/api/setup/status", get(api_setup_status))
@@ -2135,6 +2220,14 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/registry/accounts", get(api_registry_accounts))
         .route("/api/quorum/preview", post(api_quorum_preview))
         .route("/api/quorum/submit", post(api_quorum_submit))
+        .route(
+            "/api/loopback/quorum/preview",
+            post(api_loopback_quorum_preview),
+        )
+        .route(
+            "/api/loopback/quorum/submit",
+            post(api_loopback_quorum_submit),
+        )
         .route("/api/quorum/check", post(api_quorum_check))
         .route("/api/quorum/diagnose", post(api_quorum_diagnose))
         .route("/api/quorum-agg/preview", post(api_quorum_agg_preview))
@@ -2820,5 +2913,99 @@ mod generic_rpc_smoke {
         );
         assert!(!preview["digest_mnemonic"].as_str().unwrap_or("").is_empty());
         assert_eq!(preview["new_threshold"], 1);
+    }
+
+    #[tokio::test]
+    async fn testnet_index_is_loopback_skin_not_public_lab() {
+        let state = test_state_testnet_with_identities(&[]);
+        let secret = state.session_token.clone();
+        let app = build_router(state);
+        let req = Request::builder()
+            .method("GET")
+            .uri("/")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.expect("oneshot");
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let html = String::from_utf8(bytes.to_vec()).expect("utf8 body");
+        assert!(html.contains("data-loopback-skin=\"1\""));
+        assert!(html.contains("Canonical quorum"));
+        assert!(html.contains("Confirm"));
+        assert!(!html.contains("data-beat=\"1\""));
+        assert!(!html.contains("set-timelock"));
+        assert!(!html.contains("set_timelock"));
+        assert!(!html.contains(&secret));
+    }
+
+    #[tokio::test]
+    async fn mock_index_stays_public_lab() {
+        let state = test_state_with_identities(&[]);
+        let app = build_router(state);
+        let req = Request::builder()
+            .method("GET")
+            .uri("/")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.expect("oneshot");
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let html = String::from_utf8(bytes.to_vec()).expect("utf8 body");
+        assert!(html.contains("data-beat=\"1\""));
+        assert!(!html.contains("data-loopback-skin"));
+    }
+
+    #[tokio::test]
+    async fn loopback_quorum_submit_without_confirm_is_rejected() {
+        let state = test_state_testnet_with_identities(&["alice"]);
+        let app = build_router(state);
+        let body = serde_json::json!({
+            "account": 0,
+            "signers": ["alice"],
+            "confirm": false
+        });
+        let (status, resp_body) = oneshot_json(
+            app,
+            "POST",
+            "/api/loopback/quorum/submit",
+            Some(body.to_string()),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "loopback submit: {resp_body}"
+        );
+        let err: serde_json::Value = serde_json::from_str(&resp_body).expect("error json");
+        assert_eq!(err["code"], "confirm_required");
+    }
+
+    #[tokio::test]
+    async fn loopback_quorum_refuses_mock() {
+        let state = test_state_with_identities(&["alice"]);
+        let app = build_router(state);
+        let body = serde_json::json!({
+            "account": 0,
+            "signers": ["alice"],
+            "confirm": true,
+            "digest_hex": "0x00"
+        });
+        let (status, resp_body) = oneshot_json(
+            app,
+            "POST",
+            "/api/loopback/quorum/submit",
+            Some(body.to_string()),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::NOT_IMPLEMENTED,
+            "mock loopback: {resp_body}"
+        );
+        let err: serde_json::Value = serde_json::from_str(&resp_body).expect("error json");
+        assert_eq!(err["code"], "live_mode_required");
     }
 }
