@@ -6,6 +6,7 @@ Public product documentation for Knot.
 |---|---|
 | [security-model.md](security-model.md) | Trust split: Prove vs Coord, collector limits |
 | [versioning.md](versioning.md) | Crate semver vs git tags |
+| [cargo-release.md](cargo-release.md) | crates.io publish plan (`nocturne-knot-*`, not shipped) |
 | [design-notes.md](design-notes.md) | Why certain public design choices look the way they do |
 | [warden.md](warden.md) | Delaying guardian in front of Atlas. Testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` |
 
