@@ -36,7 +36,7 @@ Stacking both on one intent waits twice. Atlas `timelock_blocks` covers
 | Crate | License | Version | Role |
 |---|---|---|---|
 | `knot-encoding` | Apache-2.0 | 0.1.2 | Canonical proposal preimage + blob helpers + M3 fingerprint |
-| `knot-registry` | Apache-2.0 | 0.2.0 | On-chain BLS M-of-N quorum API |
+| `knot-registry` | Apache-2.0 | 0.2.1 | On-chain BLS M-of-N quorum API |
 | `knot-registry-data` | Apache-2.0 | 0.1.0 | Account book; writes only from the Atlas-resolved registry logic |
 | `knot-proposals` | Apache-2.0 | 0.4.0 | On-chain propose → approve → finalize `call_raw` |
 | `knot-proposals-data` | Apache-2.0 | 0.1.0 | Proposal book; writes only from the Atlas-resolved proposals logic |
