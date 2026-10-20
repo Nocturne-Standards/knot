@@ -1,6 +1,6 @@
 # Warden
 
-Source is `knot-warden` 0.2.0 and `knot-warden-encoding` 0.2.0. Testnet runs 0.1.1 `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` (deploy tx `ebf2d30d449860949d44aeb904b01188a90d3853a95e84ffc8a71bce88676d0a`), in front of Atlas 0.3.1 `21c653385e3b7cc8be32edd5e6df2e30b6464be867f39442171ba8ca8d089612`. The first 0.1.1 was `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` (tx `9b821f4a386126509aa4963dead608f63972af906b232b8916b7f0ed2f9e2952`). The deployments record has no `init_warden` for the current id and no `set_guardian` for the move. 0.1.1 forwards `set_guardian` immediately. 0.2.0 does not.
+Source is `knot-warden` 0.2.1 and `knot-warden-encoding` 0.2.0. Testnet runs 0.2.0 `7d1659d658a6a9b8781e8f85b3f7708a4e3079dd75b706ea855fbf0c6d2c7000` in front of Atlas 0.4.0 `27882147345ff547ef37fc4fbd5bf247d8c340950b8131f9e91e672d30239724`; 0.2.1 is not deployed. The sentences below about testnet running 0.1.1 are history. Testnet runs 0.1.1 `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` (deploy tx `ebf2d30d449860949d44aeb904b01188a90d3853a95e84ffc8a71bce88676d0a`), in front of Atlas 0.3.1 `21c653385e3b7cc8be32edd5e6df2e30b6464be867f39442171ba8ca8d089612`. The first 0.1.1 was `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` (tx `9b821f4a386126509aa4963dead608f63972af906b232b8916b7f0ed2f9e2952`). The deployments record has no `init_warden` for the current id and no `set_guardian` for the move. 0.1.1 forwards `set_guardian` immediately. 0.2.0 does not.
 
 Warden is the contract an operator puts in Atlas's guardian slot when a service repoint must wait. Knot-proposals stays a generic `call_raw` executor and does not grow a delay. Atlas stays a registry: it does not call warden, and it does not delay `set_service`.
 
@@ -128,6 +128,13 @@ If an admin change is already stored, either call panics `a pending admin change
 Delay `0` emits `admin_scheduled`, then applies in the same transaction. Production `init_warden` passes the delay it means to keep. A deployment left at `0` has no warden delay until a `set_delay` is executed, and that first raise from `0` applies in the same call.
 
 A service scheduled while an admin change is pending uses the delay already stored on the service entry, not the pending delay.
+
+### What the warden does not protect
+
+- **The delay is a reaction window, not a veto.** Only the scheduler can cancel. A compromised scheduler can queue a repoint at height `t`; a replacement scheduler queued at `t+1` lands at `t+1+delay_blocks`, after the repoint is executable. Nothing inside the system recovers from a scheduler compromise before the window closes; observers have to act on `service_scheduled` (revoke the pin, rotate the consumers).
+- **A guardian handover orphans the warden.** After Atlas applies a new guardian, queued `pending_services` and `pending_admin` entries can never execute (Atlas refuses the warden). They are inert, not cleared; there is no event for "no longer guardian". Watch Atlas `guardian_set`.
+- **`init_warden` does not check that it is Atlas's guardian.** Deployment tooling must read Atlas `guardian()` and the warden's `atlas()` and compare both directions.
+- **External keys must be dedicated.** Atlas and the warden accept the genesis transfer contract as `caller` of a direct call, and the transfer contract can call any contract on behalf of a Moonlight sender (`contract_to_contract`), with `public_sender` still the original signer. A malicious contract that a guardian or scheduler key is tricked into calling can therefore reach calls that take no argument or ignore it (`cancel_pending`, `cancel_service`, `cancel_admin`, `cancel_atlas_pending`). Do not use a guardian or scheduler key to sign anything else; prefer a contract account.
 
 ### Forwards
 

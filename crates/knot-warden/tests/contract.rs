@@ -1144,3 +1144,137 @@ fn schedule_service_mirrors_atlas_name_and_id_checks() {
     schedule(session, &op, &"b".repeat(64), SERVICE_ID);
     assert!(pending_service(session, &"b".repeat(64)).is_some());
 }
+
+#[test]
+fn scheduler_and_guardian_reject_unusable_accounts() {
+    let rng = &mut StdRng::seed_from_u64(36);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+
+    // init_warden refuses a scheduler that no caller can match, or that every
+    // caller matches (the transfer contract is the caller of every Moonlight tx).
+    for (id, needle) in [
+        (
+            ContractId::from_bytes([0u8; 32]),
+            "scheduler contract id zero",
+        ),
+        (TRANSFER_CONTRACT, "scheduler contract id reserved"),
+        (WARDEN_ID, "scheduler cannot be the warden itself"),
+    ] {
+        let session = &mut deploy(&owner);
+        init_atlas(session, &owner, 10);
+        set_sender(session, Some(&owner));
+        let denied = session.call::<InitWardenArgs, ()>(
+            WARDEN_ID,
+            "init_warden",
+            &InitWardenArgs {
+                atlas: ATLAS_ID,
+                scheduler: Account::Contract(id),
+                delay_blocks: 4,
+            },
+            POINT_LIMIT,
+        );
+        assert_panics(denied.expect_err("init_warden"), needle);
+    }
+
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+    for (call, id, needle) in [
+        (
+            "set_scheduler",
+            ContractId::from_bytes([0u8; 32]),
+            "scheduler contract id zero",
+        ),
+        (
+            "set_scheduler",
+            TRANSFER_CONTRACT,
+            "scheduler contract id reserved",
+        ),
+        (
+            "set_guardian",
+            TRANSFER_CONTRACT,
+            "guardian contract id reserved",
+        ),
+        // Atlas rejects its own id; the warden must refuse it at queue time or
+        // the forward would fail and wedge the admin slot.
+        ("set_guardian", ATLAS_ID, "guardian cannot be atlas"),
+    ] {
+        set_sender(session, Some(&op));
+        let denied =
+            session.call::<Account, ()>(WARDEN_ID, call, &Account::Contract(id), POINT_LIMIT);
+        assert_panics(denied.expect_err(call), needle);
+    }
+    assert!(pending_admin(session).is_none());
+}
+
+#[test]
+fn off_curve_scheduler_key_is_rejected() {
+    use rkyv::ser::Serializer;
+    use rkyv::ser::serializers::AllocSerializer;
+
+    let rng = &mut StdRng::seed_from_u64(37);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 0, 10);
+
+    let mut ser = AllocSerializer::<256>::default();
+    ser.serialize_value(&Account::External(op))
+        .expect("serialize");
+    let mut bytes = ser.into_serializer().into_inner().to_vec();
+    let len = bytes.len();
+    for b in &mut bytes[8..len - 8] {
+        *b = 0x5a;
+    }
+    // Delay 0 would apply the change in this call and lock the warden for good.
+    set_sender(session, Some(&op));
+    let denied = session.call_raw(WARDEN_ID, "set_scheduler", bytes, POINT_LIMIT);
+    assert_panics(denied.expect_err("garbage key"), "scheduler key invalid");
+    assert!(pending_admin(session).is_none());
+}
+
+#[test]
+fn queued_repoint_cannot_be_shortened_by_rotating_the_delay() {
+    let rng = &mut StdRng::seed_from_u64(38);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    schedule(session, &op, "treasury", SERVICE_ID);
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_delay", &0, POINT_LIMIT)
+        .expect("queue delay 0");
+
+    // The delay change waits the old delay, and the queued repoint keeps the
+    // execute_at it was given.
+    set_height(session, 3);
+    assert!(
+        session
+            .call::<(), ()>(WARDEN_ID, "execute_admin", &(), POINT_LIMIT)
+            .is_err()
+    );
+    assert!(
+        session
+            .call::<String, ()>(
+                WARDEN_ID,
+                "execute_service",
+                &String::from("treasury"),
+                POINT_LIMIT
+            )
+            .is_err()
+    );
+    set_height(session, 4);
+    session
+        .call::<(), ()>(WARDEN_ID, "execute_admin", &(), POINT_LIMIT)
+        .expect("delay 0 applies after the old delay");
+    session
+        .call::<String, ()>(
+            WARDEN_ID,
+            "execute_service",
+            &String::from("treasury"),
+            POINT_LIMIT,
+        )
+        .expect("repoint lands at its own execute_at");
+}
