@@ -16,11 +16,13 @@ Architecture and long-form docs:
 [docs.nocturne-standards.org — Knot](https://docs.nocturne-standards.org/v1/knot/)
 · [GitHub — Nocturne-Standards/knot](https://github.com/Nocturne-Standards/knot)
 
-`atlas/` (per-project service registry) stays **outside** this repo. Knot
-does not link it. Knot is complete without Atlas.
+`atlas/` (per-project service registry) stays **outside** this repo.
+The registry book and the proposals book call Atlas `resolve` before every
+write. The Atlas id is fixed when each book is built (`ATLAS_PIN_HEX`).
+A quorum check reads the book and does not call Atlas.
 
 The delaying guardian in front of Atlas is [warden](docs/warden.md)
-(`knot-warden` 0.2.0; testnet is still 0.1.1
+(`knot-warden` 0.2.1; testnet is still 0.1.1
 `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3`).
 Proposals `call_raw` into warden, and warden calls Atlas. Pointing Atlas's
 guardian straight at the proposals contract still works; `finalize` then
@@ -43,7 +45,7 @@ Stacking both on one intent waits twice. Atlas `timelock_blocks` covers
 | `knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
 | `knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
 | `knot-warden-encoding` | Apache-2.0 | 0.2.0 | Warden call types and events. Own workspace; needs sibling atlas 0.3 |
-| `knot-warden` | Apache-2.0 | 0.2.0 | Delaying guardian in front of Atlas. Testnet is still 0.1.1 `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` |
+| `knot-warden` | Apache-2.0 | 0.2.1 | Delaying guardian in front of Atlas. Testnet is still 0.1.1 `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` |
 | `knot-event-decoder` | Apache-2.0 | 0.1.0 | Named-event dispatch for registry, proposals, and warden. Needs sibling atlas 0.3 |
 
 The Apache suite and **AGPL collector** are intentionally split. Self-host
@@ -54,11 +56,19 @@ in `knot-tool`; the collector never holds secret keys.
 **Consumer dep (encoding):**
 
 ```toml
-knot-encoding = { git = "https://github.com/Nocturne-Standards/knot", tag = "v0.2.0", package = "knot-encoding", features = ["call-types"] }
+knot-encoding = "x.y.z"
 ```
 
-Pin a release tag or rev — see [`docs/versioning.md`](docs/versioning.md) for
-how crate semvers relate to git tags.
+`x.y.z` is a placeholder. The crate is not on crates.io yet. Replace it
+with the published version. Checklist: [`RELEASE-PENDING.md`](RELEASE-PENDING.md).
+Call types are the `call-types` feature:
+
+```toml
+knot-encoding = { version = "x.y.z", features = ["call-types"] }
+```
+
+See [`docs/versioning.md`](docs/versioning.md) for how crate semvers relate
+to git tags. Git tags still name WASM bundles. They are not the crates.io pin.
 
 ## Layout
 

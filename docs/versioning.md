@@ -18,11 +18,15 @@ field print the same semver as their crate `Cargo.toml`.
 
 ## Git tags vs crate versions
 
-Public consumers pin via **git tag or rev** on `https://github.com/Nocturne-Standards/knot`,
-not crates.io (not published here). A repo tag (e.g. `v0.2.0`) is an
-**operator-chosen bundle** of crate versions at a point in time — it is not
-required to equal every inner crate's semver. Check the tag's `Cargo.toml`
-files for the exact crate versions you are building against.
+The README pins `knot-encoding` as `x.y.z`. That string is a placeholder.
+Nothing in this repo is on crates.io yet (`publish = false` on every crate).
+When a crate is published, replace `x.y.z` with its released version.
+The list of what still changes at publish time is [`RELEASE-PENDING.md`](../RELEASE-PENDING.md).
+
+A git tag (for example `v0.2.0`) is an **operator-chosen bundle** of crate
+versions for a WASM deploy. It is not required to equal every inner crate's
+semver. Check the tag's `Cargo.toml` files for the exact crate versions you
+are building against.
 
 ## PINNED-DIFFERENT-REDEPLOYED
 
