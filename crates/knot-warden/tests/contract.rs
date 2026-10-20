@@ -1112,7 +1112,7 @@ fn set_guardian_rejects_the_zero_contract_id() {
 }
 
 #[test]
-fn schedule_service_mirrors_atlas_name_and_id_checks() {
+fn schedule_service_applies_atlas_name_and_id_checks() {
     let rng = &mut StdRng::seed_from_u64(35);
     let (_, owner) = keypair(rng);
     let (_, op) = keypair(rng);

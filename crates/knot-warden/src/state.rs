@@ -301,7 +301,7 @@ mod warden {
                         panic!("{label} cannot be the warden itself");
                     }
                     // Atlas rejects its own id as a guardian, and never calls
-                    // the warden as scheduler. Mirror Atlas so a queued
+                    // the warden as scheduler. Match Atlas exactly so a queued
                     // guardian change cannot fail when it is forwarded.
                     if *id == atlas {
                         panic!("{label} cannot be atlas");
