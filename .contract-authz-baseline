@@ -82,7 +82,7 @@ crates/knot-warden/src/state.rs:pending_service	PUBLIC — read-only view
 crates/knot-warden/src/state.rs:schedule_service	scheduler only
 crates/knot-warden/src/state.rs:scheduler	PUBLIC — read-only; None before init_warden
 crates/knot-warden/src/state.rs:set_delay	scheduler only; waits out the current delay
-crates/knot-warden/src/state.rs:set_guardian	scheduler only; forwards to Atlas set_guardian in this transaction
+crates/knot-warden/src/state.rs:set_guardian	scheduler only; queued in the admin slot for delay_blocks, execute_admin forwards to Atlas set_guardian; rejected unless warden is the Atlas guardian and Atlas has no pending change
 crates/knot-warden/src/state.rs:set_scheduler	scheduler only; waits out the current delay
 crates/knot-warden/src/state.rs:set_timelock	scheduler only; forwards to Atlas set_timelock in this transaction
 crates/knot-warden/test-proxy/src/lib.rs:call_cancel_service	PUBLIC — test-only cross-call fixture

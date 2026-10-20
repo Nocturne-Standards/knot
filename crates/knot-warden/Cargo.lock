@@ -305,6 +305,12 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "base64"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
+
+[[package]]
+name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
@@ -908,15 +914,16 @@ dependencies = [
 
 [[package]]
 name = "dusk-core"
-version = "1.6.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb7053f16922b6cce10036bda331f5dd373a64ff66972604c2fc3bca594d2158"
+checksum = "6acfdcceb4353d4bd0fa5debb7ad848a21a2672b41533bbe3b55ff5ed90663d4"
 dependencies = [
  "ark-bn254",
  "ark-groth16",
  "ark-relations",
  "ark-serialize",
  "blake2b_simd",
+ "blake3",
  "bls12_381-bls",
  "bytecheck",
  "c-kzg",
@@ -934,7 +941,7 @@ dependencies = [
  "rand 0.8.8",
  "rkyv",
  "serde",
- "serde_with",
+ "serde_with 3.23.0",
  "sha2 0.10.9",
 ]
 
@@ -1051,9 +1058,9 @@ dependencies = [
 
 [[package]]
 name = "dusk-vm"
-version = "1.6.0"
+version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4e78bea4ffcca10eb95f687d7169e94c06e0246dd4023d9f76b213877b2e123"
+checksum = "bf25fe410ca68af5633d6894c78ceb5580bbe657a859dc38973e4b44b1e3be76"
 dependencies = [
  "blake2b_simd",
  "blake3",
@@ -1069,6 +1076,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "sha3",
+ "thiserror 1.0.69",
  "tracing",
  "wasmparser 0.240.0",
 ]
@@ -1395,9 +1403,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "hex-conservative"
@@ -1567,7 +1572,7 @@ dependencies = [
 
 [[package]]
 name = "knot-warden"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "atlas-encoding",
  "bytecheck",
@@ -1841,7 +1846,7 @@ dependencies = [
  "rand 0.8.8",
  "rkyv",
  "serde",
- "serde_with",
+ "serde_with 3.23.0",
  "sha2 0.10.9",
  "subtle",
  "zeroize",
@@ -1849,9 +1854,9 @@ dependencies = [
 
 [[package]]
 name = "piecrust"
-version = "0.30.0"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "768a69c4aac88337ec2c1b9ac1624d4c52bd50c6ecbdaed70b5854006d56fe01"
+checksum = "2bf078a2440121fcdefe5e9f41082d9ae532200071761b40b2528ee43aa791ff"
 dependencies = [
  "blake3",
  "bytecheck",
@@ -1872,15 +1877,17 @@ dependencies = [
 
 [[package]]
 name = "piecrust-uplink"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9df8d2d3f5deb052f61c65d01d892c4babe604cd884cdd2fcef7f6da4392b476"
+checksum = "a6d4c7523f2e97cc85728501b8f06cea19e57c18280b89ff6d2ee10c9743c7d5"
 dependencies = [
  "bytecheck",
  "dlmalloc",
  "hex",
  "rkyv",
  "serde",
+ "serde_with 2.3.3",
+ "tracing",
 ]
 
 [[package]]
@@ -2262,6 +2269,20 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07ff71d2c147a7b57362cead5e22f772cd52f6ab31cfcd9edcd7f6aeb2a0afbe"
+dependencies = [
+ "base64 0.13.1",
+ "chrono",
+ "hex",
+ "serde",
+ "serde_json",
+ "time",
+]
+
+[[package]]
+name = "serde_with"
 version = "3.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "935177bb8c0cd8ca1a4e6d1a2ac8988bea69cab4f9d3a31311e012ad27868ea4"
@@ -2490,6 +2511,7 @@ version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
 dependencies = [
+ "log",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",

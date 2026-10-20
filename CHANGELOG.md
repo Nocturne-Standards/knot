@@ -8,6 +8,10 @@ details live in each crate's `CHANGELOG.md`. Semver policy:
 
 ## [Unreleased]
 
+### Fixed
+
+- `knot-warden` 0.2.1: `set_guardian` rejects states where the forward to Atlas would fail (warden not the Atlas guardian, Atlas pending change, zero contract id), `set_timelock` is refused while a guardian change is queued, and `schedule_service` rejects names over 64 bytes and the zero id. 0.2.0 could leave its single admin slot occupied. Builds on dusk-core 1.7.0.
+
 ### Changed
 
 - `knot-warden` 0.2.0 and `knot-warden-encoding` 0.2.0: `set_guardian` waits `delay_blocks` before it is forwarded to Atlas. Delay cap is 777,600 blocks. Not deployed. 0.1.1 remains the testnet id below.
