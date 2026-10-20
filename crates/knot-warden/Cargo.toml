@@ -16,7 +16,7 @@ description = "Delaying guardian in front of an Atlas registry. Calls Atlas; Atl
 [dependencies]
 knot-warden-encoding = { path = "../knot-warden-encoding", features = ["contract-events"] }
 dusk-bls12_381 = { version = "=0.14.2", default-features = false }
-rkyv = { version = "=0.7.39", default-features = false, features = ["size_32"] }
+rkyv = { version = "=0.7.46", default-features = false, features = ["size_32"] }
 bytecheck = { version = "=0.6.12", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 
@@ -34,7 +34,7 @@ dusk-vm = { version = "=1.7.0", default-features = false }
 dusk-bytes = "=0.1.7"
 bytecheck = { version = "=0.6.12", default-features = false }
 rand = { version = "0.8.6", default-features = false }
-rkyv = { version = "=0.7.39", default-features = false, features = ["size_32", "validation"] }
+rkyv = { version = "=0.7.46", default-features = false, features = ["size_32", "validation"] }
 
 [features]
 contract = ["dusk-core/abi-dlmalloc"]

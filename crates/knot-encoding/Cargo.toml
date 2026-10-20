@@ -12,7 +12,7 @@ description = "Canonical §4a proposal preimage + §4b ProposalBlob, plus shared
 tiny-keccak = { version = "2.0", features = ["keccak"] }
 sha2 = { version = "0.10", default-features = false }
 # Layer E only — all optional so §4a consumers stay free of dusk-core / rkyv.
-rkyv = { version = "=0.7.39", default-features = false, features = ["size_32", "alloc"], optional = true }
+rkyv = { version = "=0.7.46", default-features = false, features = ["size_32", "alloc"], optional = true }
 bytecheck = { version = "=0.6.12", default-features = false, optional = true }
 dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false, optional = true }
 dusk-forge = { version = "0.3.0", optional = true }
