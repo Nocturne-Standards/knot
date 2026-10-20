@@ -732,10 +732,17 @@ fn set_scheduler_unchanged_and_waits() {
     let early = session.call::<(), ()>(WARDEN_ID, "execute_admin", &(), POINT_LIMIT);
     assert_panics(early.expect_err("early"), "delay not elapsed");
 
+    // The delay has passed, but the incoming scheduler has not accepted.
     set_height(session, 8);
     set_sender(session, Some(&owner));
+    let unaccepted = session.call::<(), ()>(WARDEN_ID, "execute_admin", &(), POINT_LIMIT);
+    assert_panics(
+        unaccepted.expect_err("unaccepted"),
+        "incoming scheduler has not accepted",
+    );
+    set_sender(session, Some(&next));
     session
-        .call::<(), ()>(WARDEN_ID, "execute_admin", &(), POINT_LIMIT)
+        .call::<(), ()>(WARDEN_ID, "accept_scheduler", &(), POINT_LIMIT)
         .unwrap();
     assert_eq!(
         session
@@ -756,7 +763,7 @@ fn set_scheduler_unchanged_and_waits() {
 }
 
 #[test]
-fn zero_delay_set_scheduler_applies() {
+fn zero_delay_set_scheduler_applies_on_acceptance() {
     let rng = &mut StdRng::seed_from_u64(14);
     let (_, owner) = keypair(rng);
     let (_, op) = keypair(rng);
@@ -772,10 +779,20 @@ fn zero_delay_set_scheduler_applies() {
             POINT_LIMIT,
         )
         .unwrap();
+    // A scheduler change waits for the incoming scheduler even at delay zero.
+    assert_eq!(warden_topics(&receipt), ["admin_scheduled"]);
     assert_eq!(
-        warden_topics(&receipt),
-        ["admin_scheduled", "scheduler_set"]
+        session
+            .call::<(), Option<Account>>(WARDEN_ID, "scheduler", &(), POINT_LIMIT)
+            .unwrap()
+            .data,
+        Some(Account::External(op))
     );
+    set_sender(session, Some(&next));
+    let accepted = session
+        .call::<(), ()>(WARDEN_ID, "accept_scheduler", &(), POINT_LIMIT)
+        .unwrap();
+    assert_eq!(warden_topics(&accepted), ["scheduler_set"]);
     assert_eq!(
         session
             .call::<(), Option<Account>>(WARDEN_ID, "scheduler", &(), POINT_LIMIT)
@@ -1277,4 +1294,176 @@ fn queued_repoint_cannot_be_shortened_by_rotating_the_delay() {
             POINT_LIMIT,
         )
         .expect("repoint lands at its own execute_at");
+}
+
+#[test]
+fn unaccepted_scheduler_change_cannot_take_the_role() {
+    let rng = &mut StdRng::seed_from_u64(39);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let (_, typo) = keypair(rng);
+    let (_, other) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    // A valid key nobody controls is named as the next scheduler.
+    set_sender(session, Some(&op));
+    session
+        .call::<Account, ()>(
+            WARDEN_ID,
+            "set_scheduler",
+            &Account::External(typo),
+            POINT_LIMIT,
+        )
+        .expect("schedule");
+
+    set_height(session, 100);
+    set_sender(session, Some(&other));
+    let stranger = session.call::<(), ()>(WARDEN_ID, "accept_scheduler", &(), POINT_LIMIT);
+    assert_panics(
+        stranger.expect_err("stranger accepts"),
+        "Only the warden incoming scheduler may perform this action",
+    );
+    set_sender(session, Some(&op));
+    let outgoing = session.call::<(), ()>(WARDEN_ID, "accept_scheduler", &(), POINT_LIMIT);
+    assert_panics(
+        outgoing.expect_err("outgoing scheduler accepts"),
+        "Only the warden incoming scheduler may perform this action",
+    );
+    set_sender(session, None);
+    let refused = session.call::<(), ()>(WARDEN_ID, "execute_admin", &(), POINT_LIMIT);
+    assert_panics(
+        refused.expect_err("execute"),
+        "incoming scheduler has not accepted",
+    );
+
+    // The current scheduler still acts, and cancels the stuck change.
+    schedule(session, &op, "treasury", SERVICE_ID);
+    set_sender(session, Some(&op));
+    session
+        .call::<(), ()>(WARDEN_ID, "cancel_admin", &(), POINT_LIMIT)
+        .expect("cancel");
+    assert!(
+        !session
+            .call::<(), bool>(WARDEN_ID, "pending_admin_accepted", &(), POINT_LIMIT)
+            .unwrap()
+            .data
+    );
+    set_sender(session, Some(&typo));
+    let late = session.call::<(), ()>(WARDEN_ID, "accept_scheduler", &(), POINT_LIMIT);
+    assert_panics(late.expect_err("accept after cancel"), "no pending admin");
+}
+
+#[test]
+fn a_delay_change_has_nothing_to_accept() {
+    let rng = &mut StdRng::seed_from_u64(40);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let (_, other) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_delay", &6, POINT_LIMIT)
+        .expect("schedule a delay change");
+    set_sender(session, Some(&other));
+    let denied = session.call::<(), ()>(WARDEN_ID, "accept_scheduler", &(), POINT_LIMIT);
+    assert_panics(
+        denied.expect_err("accept"),
+        "the pending admin change is not a scheduler change",
+    );
+    set_height(session, 4);
+    set_sender(session, None);
+    session
+        .call::<(), ()>(WARDEN_ID, "execute_admin", &(), POINT_LIMIT)
+        .expect("a delay change needs no acceptance");
+}
+
+#[test]
+fn a_contract_scheduler_accepts_through_the_proxy() {
+    let rng = &mut StdRng::seed_from_u64(41);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 0, 10);
+
+    set_sender(session, Some(&op));
+    session
+        .call::<Account, ()>(
+            WARDEN_ID,
+            "set_scheduler",
+            &Account::Contract(PROXY_ID),
+            POINT_LIMIT,
+        )
+        .expect("schedule");
+    // A key cannot accept for a contract scheduler; the contract can.
+    set_sender(session, Some(&op));
+    assert!(
+        session
+            .call::<(), ()>(WARDEN_ID, "accept_scheduler", &(), POINT_LIMIT)
+            .is_err()
+    );
+    session
+        .call::<ContractId, ()>(PROXY_ID, "call_accept_scheduler", &WARDEN_ID, POINT_LIMIT)
+        .expect("proxy accepts");
+    assert_eq!(
+        session
+            .call::<(), Option<Account>>(WARDEN_ID, "scheduler", &(), POINT_LIMIT)
+            .unwrap()
+            .data,
+        Some(Account::Contract(PROXY_ID))
+    );
+}
+
+/// The warden is the incoming guardian of an Atlas whose guardian is a key.
+#[test]
+fn the_warden_accepts_as_the_incoming_atlas_guardian() {
+    let rng = &mut StdRng::seed_from_u64(42);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let (_, old_guardian) = keypair(rng);
+    let (_, stranger) = keypair(rng);
+    let session = &mut deploy(&owner);
+    set_sender(session, Some(&owner));
+    session
+        .call::<InitArgs, ()>(
+            ATLAS_ID,
+            "init_guardian",
+            &InitArgs {
+                guardian: Account::External(old_guardian),
+                timelock_blocks: 0,
+            },
+            POINT_LIMIT,
+        )
+        .expect("atlas init with a key guardian");
+    init_warden(session, &owner, Account::External(op), 4);
+
+    set_sender(session, Some(&old_guardian));
+    session
+        .call::<Account, ()>(
+            ATLAS_ID,
+            "set_guardian",
+            &Account::Contract(WARDEN_ID),
+            POINT_LIMIT,
+        )
+        .expect("atlas schedules the warden as guardian");
+
+    set_sender(session, Some(&stranger));
+    let denied = session.call::<(), ()>(WARDEN_ID, "accept_atlas_guardian", &(), POINT_LIMIT);
+    assert_panics(
+        denied.expect_err("stranger"),
+        "Only the warden scheduler may perform this action",
+    );
+    set_sender(session, Some(&op));
+    session
+        .call::<(), ()>(WARDEN_ID, "accept_atlas_guardian", &(), POINT_LIMIT)
+        .expect("scheduler makes the warden accept");
+    assert_eq!(
+        session
+            .call::<(), Option<Account>>(ATLAS_ID, "guardian", &(), POINT_LIMIT)
+            .unwrap()
+            .data,
+        Some(Account::Contract(WARDEN_ID))
+    );
 }

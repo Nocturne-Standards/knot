@@ -89,8 +89,11 @@ The bootstrap method is not named `init`. Piecrust treats an exported `init` as 
 | `execute_service(String)` | permissionless after `execute_at` | Calls Atlas `set_service` |
 | `cancel_service(String)` | scheduler | Drops that name's pending repoint |
 | `set_delay(u64)` | scheduler | Schedules a new `delay_blocks` |
-| `set_scheduler(Account)` | scheduler | Schedules a new scheduler |
-| `execute_admin()` | permissionless after `execute_at` | Applies the admin slot |
+| `set_scheduler(Account)` | scheduler | Schedules a new scheduler. It does not take the role until the delay has passed AND the incoming scheduler has called `accept_scheduler`, even at delay `0` |
+| `accept_scheduler()` | incoming scheduler | Authenticated like a scheduler call against the pending scheduler change (a direct call from the key, or `caller` equal to the contract id). Applies the change at once if the delay has passed. Panics `the pending admin change is not a scheduler change` for another kind |
+| `accept_atlas_guardian()` | scheduler | For when this warden is the incoming guardian of an Atlas guardian change: the warden calls Atlas `accept_guardian` |
+| `pending_admin_accepted()` | public | Whether the incoming scheduler has accepted the pending scheduler change |
+| `execute_admin()` | permissionless after `execute_at` | Applies the admin slot. A scheduler change also needs `accept_scheduler` first (`incoming scheduler has not accepted`) |
 | `cancel_admin()` | scheduler | Drops the admin slot |
 | `set_guardian(Account)` | scheduler | Queues in the admin slot for `delay_blocks`; `execute_admin` then forwards it to Atlas. Panics `warden is not the atlas guardian`, `atlas has a pending change; cancel or execute it first`, or `guardian contract id zero` |
 | `set_timelock(u64)` | scheduler | Forwards to Atlas in this transaction. Panics `an atlas guardian change is queued; cancel it first` while `set_guardian` is queued |
@@ -128,6 +131,18 @@ If an admin change is already stored, either call panics `a pending admin change
 Delay `0` emits `admin_scheduled`, then applies in the same transaction. Production `init_warden` passes the delay it means to keep. A deployment left at `0` has no warden delay until a `set_delay` is executed, and that first raise from `0` applies in the same call.
 
 A service scheduled while an admin change is pending uses the delay already stored on the service entry, not the pending delay.
+
+### Two-step handover
+
+A scheduler that was mistyped, or a contract that never calls the warden, used
+to lock every scheduler-only method once applied. A scheduler change now waits
+for the incoming scheduler too, and `execute_admin` refuses it until it has
+accepted. A scheduler that cannot accept never takes the role; the current
+scheduler keeps acting and cancels the stuck change (`cancel_admin`). The same
+rule applies on the Atlas side to a guardian change (Atlas `accept_guardian`);
+a warden installed as Atlas's new guardian accepts through `accept_atlas_guardian`.
+The `AtlasGuardian` admin change needs no acceptance here: the warden only
+forwards it, and Atlas waits for the incoming guardian.
 
 ### What the warden does not protect
 

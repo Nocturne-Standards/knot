@@ -13,6 +13,10 @@ details live in each crate's `CHANGELOG.md`. Semver policy:
 - `rkyv` moves from `=0.7.39` to `=0.7.46` in every crate and lockfile (fixes RUSTSEC-2026-0001, `Rc`/`Arc` `from_value` on OOM). The `knot-encoding` layout goldens (35), `knot-proposals` (45 tests), `knot-registry` (41), `knot-warden` (27) and `knot-warden-encoding` pass unchanged: the archived layouts are byte-identical. RUSTSEC-2026-0235 has no 0.7 fix and stays accepted (no `Rc`/`Arc` archives in Knot types). `knot-event-decoder` also moves its registry `dusk-core` dev-dependency to `=1.7.0` to match `knot-warden-encoding`.
 - Known, not from this change: `knot-event-decoder`'s `conformance_emit_topics` fails on `main` because `knot-registry` emits `evm_bootstrap_sent` and the decoder has no arm for it. That workspace is not covered by public CI.
 
+### Added
+
+- `knot-warden` 0.2.1: two-step handover for the scheduler (`accept_scheduler`, `pending_admin_accepted`) and `accept_atlas_guardian`, matching Atlas 0.4.1's `accept_guardian`. 31 contract tests.
+
 ### Fixed
 
 - `knot-warden` 0.2.1: `set_guardian` rejects states where the forward to Atlas would fail (warden not the Atlas guardian, Atlas pending change, zero contract id), `set_timelock` is refused while a guardian change is queued, and `schedule_service` rejects names over 64 bytes and the zero id. 0.2.0 could leave its single admin slot occupied. Builds on dusk-core 1.7.0.
