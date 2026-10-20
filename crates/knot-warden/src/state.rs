@@ -39,6 +39,9 @@ mod warden {
         delay_blocks: u64,
         pending_services: BTreeMap<String, (ContractId, u64)>,
         pending_admin: Option<(PendingAdmin, u64)>,
+        /// The incoming scheduler of a pending scheduler change has called
+        /// `accept_scheduler`. Always false for the other admin changes.
+        pending_admin_accepted: bool,
     }
 
     impl WardenState {
@@ -56,6 +59,7 @@ mod warden {
                 delay_blocks: 0,
                 pending_services: BTreeMap::new(),
                 pending_admin: None,
+                pending_admin_accepted: false,
             }
         }
 
@@ -110,6 +114,13 @@ mod warden {
                     id: *id,
                     execute_at: *execute_at,
                 })
+        }
+
+        /// Whether the incoming scheduler of the pending scheduler change has
+        /// accepted it. False when nothing is pending or the change is another
+        /// kind.
+        pub fn pending_admin_accepted(&self) -> bool {
+            self.pending_admin_accepted
         }
 
         pub fn pending_admin(&self) -> Option<PendingAdminView> {
@@ -214,7 +225,39 @@ mod warden {
             self.schedule_admin(PendingAdmin::Scheduler(next));
         }
 
-        /// Apply the admin slot. Permissionless after `execute_at`.
+        /// Called by the incoming scheduler of a pending scheduler change, with
+        /// the same authentication as a scheduler call. It proves the new
+        /// account can act before it takes the role; a mistyped key, or a
+        /// contract that never calls the warden, cannot accept and is never
+        /// applied. The current scheduler cancels the stuck change. If the delay
+        /// has already passed the change is applied in this call.
+        pub fn accept_scheduler(&mut self) {
+            self.require_initialized();
+            let (change, execute_at) = self
+                .pending_admin
+                .clone()
+                .unwrap_or_else(|| panic!("no pending admin"));
+            let PendingAdmin::Scheduler(incoming) = change else {
+                panic!("the pending admin change is not a scheduler change");
+            };
+            Self::require_account(&incoming, "incoming scheduler");
+            self.pending_admin_accepted = true;
+            if block_height() >= execute_at {
+                self.execute_admin();
+            }
+        }
+
+        /// For when this warden is the incoming guardian of an Atlas guardian
+        /// change: the scheduler makes the warden call Atlas `accept_guardian`,
+        /// so Atlas sees `caller` equal to this contract.
+        pub fn accept_atlas_guardian(&mut self) {
+            self.require_scheduler();
+            let _: () = abi::call(self.atlas_id(), "accept_guardian", &())
+                .expect("warden: atlas accept_guardian failed");
+        }
+
+        /// Apply the admin slot. Permissionless after `execute_at`. A scheduler
+        /// change also needs the incoming scheduler's acceptance.
         pub fn execute_admin(&mut self) {
             self.require_initialized();
             let (change, execute_at) = self
@@ -224,7 +267,11 @@ mod warden {
             if block_height() < execute_at {
                 panic!("delay not elapsed");
             }
+            if matches!(change, PendingAdmin::Scheduler(_)) && !self.pending_admin_accepted {
+                panic!("incoming scheduler has not accepted");
+            }
             self.pending_admin = None;
+            self.pending_admin_accepted = false;
             match change {
                 PendingAdmin::Delay(blocks) => {
                     self.delay_blocks = blocks;
@@ -248,6 +295,7 @@ mod warden {
                 .pending_admin
                 .take()
                 .unwrap_or_else(|| panic!("no pending admin"));
+            self.pending_admin_accepted = false;
             abi::emit("admin_cancelled", AdminCancelled { change });
         }
 
@@ -352,9 +400,13 @@ mod warden {
                 change: change.clone(),
                 execute_at,
             };
+            let waits_for_acceptance = matches!(change, PendingAdmin::Scheduler(_));
             self.pending_admin = Some((change, execute_at));
+            self.pending_admin_accepted = false;
             abi::emit("admin_scheduled", scheduled);
-            if self.delay_blocks == 0 {
+            // Delay zero applies a delay change and the Atlas forward at once.
+            // A scheduler change still waits for the incoming scheduler.
+            if self.delay_blocks == 0 && !waits_for_acceptance {
                 self.execute_admin();
             }
         }
@@ -410,18 +462,24 @@ mod warden {
         /// External: direct call from the key. Contract: `caller` equals the id.
         fn require_scheduler(&self) {
             self.require_initialized();
-            match self.scheduler.as_ref().expect("scheduler") {
+            Self::require_account(self.scheduler.as_ref().expect("scheduler"), "scheduler");
+        }
+
+        /// Authenticate the caller as `account`. `label` names the role in the
+        /// panic messages.
+        fn require_account(account: &Account, label: &str) {
+            match account {
                 Account::External(key) => {
                     if !Self::is_direct_account_call() {
-                        panic!("External scheduler: direct call required");
+                        panic!("External {label}: direct call required");
                     }
                     if abi::public_sender() != Some(*key) {
-                        panic!("Only the warden scheduler may perform this action");
+                        panic!("Only the warden {label} may perform this action");
                     }
                 }
                 Account::Contract(id) => {
                     if abi::caller() != Some(*id) {
-                        panic!("Contract scheduler: caller must be the scheduler contract");
+                        panic!("Contract {label}: caller must be the {label} contract");
                     }
                 }
             }

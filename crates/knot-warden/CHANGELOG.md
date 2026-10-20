@@ -7,6 +7,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [0.2.1]
 
+### Added
+
+- Two-step handover for the scheduler. `set_scheduler` waits for the delay AND for the incoming scheduler to call `accept_scheduler` (authenticated like a scheduler call); `execute_admin` refuses an unaccepted scheduler change (`incoming scheduler has not accepted`), so a mistyped or non-acting scheduler never takes the role and the current scheduler cancels the stuck change. Delay zero no longer applies a scheduler change at once; it applies on acceptance. A delay change and the Atlas forward are unchanged. `pending_admin_accepted()` is a read-only view.
+- `accept_atlas_guardian()` (scheduler only): makes the warden call Atlas `accept_guardian` when the warden is the incoming guardian of an Atlas guardian change (Atlas 0.4.1 two-step handover).
+
 ### Fixed
 
 - `execute_admin` could fail forwarding a queued guardian change to Atlas and leave the single admin slot occupied (the panic rolls back the slot clear). Reproduced on 0.2.0: queue `set_guardian`, open an Atlas change with `set_timelock`, advance, `execute_admin` fails, `set_delay` is blocked behind the slot. `set_guardian` now panics `warden is not the atlas guardian`, `atlas has a pending change; cancel or execute it first`, or `guardian contract id zero`, and `set_timelock` panics `an atlas guardian change is queued; cancel it first` while the change is queued.

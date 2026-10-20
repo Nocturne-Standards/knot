@@ -40,6 +40,11 @@ mod warden_test_proxy {
             let _: () = abi::call(warden, "cancel_service", &name).expect("proxy cancel_service");
         }
 
+        pub fn call_accept_scheduler(&self, warden: ContractId) {
+            let _: () =
+                abi::call(warden, "accept_scheduler", &()).expect("proxy accept_scheduler");
+        }
+
         pub fn call_set_guardian(&self, warden: ContractId, next: Account) {
             let _: () = abi::call(warden, "set_guardian", &next).expect("proxy set_guardian");
         }

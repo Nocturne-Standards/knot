@@ -69,6 +69,8 @@ crates/knot-proposals-data/src/state.rs:set_registry	Atlas-resolved knot-proposa
 crates/knot-proposals-data/src/state.rs:set_tombstone	Atlas-resolved knot-proposals logic only (require_logic_caller)
 crates/knot-mock-atlas/src/state.rs:resolve	PUBLIC — test-only read; not deployed
 crates/knot-mock-atlas/src/state.rs:set_service	PUBLIC — test-only mutator; not deployed
+crates/knot-warden/src/state.rs:accept_atlas_guardian	scheduler only; makes the warden call Atlas accept_guardian as the incoming guardian
+crates/knot-warden/src/state.rs:accept_scheduler	incoming scheduler only (require_account on the pending scheduler change); applies the change if the delay has passed
 crates/knot-warden/src/state.rs:atlas	PUBLIC — read-only; None before init_warden
 crates/knot-warden/src/state.rs:cancel_admin	scheduler only
 crates/knot-warden/src/state.rs:cancel_atlas_pending	scheduler only; forwards to Atlas cancel_pending in this transaction
@@ -78,13 +80,15 @@ crates/knot-warden/src/state.rs:execute_admin	PUBLIC — permissionless after ex
 crates/knot-warden/src/state.rs:execute_service	PUBLIC — permissionless after execute_at
 crates/knot-warden/src/state.rs:init_warden	deploy owner, direct call, once
 crates/knot-warden/src/state.rs:pending_admin	PUBLIC — read-only view
+crates/knot-warden/src/state.rs:pending_admin_accepted	PUBLIC — read-only view
 crates/knot-warden/src/state.rs:pending_service	PUBLIC — read-only view
 crates/knot-warden/src/state.rs:schedule_service	scheduler only
 crates/knot-warden/src/state.rs:scheduler	PUBLIC — read-only; None before init_warden
 crates/knot-warden/src/state.rs:set_delay	scheduler only; waits out the current delay
 crates/knot-warden/src/state.rs:set_guardian	scheduler only; queued in the admin slot for delay_blocks, execute_admin forwards to Atlas set_guardian; rejected unless warden is the Atlas guardian and Atlas has no pending change
-crates/knot-warden/src/state.rs:set_scheduler	scheduler only; waits out the current delay
+crates/knot-warden/src/state.rs:set_scheduler	scheduler only; waits out the current delay, then the incoming scheduler must accept_scheduler
 crates/knot-warden/src/state.rs:set_timelock	scheduler only; forwards to Atlas set_timelock in this transaction
+crates/knot-warden/test-proxy/src/lib.rs:call_accept_scheduler	PUBLIC — test-only cross-call fixture
 crates/knot-warden/test-proxy/src/lib.rs:call_cancel_service	PUBLIC — test-only cross-call fixture
 crates/knot-warden/test-proxy/src/lib.rs:call_init_warden	PUBLIC — test-only cross-call fixture
 crates/knot-warden/test-proxy/src/lib.rs:call_schedule_service	PUBLIC — test-only cross-call fixture
