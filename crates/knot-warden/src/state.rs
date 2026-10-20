@@ -21,7 +21,8 @@ mod warden {
     use dusk_core::abi::{self, ContractId, block_height};
 
     use knot_warden_encoding::call_types::{
-        Account, InitWardenArgs, PendingAdmin, PendingAdminView, PendingServiceView, SetServiceArgs,
+        Account, AtlasPendingView, InitWardenArgs, PendingAdmin, PendingAdminView,
+        PendingServiceView, SetServiceArgs,
     };
     use knot_warden_encoding::events::{
         AdminCancelled, AdminScheduled, AtlasCancelForwarded, AtlasSet, DelaySet,
@@ -41,6 +42,10 @@ mod warden {
     impl WardenState {
         /// 90 days of 10-second Dusk blocks. Same cap as Atlas `timelock_blocks`.
         const MAX_DELAY_BLOCKS: u64 = 777_600;
+
+        /// Atlas `set_service` rejects longer names. A queued repoint Atlas
+        /// would refuse can never execute, so reject it when scheduling.
+        const MAX_NAME_BYTES: usize = 64;
 
         pub const fn new() -> Self {
             Self {
@@ -119,6 +124,12 @@ mod warden {
             self.require_scheduler();
             if args.name.is_empty() {
                 panic!("empty service name");
+            }
+            if args.name.len() > Self::MAX_NAME_BYTES {
+                panic!("service name longer than 64 bytes");
+            }
+            if args.id == ContractId::from_bytes([0u8; 32]) {
+                panic!("service id zero");
             }
             let current: Option<ContractId> = abi::call(self.atlas_id(), "resolve", &args.name)
                 .expect("warden: atlas resolve failed");
@@ -238,14 +249,40 @@ mod warden {
 
         /// Queue Atlas `set_guardian` for `delay_blocks`. `execute_admin`
         /// forwards it. The directory then waits its own timelock.
+        ///
+        /// The forward panics, and the panic rolls back the slot clear, so it
+        /// would leave the single admin slot occupied, if the warden is not
+        /// Atlas's guardian, Atlas holds a pending change, or the guardian is
+        /// the zero contract id. All three are rejected here, and
+        /// `set_timelock` cannot open an Atlas change while this one is queued,
+        /// so the forward has no other way to fail.
         pub fn set_guardian(&mut self, next: Account) {
             self.require_scheduler();
-            let current: Option<Account> = abi::call(self.atlas_id(), "guardian", &())
-                .expect("warden: atlas guardian failed");
+            Self::require_nonzero_account(&next);
+            let current: Option<Account> =
+                abi::call(self.atlas_id(), "guardian", &()).expect("warden: atlas guardian failed");
+            if current != Some(Account::Contract(abi::self_id())) {
+                panic!("warden is not the atlas guardian");
+            }
             if current.as_ref() == Some(&next) {
                 panic!("guardian unchanged");
             }
+            let atlas_pending: Option<AtlasPendingView> =
+                abi::call(self.atlas_id(), "pending", &()).expect("warden: atlas pending failed");
+            if atlas_pending.is_some() {
+                panic!("atlas has a pending change; cancel or execute it first");
+            }
             self.schedule_admin(PendingAdmin::AtlasGuardian(next));
+        }
+
+        /// A contract guardian with the zero id could never match `caller`.
+        /// Atlas 0.4.1 rejects it; reject it here so the forward cannot fail.
+        fn require_nonzero_account(account: &Account) {
+            if let Account::Contract(id) = account
+                && *id == ContractId::from_bytes([0u8; 32])
+            {
+                panic!("guardian contract id zero");
+            }
         }
 
         fn require_delay(blocks: u64) {
@@ -257,6 +294,12 @@ mod warden {
         /// Forward Atlas `set_timelock` in this transaction.
         pub fn set_timelock(&mut self, blocks: u64) {
             self.require_scheduler();
+            if matches!(
+                self.pending_admin,
+                Some((PendingAdmin::AtlasGuardian(_), _))
+            ) {
+                panic!("an atlas guardian change is queued; cancel it first");
+            }
             let _: () = abi::call(self.atlas_id(), "set_timelock", &blocks)
                 .expect("warden: atlas set_timelock failed");
             abi::emit("timelock_forwarded", TimelockForwarded { blocks });

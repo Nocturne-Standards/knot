@@ -68,7 +68,7 @@ fn deploy(owner_pk: &BlsPublicKey) -> Session {
         (WARDEN_BYTECODE, WARDEN_ID),
         (PROXY_BYTECODE, PROXY_ID),
     ] {
-        session
+        let _: (ContractId, Option<CallReceipt<()>>) = session
             .deploy(
                 bytecode,
                 ContractData::builder()
@@ -383,7 +383,7 @@ fn external_scheduler_accepts_transfer_contract_caller() {
     let (_, owner) = keypair(rng);
     let (_, op) = keypair(rng);
     let session = &mut deploy(&owner);
-    session
+    let _: (ContractId, Option<CallReceipt<()>>) = session
         .deploy(
             PROXY_BYTECODE,
             ContractData::builder()
@@ -942,4 +942,205 @@ fn delay_cap_rejects_init_and_schedule() {
     let scheduled = session.call::<u64, ()>(WARDEN_ID, "set_delay", &(MAX_DELAY + 1), POINT_LIMIT);
     assert_panics(scheduled.expect_err("cap"), "delay above maximum");
     assert!(pending_admin(session).is_none());
+}
+
+#[test]
+fn set_guardian_rejects_when_warden_is_not_the_atlas_guardian() {
+    let rng = &mut StdRng::seed_from_u64(30);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let (_, other) = keypair(rng);
+    let (_, next) = keypair(rng);
+    let session = &mut deploy(&owner);
+    set_sender(session, Some(&owner));
+    session
+        .call::<InitArgs, ()>(
+            ATLAS_ID,
+            "init_guardian",
+            &InitArgs {
+                guardian: Account::External(other),
+                timelock_blocks: 10,
+            },
+            POINT_LIMIT,
+        )
+        .expect("atlas init with a key guardian");
+    init_warden(session, &owner, Account::External(op), 4);
+
+    set_sender(session, Some(&op));
+    let denied = session.call::<Account, ()>(
+        WARDEN_ID,
+        "set_guardian",
+        &Account::External(next),
+        POINT_LIMIT,
+    );
+    assert_panics(
+        denied.expect_err("not the guardian"),
+        "warden is not the atlas guardian",
+    );
+    assert!(pending_admin(session).is_none());
+}
+
+#[test]
+fn set_guardian_rejects_while_atlas_has_a_pending_change() {
+    let rng = &mut StdRng::seed_from_u64(31);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let (_, next) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_timelock", &20, POINT_LIMIT)
+        .expect("open an atlas timelock change");
+    set_sender(session, Some(&op));
+    let denied = session.call::<Account, ()>(
+        WARDEN_ID,
+        "set_guardian",
+        &Account::External(next),
+        POINT_LIMIT,
+    );
+    assert_panics(
+        denied.expect_err("atlas pending"),
+        "atlas has a pending change",
+    );
+    assert!(pending_admin(session).is_none());
+
+    set_sender(session, Some(&op));
+    session
+        .call::<(), ()>(WARDEN_ID, "cancel_atlas_pending", &(), POINT_LIMIT)
+        .expect("cancel atlas pending");
+    set_sender(session, Some(&op));
+    session
+        .call::<Account, ()>(
+            WARDEN_ID,
+            "set_guardian",
+            &Account::External(next),
+            POINT_LIMIT,
+        )
+        .expect("queue after the atlas slot clears");
+    assert!(pending_admin(session).is_some());
+}
+
+#[test]
+fn set_timelock_is_blocked_only_while_a_guardian_change_is_queued() {
+    let rng = &mut StdRng::seed_from_u64(32);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let (_, next) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    set_sender(session, Some(&op));
+    session
+        .call::<Account, ()>(
+            WARDEN_ID,
+            "set_guardian",
+            &Account::External(next),
+            POINT_LIMIT,
+        )
+        .expect("queue set_guardian");
+    set_sender(session, Some(&op));
+    let denied = session.call::<u64, ()>(WARDEN_ID, "set_timelock", &20, POINT_LIMIT);
+    assert_panics(
+        denied.expect_err("guardian change queued"),
+        "an atlas guardian change is queued",
+    );
+
+    set_sender(session, Some(&op));
+    session
+        .call::<(), ()>(WARDEN_ID, "cancel_admin", &(), POINT_LIMIT)
+        .expect("cancel_admin");
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_timelock", &20, POINT_LIMIT)
+        .expect("set_timelock after the slot clears");
+}
+
+#[test]
+fn queued_guardian_forward_succeeds_after_the_guards() {
+    let rng = &mut StdRng::seed_from_u64(33);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let (_, next) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    set_sender(session, Some(&op));
+    session
+        .call::<Account, ()>(
+            WARDEN_ID,
+            "set_guardian",
+            &Account::External(next),
+            POINT_LIMIT,
+        )
+        .expect("queue");
+    set_sender(session, Some(&op));
+    assert!(
+        session
+            .call::<u64, ()>(WARDEN_ID, "set_timelock", &30, POINT_LIMIT)
+            .is_err(),
+        "nothing can open an atlas change in the window"
+    );
+    set_height(session, 4);
+    session
+        .call::<(), ()>(WARDEN_ID, "execute_admin", &(), POINT_LIMIT)
+        .expect("forward cannot fail");
+    assert!(pending_admin(session).is_none());
+}
+
+#[test]
+fn set_guardian_rejects_the_zero_contract_id() {
+    let rng = &mut StdRng::seed_from_u64(34);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    set_sender(session, Some(&op));
+    let denied = session.call::<Account, ()>(
+        WARDEN_ID,
+        "set_guardian",
+        &Account::Contract(ContractId::from_bytes([0u8; 32])),
+        POINT_LIMIT,
+    );
+    assert_panics(
+        denied.expect_err("zero guardian"),
+        "guardian contract id zero",
+    );
+    assert!(pending_admin(session).is_none());
+}
+
+#[test]
+fn schedule_service_mirrors_atlas_name_and_id_checks() {
+    let rng = &mut StdRng::seed_from_u64(35);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    set_sender(session, Some(&op));
+    let long = session.call::<SetServiceArgs, ()>(
+        WARDEN_ID,
+        "schedule_service",
+        &service(&"a".repeat(65), SERVICE_ID),
+        POINT_LIMIT,
+    );
+    assert_panics(
+        long.expect_err("long name"),
+        "service name longer than 64 bytes",
+    );
+
+    set_sender(session, Some(&op));
+    let zero = session.call::<SetServiceArgs, ()>(
+        WARDEN_ID,
+        "schedule_service",
+        &service("treasury", ContractId::from_bytes([0u8; 32])),
+        POINT_LIMIT,
+    );
+    assert_panics(zero.expect_err("zero id"), "service id zero");
+    assert!(pending_service(session, "treasury").is_none());
+
+    schedule(session, &op, &"b".repeat(64), SERVICE_ID);
+    assert!(pending_service(session, &"b".repeat(64)).is_some());
 }

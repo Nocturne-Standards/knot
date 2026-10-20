@@ -2,7 +2,7 @@
 
 [package]
 name = "knot-warden"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.94"
 publish = false
@@ -21,7 +21,7 @@ bytecheck = { version = "=0.6.12", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-dusk-core = { version = "=1.6.0" }
+dusk-core = { version = "=1.7.0" }
 dusk-data-driver = { version = "0.3", optional = true }
 dusk-forge = "0.3.0"
 dusk-bytes = "=0.1.7"
@@ -29,8 +29,8 @@ dusk-bytes = "=0.1.7"
 [dev-dependencies]
 atlas-encoding = { path = "../../../atlas/crates/atlas-encoding", version = "0.3.0" }
 knot-warden-encoding = { path = "../knot-warden-encoding" }
-dusk-core = { version = "=1.6.0", features = ["zk"] }
-dusk-vm = { version = "=1.6.0", default-features = false }
+dusk-core = { version = "=1.7.0", features = ["zk"] }
+dusk-vm = { version = "=1.7.0", default-features = false }
 dusk-bytes = "=0.1.7"
 bytecheck = { version = "=0.6.12", default-features = false }
 rand = { version = "0.8.6", default-features = false }

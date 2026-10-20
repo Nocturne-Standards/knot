@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+## [0.2.1]
+
+### Fixed
+
+- `execute_admin` could fail forwarding a queued guardian change to Atlas and leave the single admin slot occupied (the panic rolls back the slot clear). Reproduced on 0.2.0: queue `set_guardian`, open an Atlas change with `set_timelock`, advance, `execute_admin` fails, `set_delay` is blocked behind the slot. `set_guardian` now panics `warden is not the atlas guardian`, `atlas has a pending change; cancel or execute it first`, or `guardian contract id zero`, and `set_timelock` panics `an atlas guardian change is queued; cancel it first` while the change is queued.
+- `schedule_service` rejects a name over 64 bytes and the all-zero id up front, as Atlas does at `set_service`. Before, such an entry could be queued, never execute, and sit until cancelled.
+
+### Changed
+
+- `dusk-core` and `dusk-vm` 1.7.0, to build against the Atlas 0.4.1 tree. Bytecode differs from 0.2.0. `knot-warden-encoding` is source-unchanged (re-exports Atlas `PendingView` as `AtlasPendingView`); call-type and event layouts are unchanged.
+
 ### Added
 
 - `init_warden` emits `atlas_set`. `set_timelock` and `cancel_atlas_pending` emit the forwarded value in the same transaction. `set_guardian` emits `guardian_forwarded` when `execute_admin` forwards the queued change.

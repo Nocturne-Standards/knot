@@ -92,8 +92,8 @@ The bootstrap method is not named `init`. Piecrust treats an exported `init` as 
 | `set_scheduler(Account)` | scheduler | Schedules a new scheduler |
 | `execute_admin()` | permissionless after `execute_at` | Applies the admin slot |
 | `cancel_admin()` | scheduler | Drops the admin slot |
-| `set_guardian(Account)` | scheduler | Forwards to Atlas in this transaction |
-| `set_timelock(u64)` | scheduler | Forwards to Atlas in this transaction |
+| `set_guardian(Account)` | scheduler | Queues in the admin slot for `delay_blocks`; `execute_admin` then forwards it to Atlas. Panics `warden is not the atlas guardian`, `atlas has a pending change; cancel or execute it first`, or `guardian contract id zero` |
+| `set_timelock(u64)` | scheduler | Forwards to Atlas in this transaction. Panics `an atlas guardian change is queued; cancel it first` while `set_guardian` is queued |
 | `cancel_atlas_pending()` | scheduler | Forwards to Atlas `cancel_pending` |
 | `atlas`, `scheduler`, `delay_blocks`, `pending_service(name)`, `pending_admin` | permissionless | Reads |
 
@@ -103,7 +103,7 @@ Deploy owner matches Atlas: a direct account call and `public_sender == self_own
 
 ### Service repoint
 
-`schedule_service` panics `empty service name` when `name` is empty.
+`schedule_service` panics `empty service name` when `name` is empty, `service name longer than 64 bytes` above 64 bytes, and `service id zero` for the all-zero id. Atlas refuses all three at `set_service` (the last two from Atlas 0.4.1), and a queued repoint Atlas would refuse can never execute, so they are rejected up front.
 
 It calls Atlas `resolve(name)`. If the returned id equals `args.id`, it panics `service unchanged` and does not take a slot. `None` is a real change: the name is new.
 
@@ -134,6 +134,8 @@ A service scheduled while an admin change is pending uses the delay already stor
 `set_guardian`, `set_timelock`, and `cancel_atlas_pending` require the scheduler, then `abi::call` Atlas. They do not read or write warden's pending maps. They do not wait `delay_blocks`.
 
 Atlas's own panics propagate: `guardian unchanged`, `timelock unchanged`, `no pending change`, `a pending change already exists; cancel or execute it first`. Warden does not catch them.
+
+The `execute_admin` forward of a queued guardian change must not fail: a panic rolls back the clear of the admin slot and leaves the one slot occupied (blocking `set_delay` and `set_scheduler`) until `cancel_admin`. 0.2.0 could reach that state when `set_timelock` opened an Atlas change during the wait, when Atlas already held one, or when warden was not Atlas's guardian. From 0.2.1 `set_guardian` checks all three when queued, and `set_timelock` is refused while the guardian change is queued, so nothing else can open an Atlas change in the window.
 
 This split is deliberate. The kernel delay exists because a contract that can both authorize and replace itself can delete its own delay. Putting warden's `delay_blocks` in front of `set_guardian` would stack two waits on one rotation and would still not be the delay the kernel is for. The wait on replacing warden is Atlas `timelock_blocks`, passed to `init_guardian`.
 
