@@ -5,6 +5,29 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Wire-format and digest pins. The golden fixtures in knot-encoding
+      # were produced against these exact versions: rkyv and bytecheck define
+      # the archived layouts, dusk-* the call and event types, rand the seeded
+      # test keys (StdRng::seed_from_u64), and sha2 and tiny-keccak the quorum
+      # signing digests. A bump here changes bytes that are signed or
+      # deployed, so it is a coordinated change made by hand with the goldens
+      # re-run, not a routine dependency update.
+      - dependency-name: "dusk-*"
+      - dependency-name: "rkyv"
+      - dependency-name: "bytecheck"
+      - dependency-name: "rand"
+      - dependency-name: "sha2"
+      - dependency-name: "tiny-keccak"
+      # knot-tool's local keystore. A major version can change KDF or cipher
+      # defaults and leave existing encrypted files unreadable. Minor and patch
+      # updates still come through.
+      - dependency-name: "aes-gcm"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pbkdf2"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "argon2"
+        update-types: ["version-update:semver-major"]
     groups:
       workspace:
         patterns:
