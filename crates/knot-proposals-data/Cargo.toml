@@ -15,7 +15,7 @@ knot-encoding = { path = "../knot-encoding", features = ["call-types"] }
 [target.'cfg(target_family = "wasm")'.dependencies]
 dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }
 dusk-forge = "0.3.0"
-dusk-bytes = "=0.1.7"
+dusk-bytes = "=0.1.8"
 
 [features]
 contract = ["dusk-core/abi-dlmalloc"]
