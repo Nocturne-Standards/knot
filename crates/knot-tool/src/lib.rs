@@ -6,6 +6,7 @@
 
 pub mod blob;
 pub mod bls;
+pub mod deadline;
 pub mod collector_client;
 #[cfg(not(feature = "deployments-crate"))]
 pub mod deployments;

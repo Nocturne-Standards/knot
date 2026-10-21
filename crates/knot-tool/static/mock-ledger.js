@@ -546,18 +546,39 @@
       };
     }
 
+    if (q === "/api/proposal/deadline" && method === "GET") {
+      const height = 1000;
+      const ttl = 1000;
+      const windowBlocks = Math.min(ttl, 100);
+      return {
+        height,
+        ttl,
+        window: windowBlocks,
+        deadline: height + windowBlocks,
+        approx_seconds: windowBlocks * 10,
+      };
+    }
+
     if (q === "/api/proposal/create" && method === "POST") {
       const body = parseBody(opts);
       try {
         const target = hexToBytes32(body.target);
         const callArgs = hexToBytes(body.args_hex || "");
         const before = store.ledger.next_proposal_id();
+        const height = 1000;
+        const ttl = 1000;
+        const requested = Number(body.deadline) || 0;
+        const max = height + ttl;
+        const deadline =
+          requested === 0 || requested < height || requested > max
+            ? height + Math.min(ttl, 100)
+            : requested;
         const id = store.ledger.create_proposal(
           Number(body.account),
           target,
           String(body.function || "noop"),
           callArgs,
-          Number(body.deadline) || 0,
+          deadline,
           MOCK_CHAIN_ID
         );
         return {

@@ -19,7 +19,8 @@ Architecture and long-form docs:
 `atlas/` (per-project service registry) stays **outside** this repo.
 The registry book and the proposals book call Atlas `resolve` before every
 write. The Atlas id is fixed when each book is built (`ATLAS_PIN_HEX`).
-A quorum check reads the book and does not call Atlas.
+A build with that variable missing or empty fails. A quorum check reads the
+book and does not call Atlas.
 
 The delaying guardian in front of Atlas is [warden](docs/warden.md)
 (`knot-warden` 0.2.1). Live contract ids:
