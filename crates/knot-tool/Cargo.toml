@@ -47,7 +47,7 @@ zeroize = "1"
 subtle = "2"
 libc = "0.2"
 argon2 = "0.5"
-directories = "5"
+directories = "6"
 nocturne-deployments = { git = "https://github.com/Nocturne-Standards/nocturne-deployments", rev = "5811377f39f152f51878eee87985062acfdad0b8", package = "nocturne-deployments", optional = true }
 
 [dev-dependencies]
