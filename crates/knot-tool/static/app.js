@@ -13,7 +13,6 @@ const STORY = {
   propTarget: "0000000000000000000000000000000000000000000000000000000000000001",
   propFunction: "noop",
   propArgsHex: "",
-  propDeadline: 999999999,
   propSigner: "alice",
 };
 
@@ -1094,9 +1093,16 @@ async function proposalCreate() {
   const target = STORY.propTarget;
   const functionName = purposeToFunction(purpose) || STORY.propFunction;
   const args_hex = STORY.propArgsHex;
-  const deadline = STORY.propDeadline;
-  setOutcome("prop-outcome", `<span class="outcome-meta">Proposing…</span>`, true);
+  setOutcome("prop-outcome", `<span class="outcome-meta">Reading the deadline…</span>`, true);
   try {
+    const preview = await api("/api/proposal/deadline");
+    const deadline = preview.deadline;
+    setOutcome(
+      "prop-outcome",
+      `<span class="outcome-meta">Deadline block ${escapeHtml(String(deadline))} ` +
+        `(about ${escapeHtml(String(preview.approx_seconds))}s). Proposing…</span>`,
+      true
+    );
     const out = await api("/api/proposal/create", {
       method: "POST",
       body: JSON.stringify({

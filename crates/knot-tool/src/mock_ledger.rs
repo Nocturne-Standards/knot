@@ -116,6 +116,10 @@ pub const MOCK_PROPOSALS_SELF_ID: [u8; 32] = [0xB3; 32];
 pub const MOCK_REGISTRY_SELF_ID: [u8; 32] = [0xA1; 32];
 /// Chain id baked into mock digests (matches live testnet `init_chain_id`).
 pub const MOCK_CHAIN_ID: u64 = 2;
+/// Lab mock height. Not a chain read.
+pub const MOCK_CHAIN_HEIGHT: u64 = 1_000;
+/// Matches the contract's default `proposal_ttl`.
+pub const MOCK_PROPOSAL_TTL: u64 = 1_000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MockProposal {

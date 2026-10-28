@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Nocturne Standards
+
 //! Account book for `knot-registry`.
 //!
 //! Quorum checks, events, and signing domains live on `knot-registry`.

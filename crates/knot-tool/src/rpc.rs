@@ -42,8 +42,8 @@ use knot_tool::collector_client::{self, CollectorClient};
 use knot_tool::diagnose;
 use knot_tool::membership;
 use knot_tool::mock_ledger::{
-    DemoMode, MOCK_CHAIN_ID, MOCK_PROPOSALS_SELF_ID, MOCK_REGISTRY_SELF_ID, MockLedger,
-    MockProposal, MockProposalStatus,
+    DemoMode, MOCK_CHAIN_HEIGHT, MOCK_CHAIN_ID, MOCK_PROPOSAL_TTL, MOCK_PROPOSALS_SELF_ID,
+    MOCK_REGISTRY_SELF_ID, MockLedger, MockProposal, MockProposalStatus,
 };
 
 /// Chain id baked into mock proposals (matches live testnet `init_chain_id`).
@@ -1589,6 +1589,44 @@ struct ProposalCreateOut {
     allocated_id_hint: u64,
 }
 
+#[derive(Serialize)]
+struct ProposalDeadlineOut {
+    height: u64,
+    ttl: u64,
+    window: u64,
+    deadline: u64,
+    approx_seconds: u64,
+}
+
+async fn proposal_clock(state: &AppState) -> Result<(u64, u64), RpcError> {
+    if state.demo_mode == DemoMode::Mock {
+        return Ok((MOCK_CHAIN_HEIGHT, MOCK_PROPOSAL_TTL));
+    }
+    let ttl = chain::proposal_ttl().await.map_err(RpcError::internal)?;
+    let now = chain::chain_height().await.map_err(RpcError::internal)?;
+    Ok((now, ttl))
+}
+
+fn deadline_out(now: u64, ttl: u64, deadline: u64) -> ProposalDeadlineOut {
+    let window = ttl.min(knot_tool::deadline::SENSIBLE_PROPOSAL_WINDOW);
+    ProposalDeadlineOut {
+        height: now,
+        ttl,
+        window,
+        deadline,
+        approx_seconds: window * knot_tool::deadline::APPROX_BLOCK_SECONDS,
+    }
+}
+
+async fn api_proposal_deadline(
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<Json<ProposalDeadlineOut>> {
+    let (now, ttl) = proposal_clock(&state).await?;
+    let deadline = knot_tool::deadline::default_proposal_deadline(now, ttl)
+        .ok_or_else(|| RpcError::invalid_input("proposal_ttl is 0"))?;
+    Ok(Json(deadline_out(now, ttl, deadline)))
+}
+
 async fn api_proposal_create(
     State(state): State<Arc<AppState>>,
     Json(req): Json<ProposalCreateReq>,
@@ -1603,6 +1641,9 @@ async fn api_proposal_create(
     } else {
         hex::decode(req.args_hex.trim_start_matches("0x")).map_err(RpcError::invalid_hex)?
     };
+    let (now, ttl) = proposal_clock(&state).await?;
+    let deadline = knot_tool::deadline::resolve_proposal_deadline(req.deadline, now, ttl)
+        .ok_or_else(|| RpcError::invalid_input("proposal_ttl is 0"))?;
     if state.demo_mode == DemoMode::Mock {
         let mut mock = state.mock.lock().await;
         let before = mock.next_proposal_id();
@@ -1613,7 +1654,7 @@ async fn api_proposal_create(
                 target_bytes,
                 req.function,
                 call_args,
-                req.deadline,
+                deadline,
                 nonce,
             )
             .map_err(RpcError::invalid_input)?;
@@ -1639,7 +1680,7 @@ async fn api_proposal_create(
         function_name: req.function,
         call_args,
         nonce,
-        deadline: req.deadline,
+        deadline,
     };
     let bytes = chain::encode(&args).map_err(RpcError::internal)?;
     let result = tokio::task::spawn_blocking(move || {
@@ -2241,6 +2282,7 @@ fn build_router(state: Arc<AppState>) -> Router {
             "/api/change-account/submit",
             post(api_change_account_submit),
         )
+        .route("/api/proposal/deadline", get(api_proposal_deadline))
         .route("/api/proposal/create", post(api_proposal_create))
         .route("/api/proposal/{id}/preview", get(api_proposal_preview))
         .route("/api/proposal/{id}/approve", post(api_proposal_approve))

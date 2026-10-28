@@ -155,6 +155,31 @@ where
     query_contract_id(&id, fn_name, args_bytes).await
 }
 
+pub async fn chain_height() -> Result<u64> {
+    let url = format!("{TESTNET_RUES_BASE}/on/graphql/query");
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .body("query { blocks(last: 1) { header { height } } }")
+        .send()
+        .await
+        .with_context(|| format!("POST {url}"))?;
+    let status = resp.status();
+    let body = resp.text().await?;
+    if !status.is_success() {
+        bail!("chain height failed ({status}): {body}");
+    }
+    let parsed: serde_json::Value = serde_json::from_str(&body)?;
+    parsed["blocks"][0]["header"]["height"]
+        .as_u64()
+        .context("chain height response had no block")
+}
+
+pub async fn proposal_ttl() -> Result<u64> {
+    query_contract(Contract::Proposals, "proposal_ttl", encode(&())?).await
+}
+
 /// Free read against `knot-registry`.
 pub async fn query<R>(fn_name: &str, args_bytes: Vec<u8>) -> Result<R>
 where

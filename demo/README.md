@@ -10,14 +10,14 @@ state lives only in the browser tab and resets on reload.
 
 ## Status
 
-**Wiring complete — live Pages deploy pending.** Target:
-`https://knot.nocturne-standards.org` (attach custom domain in the
-Cloudflare dashboard after the first upload — see checklist below).
+**Live, mock mode.** The page people open is
+`https://knot.nocturne-standards.org`. It is built from
+`nocturne-standards-site/public/knot/`, which copies this demo
+(`window.KNOT_FRONTEND_MOCK = true`). Mock only. Testnet only. Not audited yet.
+Nothing on that page is a chain write.
 
-**Do not flip `products.knot.site` in `nocturne-standards-site/published.json`
-until `knot.nocturne-standards.org` is confirmed live** (`curl -I` 2xx/3xx).
-Per the release runbook, marketing only points at a product once its
-subdomain resolves.
+This directory (`knot/demo`) is the source the site copy is taken from.
+It is not a second deploy.
 
 ## Run
 

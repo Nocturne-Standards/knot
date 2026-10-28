@@ -76,5 +76,8 @@ jobs:
           fi
         timeout-minutes: 30
       - name: cargo test (workspace)
+        env:
+          # Lab mock Atlas. Unset is a build failure in the book build scripts.
+          ATLAS_PIN_HEX: c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1
         run: cargo test
         timeout-minutes: 45

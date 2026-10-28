@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Nocturne Standards
+
 #[dusk_forge::contract]
 mod knot_proposals_data {
     use alloc::collections::BTreeMap;

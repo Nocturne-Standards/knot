@@ -1,6 +1,6 @@
 # Warden
 
-Source is `knot-warden` 0.2.1 and `knot-warden-encoding` 0.2.0. Testnet runs 0.2.0 `7d1659d658a6a9b8781e8f85b3f7708a4e3079dd75b706ea855fbf0c6d2c7000` in front of Atlas 0.4.0 `27882147345ff547ef37fc4fbd5bf247d8c340950b8131f9e91e672d30239724`; 0.2.1 is not deployed. The sentences below about testnet running 0.1.1 are history. Testnet runs 0.1.1 `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` (deploy tx `ebf2d30d449860949d44aeb904b01188a90d3853a95e84ffc8a71bce88676d0a`), in front of Atlas 0.3.1 `21c653385e3b7cc8be32edd5e6df2e30b6464be867f39442171ba8ca8d089612`. The first 0.1.1 was `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` (tx `9b821f4a386126509aa4963dead608f63972af906b232b8916b7f0ed2f9e2952`). The deployments record has no `init_warden` for the current id and no `set_guardian` for the move. 0.1.1 forwards `set_guardian` immediately. 0.2.0 does not.
+Source is `knot-warden` 0.2.1 and `knot-warden-encoding` 0.2.0. The live testnet contract id is in [nocturne-deployments](https://github.com/Nocturne-Standards/nocturne-deployments). Older ids in changelogs, including `fb143b1e…` and `113159d3…`, are history. Warden and `knot-warden-encoding` build only next to an Atlas checkout. Public CI does not build them.
 
 Warden is the contract an operator puts in Atlas's guardian slot when a service repoint must wait. Knot-proposals stays a generic `call_raw` executor and does not grow a delay. Atlas stays a registry: it does not call warden, and it does not delay `set_service`.
 
