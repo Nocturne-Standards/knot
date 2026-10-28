@@ -26,7 +26,7 @@ use clap::{Parser, Subcommand};
 use dusk_bytes::Serializable;
 use dusk_core::abi::ContractId;
 use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
-use knot_tool::{blob, bls, collector_client, diagnose, membership, mock_ledger};
+use knot_tool::{blob, bls, collector_client, diagnose, evm, membership, mock_ledger};
 
 use proposals_types::call_types::{
     ApproveArgs, CancelProposalArgs, ProposalStatus, ProposalView, ProposeArgs,
@@ -101,6 +101,12 @@ enum Cmd {
     Party {
         #[command(subcommand)]
         cmd: PartyCmd,
+    },
+    /// DuskEVM: publish the member set to `KnotEvmRoot` and sign actions it accepts
+    /// (testnet only, not audited yet).
+    Evm {
+        #[command(subcommand)]
+        cmd: EvmCmd,
     },
     /// Serve the local web UI + RPC on 127.0.0.1.
     ///
@@ -431,6 +437,68 @@ enum BlobCmd {
         out: PathBuf,
         #[arg(long)]
         collector: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum EvmCmd {
+    /// Sign the bootstrap message for `publish_bootstrap_root` and add the partial to `--file`.
+    /// Account members, threshold and nonce are read from the registry in the pins.
+    BootstrapSign {
+        #[arg(long)]
+        account: u64,
+        /// `KnotEvmRoot` address (20-byte hex) the registry is configured to send to.
+        #[arg(long)]
+        receiver: String,
+        #[arg(long)]
+        signer: String,
+        /// Partial file (public data). Created if missing, else merged.
+        #[arg(long)]
+        file: PathBuf,
+        /// Required — preview first, then re-run with `--confirm`.
+        #[arg(long)]
+        confirm: bool,
+    },
+    /// Check the partials (threshold, signatures) and submit `publish_bootstrap_root`.
+    BootstrapSubmit {
+        #[arg(long)]
+        file: PathBuf,
+        /// Required — preview first, then re-run with `--confirm`.
+        #[arg(long)]
+        confirm: bool,
+    },
+    /// Sign `KnotEvmRoot.actionMessage` for `checkAction` and add the partial to `--file`.
+    ActionSign {
+        #[arg(long)]
+        account: u64,
+        /// `KnotEvmRoot` address (20-byte hex).
+        #[arg(long)]
+        root: String,
+        /// DuskEVM chain id (`block.chainid`; 745 on testnet).
+        #[arg(long)]
+        evm_chain: u64,
+        /// `KnotEvmRoot.rotationNonce(account)` right now.
+        #[arg(long)]
+        rotation_nonce: u64,
+        /// Address that will call `checkAction` (`msg.sender`).
+        #[arg(long)]
+        consumer: String,
+        /// 32-byte action digest (64 hex chars).
+        #[arg(long)]
+        digest: String,
+        #[arg(long)]
+        signer: String,
+        /// Partial file (public data). Created if missing, else merged.
+        #[arg(long)]
+        file: PathBuf,
+        /// Required — preview first, then re-run with `--confirm`.
+        #[arg(long)]
+        confirm: bool,
+    },
+    /// Aggregate the action partials and print the `cast send ... checkAction` arguments.
+    ActionArgs {
+        #[arg(long)]
+        file: PathBuf,
     },
 }
 
@@ -1514,6 +1582,8 @@ async fn main() -> Result<()> {
             println!("  signature: 0x{}", hex::encode(signature.to_bytes()));
         }
 
+        Cmd::Evm { cmd } => run_evm(cmd, &store_path).await?,
+
         Cmd::Serve { bind } => {
             let mode = mock_ledger::DemoMode::from_env().map_err(anyhow::Error::msg)?;
             eprintln!(
@@ -1615,6 +1685,229 @@ async fn threshold_guard_for_blob(proposal: &knot_encoding::ProposalBlob) -> blo
                 proposal.threshold
             );
             blob::ThresholdGuard::unverified_blob(proposal.threshold)
+        }
+    }
+}
+
+fn require_submit_confirm(confirm: bool) -> Result<()> {
+    if confirm {
+        return Ok(());
+    }
+    bail!("preview only — re-run with --confirm to submit");
+}
+
+fn member_bytes(view: &MultisigAccountView) -> Vec<[u8; 96]> {
+    view.members.iter().map(|pk| pk.to_bytes()).collect()
+}
+
+/// The round as the registry in the pins sees it right now.
+async fn evm_round_from_chain(account: u64, context: evm::EvmContext) -> Result<evm::EvmSigFile> {
+    let view = fetch_registry_account(account).await?;
+    let context = match context {
+        evm::EvmContext::Bootstrap { receiver, .. } => evm::EvmContext::Bootstrap {
+            nonce: view.nonce,
+            receiver,
+        },
+        other => other,
+    };
+    evm::EvmSigFile::new(
+        chain::digest_chain_id(),
+        chain::contract_self_id_bytes(chain::Contract::Registry)?,
+        account,
+        member_bytes(&view),
+        view.threshold,
+        context,
+    )
+}
+
+/// Existing file merged with the fresh round, or the fresh round. Refuses any header difference.
+fn evm_load_or_start(path: &std::path::Path, fresh: evm::EvmSigFile) -> Result<evm::EvmSigFile> {
+    if !path.exists() {
+        return Ok(fresh);
+    }
+    let existing = evm::read_file(path)?;
+    existing.ensure_same_round(&fresh)?;
+    Ok(existing)
+}
+
+fn print_evm_round(round: &evm::EvmSigFile) {
+    println!(
+        "=== DuskEVM {} (testnet only, not audited yet) ===",
+        round.kind()
+    );
+    println!("  dusk_chain_id: {}", round.dusk_chain_id);
+    println!("  registry: 0x{}", hex::encode(round.registry_id));
+    println!("  account: {}", round.account_id);
+    match &round.context {
+        evm::EvmContext::Bootstrap { nonce, receiver } => {
+            println!("  account nonce: {nonce}");
+            println!("  receiver (KnotEvmRoot): 0x{}", hex::encode(receiver));
+        }
+        evm::EvmContext::Action {
+            evm_chain_id,
+            root,
+            rotation_nonce,
+            consumer,
+            digest,
+        } => {
+            println!("  evm_chain_id: {evm_chain_id}");
+            println!("  root (KnotEvmRoot): 0x{}", hex::encode(root));
+            println!("  rotation nonce: {rotation_nonce}");
+            println!("  consumer (msg.sender): 0x{}", hex::encode(consumer));
+            println!("  action digest: 0x{}", hex::encode(digest));
+        }
+    }
+    println!("  threshold: {}", round.threshold);
+    for (i, pk) in round.members.iter().enumerate() {
+        let signed = round.partials.iter().any(|p| &p.signer_pk == pk);
+        println!(
+            "  member[{i}] {}{}",
+            evm::short_pk(pk),
+            if signed { " (signed)" } else { "" }
+        );
+    }
+    match evm::members_root(&round.members) {
+        Ok(r) => println!("  members root: 0x{}", hex::encode(r)),
+        Err(e) => println!("  members root: (cannot compute: {e})"),
+    }
+    println!("  partials: {}/{}", round.partials.len(), round.threshold);
+}
+
+async fn evm_sign(
+    store_path: &std::path::Path,
+    file: &std::path::Path,
+    fresh: evm::EvmSigFile,
+    signer: &str,
+    confirm: bool,
+) -> Result<()> {
+    let mut round = evm_load_or_start(file, fresh)?;
+    let (identities, _) = load_store(store_path)?;
+    let identity = find_identity(&identities, signer)?;
+    let sk = identity.require_sk()?;
+    round.ensure_can_sign(&identity.pk.to_bytes())?;
+    print_evm_round(&round);
+    println!(
+        "  signer: {signer} {}",
+        evm::short_pk(&identity.pk.to_bytes())
+    );
+    print_signing_fingerprint(&round.message);
+    require_cli_confirm(confirm)?;
+    round.sign_and_add(sk, &identity.pk)?;
+    evm::write_file(file, &round)?;
+    println!(
+        "added partial from {signer}; partials={}/{}",
+        round.partials.len(),
+        round.threshold
+    );
+    println!("wrote {}", file.display());
+    Ok(())
+}
+
+async fn run_evm(cmd: EvmCmd, store_path: &std::path::Path) -> Result<()> {
+    match cmd {
+        EvmCmd::BootstrapSign {
+            account,
+            receiver,
+            signer,
+            file,
+            confirm,
+        } => {
+            let receiver = evm::parse_hex_array::<20>(&receiver, "--receiver")?;
+            if receiver == [0u8; 20] {
+                bail!("--receiver must be non-zero");
+            }
+            let fresh =
+                evm_round_from_chain(account, evm::EvmContext::Bootstrap { nonce: 0, receiver })
+                    .await?;
+            evm_sign(store_path, &file, fresh, &signer, confirm).await
+        }
+        EvmCmd::BootstrapSubmit { file, confirm } => {
+            let round = evm::read_file(&file)?;
+            let evm::EvmContext::Bootstrap { receiver, .. } = round.context else {
+                bail!("{} is not a bootstrap file", file.display());
+            };
+            // Same round as the registry sees now: a change_account since signing moved the nonce.
+            let fresh = evm_round_from_chain(
+                round.account_id,
+                evm::EvmContext::Bootstrap { nonce: 0, receiver },
+            )
+            .await?;
+            round.ensure_same_round(&fresh)?;
+            let args = round.publish_args(fresh.threshold)?;
+            print_evm_round(&round);
+            print_signing_fingerprint(&round.message);
+            println!(
+                "  {} signature(s) verified locally; receiver must equal the registry's init_evm_root_receiver",
+                args.sigs.len()
+            );
+            require_submit_confirm(confirm)?;
+            let bytes = chain::encode(&args)?;
+            let result = chain::submit_call("publish_bootstrap_root", &bytes)?;
+            print_write_result("publish_bootstrap_root", result);
+            Ok(())
+        }
+        EvmCmd::ActionSign {
+            account,
+            root,
+            evm_chain,
+            rotation_nonce,
+            consumer,
+            digest,
+            signer,
+            file,
+            confirm,
+        } => {
+            let root = evm::parse_hex_array::<20>(&root, "--root")?;
+            let consumer = evm::parse_hex_array::<20>(&consumer, "--consumer")?;
+            let digest = parse_digest32(&digest)?;
+            let fresh = evm_round_from_chain(
+                account,
+                evm::EvmContext::Action {
+                    evm_chain_id: evm_chain,
+                    root,
+                    rotation_nonce,
+                    consumer,
+                    digest,
+                },
+            )
+            .await?;
+            println!(
+                "check before signing: `cast call 0x{} \"membersRoot(uint64)(bytes32)\" {account}` \
+                 must equal the members root below, and `rotationNonce(uint64)(uint64)` must be {rotation_nonce}",
+                hex::encode(root)
+            );
+            evm_sign(store_path, &file, fresh, &signer, confirm).await
+        }
+        EvmCmd::ActionArgs { file } => {
+            let round = evm::read_file(&file)?;
+            let evm::EvmContext::Action { root, consumer, .. } = round.context else {
+                bail!("{} is not an action file", file.display());
+            };
+            match fetch_registry_account(round.account_id).await {
+                Ok(view) if member_bytes(&view) != round.members => eprintln!(
+                    "warning: DuskDS account {} members differ from the file; the root only accepts the set it holds",
+                    round.account_id
+                ),
+                Ok(_) => {}
+                Err(e) => eprintln!("warning: could not re-read DuskDS account: {e}"),
+            }
+            let q = round.quorum(round.threshold)?;
+            print_evm_round(&round);
+            println!("=== checkAction arguments (aggregate verified locally) ===");
+            println!("{}", q.args_line());
+            println!(
+                "=== send from 0x{} (it must be msg.sender) ===",
+                hex::encode(consumer)
+            );
+            println!(
+                "cast send 0x{} \"{}\" {} 0x{} \"{}\"",
+                hex::encode(root),
+                evm::CHECK_ACTION_SIG,
+                q.account_id,
+                hex::encode(q.digest),
+                q.tuple()
+            );
+            Ok(())
         }
     }
 }
