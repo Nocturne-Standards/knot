@@ -11,6 +11,7 @@ pub mod deadline;
 #[cfg(not(feature = "deployments-crate"))]
 pub mod deployments;
 pub mod diagnose;
+pub mod evm;
 pub mod hex_util;
 pub mod membership;
 pub mod mock_ledger;

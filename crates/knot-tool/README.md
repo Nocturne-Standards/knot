@@ -393,6 +393,54 @@ free-read diagnose/check follow-up and warns when it looks untrusted.
 `--store <path>` (global flag) or `KNOT_STORE` overrides the default keystore
 location (platform data dir; legacy `~/.knot/identities.dat` read fallback).
 
+### DuskEVM
+
+Status: testnet only, not audited yet.
+
+These commands let a council whose members each keep their own identity
+store publish the council's member set to `KnotEvmRoot` on DuskEVM, then
+sign actions that `KnotEvmRoot.checkAction` accepts. Signatures travel in
+one JSON file of public data (keys and signatures only). Each member runs
+the sign command on their own machine with their own `--store`, then
+passes the file on. Every command shows a preview; signing and submitting
+need `--confirm`.
+
+```bash
+# 1. Publish the member set. Members, threshold and nonce are read from the
+#    registry in the pins. The receiver is the KnotEvmRoot address the
+#    registry was set up with (init_evm_root_receiver).
+knot-tool --store <my-store> evm bootstrap-sign --account 0 \
+  --receiver 0x<KnotEvmRoot> --signer alice --file bootstrap.json            # preview
+knot-tool --store <my-store> evm bootstrap-sign --account 0 \
+  --receiver 0x<KnotEvmRoot> --signer alice --file bootstrap.json --confirm
+# ... next member signs the same file ...
+knot-tool evm bootstrap-submit --file bootstrap.json             # preview
+knot-tool evm bootstrap-submit --file bootstrap.json --confirm   # sends publish_bootstrap_root
+
+# 2. Sign an action. Check the root first:
+#    cast call <root> "membersRoot(uint64)(bytes32)" 0  (must match the preview)
+#    cast call <root> "rotationNonce(uint64)(uint64)" 0
+knot-tool --store <my-store> evm action-sign --account 0 --root 0x<KnotEvmRoot> \
+  --evm-chain 745 --rotation-nonce 0 --consumer 0x<caller> \
+  --digest 0x<32 bytes> --signer alice --file action.json --confirm
+# ... next member signs the same file ...
+knot-tool evm action-args --file action.json   # prints the cast send line
+```
+
+The tool refuses to add a signature to a file from a different round
+(account, nonce, receiver or root, consumer, digest, members or message
+differ), a signer who is not a member, and a second signature from the
+same member. Submit and `action-args` check the threshold and verify
+every signature locally first. `bootstrap-submit` also refuses when the
+account changed since signing (a `change_account` moves the nonce, so
+the signatures would no longer count).
+
+`checkAction` must be sent by the consumer address, since it is bound
+into the signed message. The member set is the account's set on DuskDS
+when signing; it has to be the set the root holds. After a
+`change_account` on DuskDS, the root keeps its old set until it is
+rotated, and `action-args` warns when they differ.
+
 ### Web UI
 
 ```bash

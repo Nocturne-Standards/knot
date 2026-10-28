@@ -9,6 +9,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 - CLI/RPC: `account set-timelock` / `execute-pending` / `cancel-pending`,
   `proposal execute` / `cancel`. Mock ledger shows queued + eta.
+- CLI: `evm bootstrap-sign` / `bootstrap-submit` / `action-sign` / `action-args`
+  for `KnotEvmRoot` on DuskEVM, one signer per store, partials in a public JSON
+  file. Testnet only, not audited yet.
+
+### Fixed
+
+- Default build loads both pin shapes: the flat `testnet.json` and the
+  enveloped `duskds/testnet.json` (`nocturne.pins.v1`, `contracts`,
+  `aliases`). `NOCTURNE_DEPLOYMENTS` may name either file or the pins dir
+  (`duskds/testnet.json` first).
 
 ### Changed
 

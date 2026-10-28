@@ -7,6 +7,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Added
 
+- `evm_root_action_message_v1` and `EVM_ROOT_ACTION_TAG`: the bytes
+  `KnotEvmRoot.actionMessage` returns, which members sign for `checkAction`.
+  Checked against the `act_s2` vector the root's tests use. Additive.
+
 - Event payloads for registry and proposals logic (`events`). `RegistryBookEffect`
   carries the new members, threshold, delay, or pending change. `PruneReport`
   lists the proposal ids and digest keys one prune removed. Layout goldens
