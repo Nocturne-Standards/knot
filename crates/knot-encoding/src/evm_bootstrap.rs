@@ -96,6 +96,38 @@ pub fn encode_bootstrap_calldata(
     out
 }
 
+/// `KnotEvmRoot.ACTION_TAG`, left-aligned in a 32-byte word.
+pub const EVM_ROOT_ACTION_TAG: &[u8] = b"KNOT_EVM_ROOT_ACTION_V1";
+
+/// `KnotEvmRoot.actionMessage(accountId, consumer, actionDigest)` for the root at `root` on `evm_chain_id`:
+/// `abi.encode(ACTION_TAG, uint256(duskChainId), block.chainid, address(this), registryId, uint256(accountId),
+/// uint256(rotationNonce), consumer, actionDigest)`. Nine 32-byte words; members sign it with `sign_multisig`.
+#[allow(clippy::too_many_arguments)]
+pub fn evm_root_action_message_v1(
+    dusk_chain_id: u64,
+    evm_chain_id: u64,
+    root: &[u8; 20],
+    registry_id: &[u8; 32],
+    account_id: u64,
+    rotation_nonce: u64,
+    consumer: &[u8; 20],
+    action_digest: &[u8; 32],
+) -> Vec<u8> {
+    let mut tag = [0u8; 32];
+    tag[..EVM_ROOT_ACTION_TAG.len()].copy_from_slice(EVM_ROOT_ACTION_TAG);
+    let mut out = Vec::with_capacity(9 * 32);
+    out.extend_from_slice(&tag);
+    out.extend_from_slice(&word(dusk_chain_id));
+    out.extend_from_slice(&word(evm_chain_id));
+    out.extend_from_slice(&addr_word(root));
+    out.extend_from_slice(registry_id);
+    out.extend_from_slice(&word(account_id));
+    out.extend_from_slice(&word(rotation_nonce));
+    out.extend_from_slice(&addr_word(consumer));
+    out.extend_from_slice(action_digest);
+    out
+}
+
 /// `sendMessage` min gas for a bootstrap of `member_count` keys.
 pub fn bootstrap_min_gas(member_count: u32) -> u32 {
     BOOTSTRAP_MIN_GAS_PER_MEMBER
@@ -106,6 +138,12 @@ pub fn bootstrap_min_gas(member_count: u32) -> u32 {
 fn word(v: u64) -> [u8; 32] {
     let mut w = [0u8; 32];
     w[24..].copy_from_slice(&v.to_be_bytes());
+    w
+}
+
+fn addr_word(a: &[u8; 20]) -> [u8; 32] {
+    let mut w = [0u8; 32];
+    w[12..].copy_from_slice(a);
     w
 }
 
@@ -185,6 +223,46 @@ mod tests {
         ] {
             assert_ne!(other.unwrap(), m);
         }
+    }
+
+    #[test]
+    fn action_message_matches_root_vector() {
+        // evm/test/vectors/knot_root.json act_s2: the message the KnotEvmRoot forge tests accept.
+        let golden = alloc::format!(
+            "{}{}{}{}{}{}{}{}{}",
+            "4b4e4f545f45564d5f524f4f545f414354494f4e5f5631000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000002",
+            "00000000000000000000000000000000000000000000000000000000000002e9",
+            "0000000000000000000000009145485659094a9de5316261fba3a55ee99398dc",
+            "8cb3c0d5087604e3c94d31778faf1b579260110d834a3050cc28c257e1290ca4",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000004c35455ba71294241b4978cf79d3c7f7042ad5df",
+            "8ca43d3c3de37882449d24c4c1930aca1d3bbd13eebbcb1b91fd2b0d04addec1",
+        );
+        let unhex = |s: &str| -> alloc::vec::Vec<u8> {
+            (0..s.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+                .collect()
+        };
+        let root: [u8; 20] = unhex("9145485659094a9de5316261fba3a55ee99398dc")
+            .try_into()
+            .unwrap();
+        let reg: [u8; 32] =
+            unhex("8cb3c0d5087604e3c94d31778faf1b579260110d834a3050cc28c257e1290ca4")
+                .try_into()
+                .unwrap();
+        let consumer: [u8; 20] = unhex("4c35455ba71294241b4978cf79d3c7f7042ad5df")
+            .try_into()
+            .unwrap();
+        let digest: [u8; 32] =
+            unhex("8ca43d3c3de37882449d24c4c1930aca1d3bbd13eebbcb1b91fd2b0d04addec1")
+                .try_into()
+                .unwrap();
+        let m = evm_root_action_message_v1(2, 745, &root, &reg, 1, 0, &consumer, &digest);
+        assert_eq!(m.len(), 288);
+        assert_eq!(hex(&m), golden);
     }
 
     #[test]
