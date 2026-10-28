@@ -30,7 +30,7 @@ Atlas's delay is what a hostile warden cannot delete. Warden can call `set_guard
 - Not the committee. Membership and quorum stay in `knot-registry` and `knot-proposals`. Warden does not verify BLS signatures.
 - Not a second Atlas. It does not store the directory and it does not answer `resolve` for consumers. Consumers keep baking the Atlas id.
 - Not a generic proxy. There is no method that takes a function name and raw bytes and forwards them to Atlas. A closed method list is the policy. An open forwarder would let the scheduler call Atlas `set_service` with no wait.
-- Not Vigil, and not a constants table. Bounds that used to be Atlas `constant(name)` belong in the service contract `resolve` returns (for Vigil, `vigil_policy`). Warden only decides when that name may point at a different id.
+- Not a constants table. Bounds that used to be Atlas `constant(name)` belong in the service contract `resolve` returns. Warden only decides when that name may point at a different id.
 - Not upgradeable. A new warden is a new `ContractId`, installed with `set_guardian`, which waits `delay_blocks` and then Atlas `timelock_blocks`.
 
 ## Crates
@@ -206,11 +206,9 @@ A guardian rotation through knot uses `function_name` `set_guardian` and `target
 
 Pointing Atlas's guardian straight at the proposals contract still works. `finalize` then calls `set_service` immediately. That wiring has quorum and no service delay. Warden is the deployment that wants the delay.
 
-## Vigil
+## Service contracts that read a policy by name
 
-Vigil stays pinned to Atlas 0.2.0 until its `constant(name)` reads move. This spec does not change Vigil.
-
-On an Atlas 0.3 pin, `resolve("vigil_policy")` is still how the vault finds the policy contract. A repoint of that name waits `delay_blocks` only when warden is the Atlas guardian and the proposal targets `schedule_service`. Vigil's withdrawal delay and veto stay in the vault. They are not this delay.
+A service contract that finds its policy through Atlas `resolve(name)` sees a repoint of that name wait `delay_blocks` only when warden is the Atlas guardian and the proposal targets `schedule_service`. Delays inside the service contract itself, such as a withdrawal delay, are separate from this one.
 
 ## Acceptance
 
