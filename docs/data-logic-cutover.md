@@ -2,6 +2,8 @@
 
 Landed on Dusk testnet 2026-09-27 against Atlas `21c653385e3b7cc8be32edd5e6df2e30b6464be867f39442171ba8ca8d089612`. Warden `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` applied both service names. `init_data` and `init_registry` are set. `set_authorized_account` was not called. Warden's scheduler is still the operator key.
 
+The ids below are the 2026-09-27 cutover and are history now. Current ids are on [Deployments](https://docs.nocturne-standards.org/v1/deployments/).
+
 | contract | id |
 |---|---|
 | `knot-registry` | `c8991fa3d54b0a16c1789a0821db4096f9d501ba83dd9de4bd620c3377cee02d` |

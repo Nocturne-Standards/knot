@@ -36,7 +36,7 @@ guardian straight at the proposals contract still works; `finalize` then
 applies `set_service` in that same transaction.
 
 Knot's per-account delay covers registry writes. Warden's `delay_blocks`
-covers an Atlas service repoint and, in 0.2.0, a guardian change.
+covers an Atlas service repoint and, since 0.2.0, a guardian change.
 Stacking both on one intent waits twice. Atlas `timelock_blocks` covers
 `set_timelock` and the second half of a guardian change.
 

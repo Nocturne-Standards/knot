@@ -4,7 +4,7 @@ Source is `knot-warden` 0.2.1 and `knot-warden-encoding` 0.2.0. The live testnet
 
 Warden is the contract an operator puts in Atlas's guardian slot when a service repoint must wait. Knot-proposals stays a generic `call_raw` executor and does not grow a delay. Atlas stays a registry: it does not call warden, and it does not delay `set_service`.
 
-Pinned to the Atlas 0.3 ABI: method names `resolve`, `set_service`, `set_guardian`, `set_timelock`, `cancel_pending`, and the `atlas-encoding` types `Account` and `SetServiceArgs`. A later Atlas bytecode is a new `ContractId` and a new warden deployment.
+Built against `atlas-encoding` 0.3.0, the call types Atlas 0.4.1 serves: method names `resolve`, `set_service`, `set_guardian`, `set_timelock`, `cancel_pending`, and the `atlas-encoding` types `Account` and `SetServiceArgs`. A later Atlas bytecode is a new `ContractId` and a new warden deployment.
 
 ## Job
 
@@ -35,7 +35,7 @@ Atlas's delay is what a hostile warden cannot delete. Warden can call `set_guard
 
 ## Crates
 
-Both under Apache-2.0, next to the existing suite. Each crate is its own Cargo workspace: they path-depend on a sibling checkout of atlas 0.3, and public knot CI does not check that sibling out. `make -C crates/knot-warden test` builds the contracts and runs the suite.
+Both under Apache-2.0, next to the existing suite. Each crate is its own Cargo workspace: they path-depend on a sibling Atlas 0.4.1 checkout (`atlas-encoding` 0.3.0), and public knot CI does not check that sibling out. `make -C crates/knot-warden test` builds the contracts and runs the suite.
 
 | Crate | Role |
 |---|---|
@@ -153,13 +153,13 @@ forwards it, and Atlas waits for the incoming guardian.
 
 ### Forwards
 
-`set_guardian`, `set_timelock`, and `cancel_atlas_pending` require the scheduler, then `abi::call` Atlas. They do not read or write warden's pending maps. They do not wait `delay_blocks`.
+`set_timelock` and `cancel_atlas_pending` require the scheduler, then `abi::call` Atlas in the same transaction. They do not wait `delay_blocks`. `set_guardian` is not a forward: it is queued in the admin slot, waits `delay_blocks`, and `execute_admin` then calls Atlas (see Job).
 
 Atlas's own panics propagate: `guardian unchanged`, `timelock unchanged`, `no pending change`, `a pending change already exists; cancel or execute it first`. Warden does not catch them.
 
 The `execute_admin` forward of a queued guardian change must not fail: a panic rolls back the clear of the admin slot and leaves the one slot occupied (blocking `set_delay` and `set_scheduler`) until `cancel_admin`. 0.2.0 could reach that state when `set_timelock` opened an Atlas change during the wait, when Atlas already held one, or when warden was not Atlas's guardian. From 0.2.1 `set_guardian` checks all three when queued, and `set_timelock` is refused while the guardian change is queued, so nothing else can open an Atlas change in the window.
 
-This split is deliberate. The kernel delay exists because a contract that can both authorize and replace itself can delete its own delay. Putting warden's `delay_blocks` in front of `set_guardian` would stack two waits on one rotation and would still not be the delay the kernel is for. The wait on replacing warden is Atlas `timelock_blocks`, passed to `init_guardian`.
+A guardian change therefore waits twice: warden's `delay_blocks`, then Atlas `timelock_blocks` (passed to `init_guardian`). The Atlas wait is the one that still holds if a guardian could remove its own delay, because Atlas keeps it, not the guardian.
 
 While an Atlas guardian rotation is pending, warden remains the caller Atlas accepts, and `schedule_service` still waits `delay_blocks`. Atlas does not freeze the directory during `set_guardian`. Warden is what keeps a repoint from landing in that window.
 
