@@ -93,3 +93,4 @@ crates/knot-warden/test-proxy/src/lib.rs:call_cancel_service	PUBLIC — test-onl
 crates/knot-warden/test-proxy/src/lib.rs:call_init_warden	PUBLIC — test-only cross-call fixture
 crates/knot-warden/test-proxy/src/lib.rs:call_schedule_service	PUBLIC — test-only cross-call fixture
 crates/knot-warden/test-proxy/src/lib.rs:call_set_guardian	PUBLIC — test-only cross-call fixture
+crates/knot-warden/test-proxy/src/lib.rs:relay	PUBLIC — test-only cross-call fixture (contract_to_contract stack)

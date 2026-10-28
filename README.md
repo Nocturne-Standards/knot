@@ -29,7 +29,7 @@ A build with that variable missing or empty fails. A quorum check reads the
 book and does not call Atlas.
 
 The delaying guardian in front of Atlas is [warden](docs/warden.md)
-(`knot-warden` 0.2.1). Live contract ids:
+(`knot-warden` 0.3.0; testnet runs 0.2.1). Live contract ids:
 [Deployments](https://docs.nocturne-standards.org/v1/deployments/).
 Proposals `call_raw` into warden, and warden calls Atlas. Pointing Atlas's
 guardian straight at the proposals contract still works; `finalize` then
@@ -51,9 +51,9 @@ Stacking both on one intent waits twice. Atlas `timelock_blocks` covers
 | `knot-proposals-data` | Apache-2.0 | 0.1.0 | Proposal book; writes only from the Atlas-resolved proposals logic |
 | `knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
 | `knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
-| `knot-warden-encoding` | Apache-2.0 | 0.2.0 | Warden call types and events. Own workspace; needs a sibling Atlas 0.4.1 checkout (`atlas-encoding` 0.3.0) |
-| `knot-warden` | Apache-2.0 | 0.2.1 | Delaying guardian in front of Atlas. Live ids are in [Deployments](https://docs.nocturne-standards.org/v1/deployments/) |
-| `knot-event-decoder` | Apache-2.0 | 0.1.0 | Named-event dispatch for registry, proposals, and warden. Needs a sibling Atlas 0.4.1 checkout (`atlas-encoding` 0.3.0) |
+| `nocturne-knot-warden-encoding` | Apache-2.0 | 0.2.1 | Warden call types and events (Rust name `knot_warden_encoding`). Own workspace; needs a sibling Atlas checkout (`nocturne-atlas-encoding` 0.4.0, Atlas 0.5.0 tree) |
+| `nocturne-knot-warden` | Apache-2.0 | 0.3.0 | Delaying guardian in front of Atlas. Live ids are in [Deployments](https://docs.nocturne-standards.org/v1/deployments/) |
+| `nocturne-knot-event-decoder` | Apache-2.0 | 0.1.0 | Named-event dispatch for registry, proposals, and warden. Needs a sibling Atlas checkout (`nocturne-atlas-encoding` 0.4.0, Atlas 0.5.0 tree) |
 
 The Apache suite and **AGPL collector** are intentionally split. Self-host
 `knot-collector` only if you accept AGPL (or purchase a commercial

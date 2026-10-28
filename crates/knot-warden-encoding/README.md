@@ -4,7 +4,7 @@ Host-visible warden types: `InitWardenArgs`, `PendingAdmin`, pending views, and 
 
 rkyv layout is pinned by `tests/layout_goldens.rs`. `no_std` + `alloc`.
 
-This crate is its own Cargo workspace. It path-depends on a sibling checkout of atlas 0.3 at `../../../atlas/crates/atlas-encoding` (the `aichbindas/atlas` repo next to `knot`). Public knot CI does not check that sibling out, so this crate is not a member of the parent workspace.
+This crate is its own Cargo workspace. Package `nocturne-knot-warden-encoding`; the Rust name stays `knot_warden_encoding`. It path-depends on a sibling checkout of atlas at `../../../atlas/crates/atlas-encoding` (package `nocturne-atlas-encoding` 0.4) (the `aichbindas/atlas` repo next to `knot`). Public knot CI does not check that sibling out, so this crate is not a member of the parent workspace.
 
 ```bash
 cargo test --release --manifest-path crates/knot-warden-encoding/Cargo.toml

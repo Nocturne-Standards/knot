@@ -10,7 +10,7 @@ publish = false
 description = "Test-only proxy that cross-calls warden so abi::caller() is this contract."
 
 [dependencies]
-knot-warden-encoding = { path = "../../knot-warden-encoding" }
+knot-warden-encoding = { package = "nocturne-knot-warden-encoding", path = "../../knot-warden-encoding" }
 rkyv = { version = "=0.7.46", default-features = false, features = ["size_32"] }
 bytecheck = { version = "=0.6.12", default-features = false }
 

@@ -1,8 +1,8 @@
 [workspace]
 
 [package]
-name = "knot-warden"
-version = "0.2.1"
+name = "nocturne-knot-warden"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.94"
 publish = false
@@ -10,11 +10,11 @@ license = "Apache-2.0"
 repository = "https://github.com/Nocturne-Standards/knot"
 description = "Delaying guardian in front of an Atlas registry. Calls Atlas; Atlas does not call it."
 
-# Own workspace: path-depends on sibling atlas 0.3 via knot-warden-encoding.
+# Own workspace: path-depends on sibling atlas (atlas-encoding 0.4) via knot-warden-encoding.
 # Public knot CI does not check that sibling out. `make test` in this directory.
 
 [dependencies]
-knot-warden-encoding = { path = "../knot-warden-encoding", features = ["contract-events"] }
+knot-warden-encoding = { package = "nocturne-knot-warden-encoding", path = "../knot-warden-encoding", features = ["contract-events"] }
 dusk-bls12_381 = { version = "=0.14.2", default-features = false }
 rkyv = { version = "=0.7.46", default-features = false, features = ["size_32"] }
 bytecheck = { version = "=0.6.12", default-features = false }
@@ -27,8 +27,8 @@ dusk-forge = "0.3.0"
 dusk-bytes = "=0.1.7"
 
 [dev-dependencies]
-atlas-encoding = { path = "../../../atlas/crates/atlas-encoding", version = "0.3.0" }
-knot-warden-encoding = { path = "../knot-warden-encoding" }
+atlas-encoding = { package = "nocturne-atlas-encoding", path = "../../../atlas/crates/atlas-encoding", version = "0.4" }
+knot-warden-encoding = { package = "nocturne-knot-warden-encoding", path = "../knot-warden-encoding" }
 dusk-core = { version = "=1.7.0", features = ["zk"] }
 dusk-vm = { version = "=1.7.0", default-features = false }
 dusk-bytes = "=0.1.7"
@@ -51,4 +51,6 @@ data-driver = [
 data-driver-js = ["data-driver", "dusk-data-driver/alloc"]
 
 [lib]
+# Package is nocturne-knot-warden; the Rust name and the built file keep the short name.
+name = "knot_warden"
 crate-type = ["cdylib", "rlib"]

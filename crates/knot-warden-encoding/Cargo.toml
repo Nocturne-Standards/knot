@@ -1,8 +1,8 @@
 [workspace]
 
 [package]
-name = "knot-warden-encoding"
-version = "0.2.0"
+name = "nocturne-knot-warden-encoding"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.94"
 publish = false
@@ -10,12 +10,13 @@ license = "Apache-2.0"
 repository = "https://github.com/Nocturne-Standards/knot"
 description = "Host-visible call types and events for the warden contract (rkyv layout-pinned)"
 
-# Own workspace: path-depends on sibling atlas 0.3, which public knot CI does
+# Own workspace: path-depends on sibling atlas (atlas-encoding 0.4), which public knot CI does
 # not check out. Parent `cargo test --workspace` must not require it.
 
 [dependencies]
-# Sibling checkout of atlas at the 0.3 kernel (Account, SetServiceArgs).
-atlas-encoding = { path = "../../../atlas/crates/atlas-encoding", version = "0.3.0" }
+# Sibling checkout of atlas: atlas-encoding 0.4 (Account, SetServiceArgs).
+# The package is nocturne-atlas-encoding; the key keeps the Rust name.
+atlas-encoding = { package = "nocturne-atlas-encoding", path = "../../../atlas/crates/atlas-encoding", version = "0.4" }
 dusk-core = { version = "=1.7.0", default-features = false }
 dusk-forge = { version = "0.3.0", optional = true }
 rkyv = { version = "=0.7.46", default-features = false, features = ["size_32", "alloc", "validation"] }
@@ -35,6 +36,8 @@ rand = { version = "0.8.6", default-features = false }
 dusk-core = { version = "=1.7.0", features = ["zk"] }
 
 [lib]
+# Package is nocturne-knot-warden-encoding; the Rust name and the built file keep the short name.
+name = "knot_warden_encoding"
 crate-type = ["rlib"]
 
 [[bin]]

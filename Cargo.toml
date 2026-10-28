@@ -15,12 +15,13 @@ members = [
 # local loader (NOCTURNE_DEPLOYMENTS / walk-up). Optional feature
 # `deployments-crate` uses the public Nocturne-Standards/nocturne-deployments crate.
 
-# knot-warden and knot-warden-encoding are separate workspaces (each Cargo.toml
-# has [workspace]). They path-depend on a sibling atlas 0.3 checkout, which
+# knot-warden and knot-warden-encoding (packages nocturne-knot-warden,
+# nocturne-knot-warden-encoding) are separate workspaces (each Cargo.toml
+# has [workspace]). They path-depend on a sibling atlas checkout, which
 # public CI does not have. Build with `make -C crates/knot-warden test`.
 #
 # knot-event-decoder is its own workspace for the same reason: it
-# path-depends on knot-warden-encoding. `cargo test -p knot-event-decoder`
+# path-depends on knot-warden-encoding. `cargo test -p nocturne-knot-event-decoder`
 # from `crates/knot-event-decoder`.
 
 [workspace.package]
