@@ -1,10 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 Nocturne Standards
+
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-
-/// Lab pin. Tests deploy mock Atlas at this id. Override with `ATLAS_PIN_HEX`.
-const DEFAULT_ATLAS_PIN_HEX: &str =
-    "c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1";
 
 fn parse_atlas_pin_hex(s: &str) -> Result<[u8; 32], String> {
     let s = s.trim();
@@ -23,10 +22,15 @@ fn parse_atlas_pin_hex(s: &str) -> Result<[u8; 32], String> {
 }
 
 fn main() {
-    let hex = match env::var("ATLAS_PIN_HEX") {
-        Ok(s) if !s.trim().is_empty() => s,
-        _ => DEFAULT_ATLAS_PIN_HEX.to_string(),
-    };
+    let hex = env::var("ATLAS_PIN_HEX").unwrap_or_else(|_| {
+        panic!(
+            "ATLAS_PIN_HEX must be set to 64 hex chars, the Atlas contract id this book calls. \
+             Tests use the lab id c1c1…c1. A release build must use the real Atlas id."
+        )
+    });
+    if hex.trim().is_empty() {
+        panic!("ATLAS_PIN_HEX must be set to 64 hex chars");
+    }
     let bytes = parse_atlas_pin_hex(&hex).expect("ATLAS_PIN_HEX");
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let dest = out_dir.join("atlas_pin.rs");

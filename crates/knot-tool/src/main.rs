@@ -110,6 +110,21 @@ enum Cmd {
         #[arg(long, default_value = "127.0.0.1:8877")]
         bind: String,
     },
+    /// Sign a 32-byte digest the integrator already domain-separated.
+    /// Prints the domain and the digest, then requires `--confirm`.
+    /// Refuses a text message.
+    SignDigest {
+        #[arg(long)]
+        signer: String,
+        /// 64 hex chars (optional 0x). Any other length is refused.
+        #[arg(long)]
+        digest: String,
+        /// Label of the domain that produced the digest. Printed, not hashed again.
+        #[arg(long)]
+        domain: String,
+        #[arg(long)]
+        confirm: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -291,6 +306,7 @@ enum ProposalCmd {
         /// Call args as hex (rkyv payload), or empty.
         #[arg(long, default_value = "")]
         args_hex: String,
+        /// Block height. `0` means `now + min(proposal_ttl, 100)`.
         #[arg(long, default_value_t = 0)]
         deadline: u64,
         /// Caller uniquifier (v3); CSPRNG default when omitted.
@@ -480,6 +496,19 @@ fn prompt_new_password() -> Result<String> {
             Ok(pwd1)
         }
     }
+}
+
+fn parse_digest32(text: &str) -> Result<[u8; 32]> {
+    let raw = hex::decode(text.trim().trim_start_matches("0x")).context("digest is not hex")?;
+    if raw.len() != 32 {
+        bail!(
+            "digest must be 32 bytes, got {} bytes. This command refuses a text message.",
+            raw.len()
+        );
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&raw);
+    Ok(out)
 }
 
 fn require_cli_confirm(confirm: bool) -> Result<()> {
@@ -1066,6 +1095,21 @@ async fn main() -> Result<()> {
                 } else {
                     hex::decode(args_hex.trim_start_matches("0x"))?
                 };
+                let deadline = if deadline == 0 {
+                    let now = chain::chain_height().await?;
+                    let ttl = chain::proposal_ttl().await?;
+                    let chosen = knot_tool::deadline::default_proposal_deadline(now, ttl)
+                        .context("proposal_ttl is 0")?;
+                    let window = ttl.min(knot_tool::deadline::SENSIBLE_PROPOSAL_WINDOW);
+                    println!(
+                        "deadline: block {chosen} (now {now} + {window} blocks, about {}s)",
+                        window * knot_tool::deadline::APPROX_BLOCK_SECONDS
+                    );
+                    chosen
+                } else {
+                    println!("deadline: block {deadline} (explicit)");
+                    deadline
+                };
                 let nonce = blob::resolve_proposal_nonce(nonce);
                 let before: u64 = chain::query_contract(
                     chain::Contract::Proposals,
@@ -1446,6 +1490,29 @@ async fn main() -> Result<()> {
                 println!("signed up: {} pk={}", member.name, member.pk);
             }
         },
+
+        Cmd::SignDigest {
+            signer,
+            digest,
+            domain,
+            confirm,
+        } => {
+            if domain.trim().is_empty() {
+                bail!("domain label is required");
+            }
+            let digest_bytes = parse_digest32(&digest)?;
+            let (identities, _) = load_store(&store_path)?;
+            let identity = find_identity(&identities, &signer)?;
+            let sk = identity.require_sk()?;
+            println!("=== sign-digest ===");
+            println!("  signer: {signer}");
+            println!("  domain: {domain}");
+            println!("  digest: 0x{}", hex::encode(digest_bytes));
+            println!("  this signs those 32 bytes and refuses a text message");
+            require_cli_confirm(confirm)?;
+            let signature = bls::sign(sk, &digest_bytes);
+            println!("  signature: 0x{}", hex::encode(signature.to_bytes()));
+        }
 
         Cmd::Serve { bind } => {
             let mode = mock_ledger::DemoMode::from_env().map_err(anyhow::Error::msg)?;

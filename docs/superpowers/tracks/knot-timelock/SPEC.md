@@ -5,9 +5,11 @@ reviewer_model: claude-sonnet-5-thinking-high
 ---
 # SPEC — knot-timelock
 
+> **Frozen.** Atlas-optional is history. Knot and Atlas stay together (D-76). Do not continue this track. `STATUS.md` is generated; do not hand-edit it.
+
 ## Goal
 
-Add Atlas-style per-account timelock to knot-registry (change_account / set_timelock) and queue proposal call_raw until execute_at. One delay knob per council, default 0. Proposal digest v3 unchanged. Docs: Knot standalone; Atlas optional; Atlas delay 0 when paired.
+Historical goal, not current design: add Atlas-style per-account timelock to knot-registry (change_account / set_timelock) and queue proposal call_raw until execute_at. One delay knob per council, default 0. Proposal digest v3 unchanged. The line "Knot standalone; Atlas optional" is withdrawn.
 
 ## Scope
 

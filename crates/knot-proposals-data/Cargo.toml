@@ -12,14 +12,24 @@ build = "build.rs"
 [dependencies]
 knot-encoding = { path = "../knot-encoding", features = ["call-types"] }
 
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+
 [target.'cfg(target_family = "wasm")'.dependencies]
 dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }
+dusk-data-driver = { version = "0.3", optional = true }
 dusk-forge = "0.3.0"
 dusk-bytes = "=0.1.7"
 
 [features]
 contract = ["dusk-core/abi-dlmalloc"]
-data-driver = []
+data-driver = [
+  "dusk-core/serde",
+  "dep:dusk-data-driver",
+  "dusk-data-driver/wasm-export",
+  "dep:serde",
+  "knot-encoding/data-driver",
+]
+data-driver-js = ["data-driver", "dusk-data-driver/alloc"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -16,7 +16,7 @@ valid?" — keep them separate, they are not interchangeable:
   caller's inputs (which signers, which sigs) are just evidence; the contract
   never trusts them without re-checking. **This is what every write path in
   `knot-registry` and `knot-proposals` actually does today** —
-  confirmed by code read (2026-08-04): `verify_quorum`/`verify_quorum_aggregate`
+  The contracts do this: `verify_quorum`/`verify_quorum_aggregate`
   check membership + threshold + `abi::verify_bls`/`verify_bls_multisig`
   in-contract; `knot-proposals::approve` panics if `signer` isn't a
   current registry member and re-verifies the BLS signature; `finalize` calls
@@ -29,7 +29,7 @@ valid?" — keep them separate, they are not interchangeable:
   only exists **inside `knot-tool` itself**, before anything reaches
   chain: the tool's digest-recompute gate (anti-blind-signing) is real and
   enforced, but membership/threshold gating before producing a signature is
-  not (see `crates/knot-tool/` audit, 2026-08-04) — a signature the tool
+  not. A signature the tool
   produces for a non-member is *useless* on-chain (Prove rejects it), but the
   tool does not tell the operator that before burning a signing round.
 
@@ -92,9 +92,11 @@ the collector (see each crate’s `LICENSE` / `LICENSING.md`).
 
 ### Proposals
 
-- Anyone may propose, relay approvals, or finalize. Authorization is the
-  BLS quorum over the on-chain-recomputed §4a digest
-  (`chain_id ‖ committee ‖ nonce ‖ target ‖ fn ‖ args ‖ deadline`).
+- Anyone can submit a proposal for the bound group, relay approvals, or
+  finalize. A proposal for any other group is rejected. Authorization is the
+  BLS quorum over `proposal_digest_v3` in `knot-encoding`: domain, chain id,
+  this contract's id, epoch, committee, nonce, target, function, arguments,
+  deadline. `auth_generation` is not in the digest.
 - On finalize, the contract calls `call_raw(target, function_name, call_args)`
   immediately when the council's `timelock_blocks` is 0. If delay > 0, finalize
   **queues** (`Queued`, `execute_at = now + delay`) and anyone may `execute`
@@ -105,12 +107,9 @@ the collector (see each crate’s `LICENSE` / `LICENSING.md`).
   re-queue.
 - **Targets must independently require `abi::caller() == proposals`.**
   This suite does not maintain a target allowlist.
-- **Never propose owner-gated methods on the proposals contract itself**
-  (e.g. `set_tombstone`, `init_chain_id`, `set_proposal_ttl`) unless that is
-  intentional governance of the proposals contract — finalize would invoke
-  them via `call_raw` with `caller == proposals`, which satisfies typical
-  owner checks that only compare `abi::caller()` / owner to the proposals id
-  (ops hazard M2; not a protocol lock).
+- Finalize refuses its own contract and its book as a target. Owner-gated
+  methods also require a direct call from the owner key, so a proposal
+  cannot reach them.
 - Treat proposal `human_summary` (off-chain) as untrusted display text.
   Sign only after recomputing the digest from canonical fields
   (`knot-encoding::gate_blob_for_signing` / `recompute_and_verify`).
@@ -124,12 +123,12 @@ the collector (see each crate’s `LICENSE` / `LICENSING.md`).
 - Secret keys live in-process or in a local encrypted keystore
   (`AES-256-GCM`, password-derived). The browser UI never receives secret
   keys — only names, public keys, digests, and signatures.
-- The local RPC binds loopback only and requires a process-scoped bearer
-  token on `/api/*`.
+- The local RPC binds loopback only. A one-shot link sets a session cookie
+  on `/api/*`.
 - Prefer interactive password entry. `KNOT_PWD` is only honored when
   `KNOT_ALLOW_ENV_PWD=1` is also set (scripting opt-in); otherwise the
   tool errors with a clear message.
-- **Lab membership pre-check (A4 / 2026-08-04 audit):** generic approve /
+- **Lab membership pre-check:** generic approve /
   quorum / change-account sign paths fetch live registry `account` and refuse
   to sign when a local signer PK is not in `view.members` (HTTP **403** /
   CLI error). Prove-mode on-chain re-verification remains the cryptographic
@@ -143,17 +142,17 @@ Co-signers must agree on that order; a permutation yields a different digest.
 
 ### Owner gates vs `call_raw` (A9)
 
-Owner-only methods use `require_owner()` against `abi::public_sender()`. A
-proposals `finalize` that `call_raw`s an owner-gated method on the proposals
-contract itself can satisfy `abi::caller() == proposals` checks — do not
-propose those methods unless intentional. Execute targets should authorize
-via `abi::caller() == proposals` (checklist item 4).
+Owner-only methods use `require_owner()` against `abi::public_sender()`, and
+that check requires a direct call. Finalize refuses its own contract and its
+book as a target. Execute targets should authorize via
+`abi::caller() == proposals` (checklist item 4).
 
 ### Collector
 
 - Assume the collector can lie, omit, reorder, or append junk partials.
   Same-`signer_pk` appends **replace** (last-write-wins) so a real signer can
-  overwrite junk; the collector still does not verify BLS.
+  overwrite junk. The collector recomputes digests and verifies BLS
+  signatures on partials and sign-ups.
 - Honest signers must **re-gate** digests after pull and reject mismatched
   blobs. On-chain quorum checks reject invalid signatures.
 - Production deploys must put authentication and TLS in front of the process

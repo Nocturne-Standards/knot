@@ -27,8 +27,9 @@
 # Contract feature name (adjust to match your Cargo.toml)
 CONTRACT_FEATURE ?= contract
 
-# Data-driver feature name (adjust to match your Cargo.toml)
-DD_FEATURE ?= data-driver-js
+# Books have no JSON schema. wasm-dd builds the contract feature into the
+# data-driver target dir so deploy-contract.sh can record a path.
+DD_FEATURE ?= contract
 
 # WASM optimization level: -O0, -O1, -O2, -O3, -O4, -Os, -Oz
 WASM_OPT_LEVEL ?= -Oz
@@ -98,7 +99,9 @@ all: wasm
 .PHONY: wasm
 wasm: ## Build contract WASM (optimizes if wasm-opt available)
 	@echo "Building contract WASM: $(CRATE_NAME)"
+	@test -n "$(ATLAS_PIN_HEX)" || { echo "error: ATLAS_PIN_HEX required" >&2; exit 1; }
 	@CARGO_TARGET_DIR=$(CONTRACT_TARGET_DIR) \
+		ATLAS_PIN_HEX="$(ATLAS_PIN_HEX)" \
 		RUSTFLAGS="$(RUSTFLAGS) --remap-path-prefix $(HOME)= -C link-args=-zstack-size=$(STACK_SIZE)" \
 		cargo build \
 			--release \
@@ -113,7 +116,9 @@ wasm-dd: ## Build data-driver WASM (optimizes if wasm-opt available)
 	@echo "Building data-driver WASM: $(CRATE_NAME) (feature: $(DD_FEATURE))"
 # Data-driver doesn't use build-std because it runs off-chain (browser/Node)
 # and may need std features. No stack size constraint needed.
+	@test -n "$(ATLAS_PIN_HEX)" || { echo "error: ATLAS_PIN_HEX required" >&2; exit 1; }
 	@CARGO_TARGET_DIR=$(DD_TARGET_DIR) \
+		ATLAS_PIN_HEX="$(ATLAS_PIN_HEX)" \
 		RUSTFLAGS="$(RUSTFLAGS) --remap-path-prefix $(HOME)=" \
 		cargo build \
 			--release \

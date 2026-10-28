@@ -37,8 +37,7 @@ export KNOT_COLLECTOR_URL=https://collector.nocturne-standards.org
 export KNOT_COLLECTOR_USER=demo                # collector htpasswd user (not WEN metadata user)
 export KNOT_COLLECTOR_PASSWORD=...
 
-cargo run -p knot-tool -- serve --bind 127.0.0.1:8877
-# or: cargo run -p knot-tool -- serve --bind 127.0.0.1:8877
+DEMO_MODE=mock cargo run -p knot-tool -- serve --bind 127.0.0.1:8877
 ```
 
 Set `DEMO_MODE=mock` or `DEMO_MODE=testnet`, then open the printed bootstrap URL
@@ -143,10 +142,16 @@ developers can exercise multisig flows; do not treat it as a hardened wallet.
   hex-encoded requests and looked like “stuck `account` not found” /
   upstream lag; that was not a node or contract-state failure.
 - **Free-read `verify_quorum` / `verify_quorum_aggregate` / `diagnose_quorum`:**
-  with raw RUES these no longer 500, but can report `false` /
-  `sigs_ok=0` for secure signatures that succeed in transaction
-  execution (`change_account`). Do not treat free-read verify as the
-  source of truth for live correctness; use writes + account reads.
+  the contract function is the same one a transaction calls. It asks the
+  host `abi::verify_bls`. A free read is a RUES query
+  (`POST /on/contracts:{id}/verify_quorum`), so that host call runs in the
+  node's query VM. `dusk-vm`'s `VM::ephemeral()` defaults that host-query
+  policy to `HardFork::PreFork`, and secure signatures then fail
+  (`sigs_ok=0`) while the same bytes succeed in a real `change_account`
+  transaction. The live free-read `false` matches that split. It is not the
+  old hex-encoding client bug. Do not use the free read as the test. Send
+  the transaction and read the account back. A fix belongs in dusk-vm /
+  rusk, so the query path uses the post-hardfork verify policy.
 
 ## Status
 
@@ -268,8 +273,8 @@ our preimage shape. **No follow-up work in the current suite plan.**
 ### Monitoring note
 
 Atlas is outside this repo. On Atlas 0.3, `set_service` is immediate. A
-service delay lives in [warden](../../docs/warden.md) (`knot-warden` 0.2.0, testnet still 0.1.1,
-testnet `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb`).
+service delay lives in [warden](../../docs/warden.md). The live id is in
+[Deployments](https://docs.nocturne-standards.org/v1/deployments/).
 Replacing the guardian waits `timelock_blocks` inside Atlas. Knot membership
 and proposal execution still delay when the registry account's delay is
 greater than 0. Operators should alarm on the change *and* on unexpected
@@ -339,7 +344,7 @@ knot-tool change-account submit --account 0 \
   --signer alice --signer bob --confirm
 # optional: --nonce N to bypass account free-read when diagnosing
 
-# Multi-person proposals (after deploy + one-time `proposal init-registry` + `init_chain_id`)
+# Multi-person proposals (after deploy + `init_data`, `init_registry`, then `set_authorized_account`)
 knot-tool proposal create --account 0 \
   --target <32-byte-hex-ContractId> --function set_value --args-hex <rkyv-hex>
 knot-tool proposal approve --id 0 --signer alice            # preview fingerprint
@@ -349,6 +354,10 @@ knot-tool proposal status --id 0
 knot-tool proposal finalize --id 0
 knot-tool proposal execute --id 0
 knot-tool proposal cancel --id 0 --signer alice --signer bob --confirm
+
+# Sign a 32-byte digest. Prints signer, domain, and digest, then asks.
+# Refuses an empty domain and any digest that is not 32 bytes.
+knot-tool sign-digest --signer alice --digest <64-hex-chars> --domain MYAPP/ACTION/v1 --confirm
 
 # Topology B — file / BYO channel (QR deferred). Move the JSON between machines.
 knot-tool blob create --out proposal.json --committee-id 0 --threshold 2 \
@@ -392,10 +401,7 @@ knot-tool serve --bind 127.0.0.1:8877
 
 Prints a loopback bootstrap URL (`http://127.0.0.1:8877/?code=…`) — open it
 once to set the HttpOnly session cookie. `X-Knot-Token` is optional for
-tests; the session secret is never embedded in served HTML. Or via this repo's preview convention:
-`scripts/run-knot-tool-native.sh` (wired into `.claude/launch.json` as
-`knot-tool`, port 8877) — uses a fixed dev password
-(`KNOT_ALLOW_ENV_PWD=1` + `KNOT_PWD=...`), fine for local dev only.
+tests; the session secret is never embedded in served HTML.
 
 The UI matches the Agent Pay demo visual language (Literata/Sora, cream/sky)
 as **three slides**: cover → demo studio → use cases. Set

@@ -1,16 +1,22 @@
 # Knot (multisig)
 
-BLS M-of-N multisig suite for Dusk: on-chain registry and proposals
-(`call_raw`), canonical encoding, a local signing Lab, and an optional
-untrusted collector for sharing proposal blobs and partial signatures.
+Knot lets a group share control of something on Dusk. The group lists its
+members and a threshold, for example 2 of 3. An action goes through only when
+enough members have signed it, and the chain checks those signatures itself on
+every write. Each member signs on their own machine, so nobody hands their key
+to anyone else.
 
-**Quorum authorization is Prove mode** — on every write the chain
-re-verifies membership, threshold, and BLS signatures against live on-chain
-state. The Lab holds keys and helps operators sign; it is **not** the final
-authority. Detail: [`docs/security-model.md`](docs/security-model.md).
+**Status:** runs on Dusk testnet and isn't audited yet. Don't use it with real
+keys or funds. Versioning: [`docs/versioning.md`](docs/versioning.md).
 
-**Testnet only** — no mainnet deployment claim. Versioning:
-[`docs/versioning.md`](docs/versioning.md).
+In this repo: the registry and proposals contracts (BLS M-of-N, `call_raw`),
+the shared encoding, a local signing app (the Lab), and an optional relay
+(`knot-collector`) that passes proposals and partial signatures between
+members without ever holding a key.
+
+The Lab helps members sign; it doesn't decide anything. The chain re-checks
+membership, threshold and BLS signatures against what is stored on chain.
+Detail: [`docs/security-model.md`](docs/security-model.md).
 
 Architecture and long-form docs:
 [docs.nocturne-standards.org — Knot](https://docs.nocturne-standards.org/v1/knot/)
@@ -19,7 +25,8 @@ Architecture and long-form docs:
 `atlas/` (per-project service registry) stays **outside** this repo.
 The registry book and the proposals book call Atlas `resolve` before every
 write. The Atlas id is fixed when each book is built (`ATLAS_PIN_HEX`).
-A quorum check reads the book and does not call Atlas.
+A build with that variable missing or empty fails. A quorum check reads the
+book and does not call Atlas.
 
 The delaying guardian in front of Atlas is [warden](docs/warden.md)
 (`knot-warden` 0.2.1). Live contract ids:
@@ -29,7 +36,7 @@ guardian straight at the proposals contract still works; `finalize` then
 applies `set_service` in that same transaction.
 
 Knot's per-account delay covers registry writes. Warden's `delay_blocks`
-covers an Atlas service repoint and, in 0.2.0, a guardian change.
+covers an Atlas service repoint and, since 0.2.0, a guardian change.
 Stacking both on one intent waits twice. Atlas `timelock_blocks` covers
 `set_timelock` and the second half of a guardian change.
 

@@ -2135,8 +2135,10 @@ version = "0.1.0"
 dependencies = [
  "dusk-bytes",
  "dusk-core",
+ "dusk-data-driver",
  "dusk-forge",
  "knot-encoding",
+ "serde",
 ]
 
 [[package]]

@@ -30,13 +30,14 @@ lets a funded relayer pay gas while council members hold no DUSK.
 `deadline` is an expiry: the action must happen **by** that block height.
 `timelock_blocks` is a delay: after quorum, the action must wait **until**
 `execute_at`. They are not interchangeable. Cancel of a queued proposal or
-registry pending is immediate (new quorum), so observers can stop a stolen-key
-action during the wait.
+a pending member change needs a new quorum, the same threshold that approved
+it, and that cancel does not start another wait. It helps only while enough
+honest keys remain. Open proposals are not cancelled this way; they expire
+at the deadline.
 
-Atlas is a separate layer (named services, roles, admin gate), not a second
-Knot. Atlas can delay its own admin path. Two delays stack. The usual pairing
-leaves Atlas `timelock_blocks` at 0 so Knot’s wait is the only one. Atlas
-remains optional — Knot does not depend on it.
+Knot's data contracts use Atlas to decide who may write to them. Atlas's own
+delay applies to replacing its guardian. Keep that delay above 0 when Warden
+is the guardian (see `docs/warden.md`).
 
 ## 5. No proof of possession required
 

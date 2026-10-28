@@ -1,10 +1,10 @@
 # Warden
 
-Source is `knot-warden` 0.2.1 and `knot-warden-encoding` 0.2.0. Testnet runs 0.2.0 `7d1659d658a6a9b8781e8f85b3f7708a4e3079dd75b706ea855fbf0c6d2c7000` in front of Atlas 0.4.0 `27882147345ff547ef37fc4fbd5bf247d8c340950b8131f9e91e672d30239724`; 0.2.1 is not deployed. The sentences below about testnet running 0.1.1 are history. Testnet runs 0.1.1 `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3` (deploy tx `ebf2d30d449860949d44aeb904b01188a90d3853a95e84ffc8a71bce88676d0a`), in front of Atlas 0.3.1 `21c653385e3b7cc8be32edd5e6df2e30b6464be867f39442171ba8ca8d089612`. The first 0.1.1 was `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb` (tx `9b821f4a386126509aa4963dead608f63972af906b232b8916b7f0ed2f9e2952`). The deployments record has no `init_warden` for the current id and no `set_guardian` for the move. 0.1.1 forwards `set_guardian` immediately. 0.2.0 does not.
+Source is `knot-warden` 0.2.1 and `knot-warden-encoding` 0.2.0. The live testnet contract id is in [nocturne-deployments](https://github.com/Nocturne-Standards/nocturne-deployments). Older ids in changelogs, including `fb143b1e…` and `113159d3…`, are history. Warden and `knot-warden-encoding` build only next to an Atlas checkout. Public CI does not build them.
 
 Warden is the contract an operator puts in Atlas's guardian slot when a service repoint must wait. Knot-proposals stays a generic `call_raw` executor and does not grow a delay. Atlas stays a registry: it does not call warden, and it does not delay `set_service`.
 
-Pinned to the Atlas 0.3 ABI: method names `resolve`, `set_service`, `set_guardian`, `set_timelock`, `cancel_pending`, and the `atlas-encoding` types `Account` and `SetServiceArgs`. A later Atlas bytecode is a new `ContractId` and a new warden deployment.
+Built against `atlas-encoding` 0.3.0, the call types Atlas 0.4.1 serves: method names `resolve`, `set_service`, `set_guardian`, `set_timelock`, `cancel_pending`, and the `atlas-encoding` types `Account` and `SetServiceArgs`. A later Atlas bytecode is a new `ContractId` and a new warden deployment.
 
 ## Job
 
@@ -30,12 +30,12 @@ Atlas's delay is what a hostile warden cannot delete. Warden can call `set_guard
 - Not the committee. Membership and quorum stay in `knot-registry` and `knot-proposals`. Warden does not verify BLS signatures.
 - Not a second Atlas. It does not store the directory and it does not answer `resolve` for consumers. Consumers keep baking the Atlas id.
 - Not a generic proxy. There is no method that takes a function name and raw bytes and forwards them to Atlas. A closed method list is the policy. An open forwarder would let the scheduler call Atlas `set_service` with no wait.
-- Not Vigil, and not a constants table. Bounds that used to be Atlas `constant(name)` belong in the service contract `resolve` returns (for Vigil, `vigil_policy`). Warden only decides when that name may point at a different id.
+- Not a constants table. Bounds that used to be Atlas `constant(name)` belong in the service contract `resolve` returns. Warden only decides when that name may point at a different id.
 - Not upgradeable. A new warden is a new `ContractId`, installed with `set_guardian`, which waits `delay_blocks` and then Atlas `timelock_blocks`.
 
 ## Crates
 
-Both under Apache-2.0, next to the existing suite. Each crate is its own Cargo workspace: they path-depend on a sibling checkout of atlas 0.3, and public knot CI does not check that sibling out. `make -C crates/knot-warden test` builds the contracts and runs the suite.
+Both under Apache-2.0, next to the existing suite. Each crate is its own Cargo workspace: they path-depend on a sibling Atlas 0.4.1 checkout (`atlas-encoding` 0.3.0), and public knot CI does not check that sibling out. `make -C crates/knot-warden test` builds the contracts and runs the suite.
 
 | Crate | Role |
 |---|---|
@@ -153,13 +153,13 @@ forwards it, and Atlas waits for the incoming guardian.
 
 ### Forwards
 
-`set_guardian`, `set_timelock`, and `cancel_atlas_pending` require the scheduler, then `abi::call` Atlas. They do not read or write warden's pending maps. They do not wait `delay_blocks`.
+`set_timelock` and `cancel_atlas_pending` require the scheduler, then `abi::call` Atlas in the same transaction. They do not wait `delay_blocks`. `set_guardian` is not a forward: it is queued in the admin slot, waits `delay_blocks`, and `execute_admin` then calls Atlas (see Job).
 
 Atlas's own panics propagate: `guardian unchanged`, `timelock unchanged`, `no pending change`, `a pending change already exists; cancel or execute it first`. Warden does not catch them.
 
 The `execute_admin` forward of a queued guardian change must not fail: a panic rolls back the clear of the admin slot and leaves the one slot occupied (blocking `set_delay` and `set_scheduler`) until `cancel_admin`. 0.2.0 could reach that state when `set_timelock` opened an Atlas change during the wait, when Atlas already held one, or when warden was not Atlas's guardian. From 0.2.1 `set_guardian` checks all three when queued, and `set_timelock` is refused while the guardian change is queued, so nothing else can open an Atlas change in the window.
 
-This split is deliberate. The kernel delay exists because a contract that can both authorize and replace itself can delete its own delay. Putting warden's `delay_blocks` in front of `set_guardian` would stack two waits on one rotation and would still not be the delay the kernel is for. The wait on replacing warden is Atlas `timelock_blocks`, passed to `init_guardian`.
+A guardian change therefore waits twice: warden's `delay_blocks`, then Atlas `timelock_blocks` (passed to `init_guardian`). The Atlas wait is the one that still holds if a guardian could remove its own delay, because Atlas keeps it, not the guardian.
 
 While an Atlas guardian rotation is pending, warden remains the caller Atlas accepts, and `schedule_service` still waits `delay_blocks`. Atlas does not freeze the directory during `set_guardian`. Warden is what keeps a repoint from landing in that window.
 
@@ -206,11 +206,9 @@ A guardian rotation through knot uses `function_name` `set_guardian` and `target
 
 Pointing Atlas's guardian straight at the proposals contract still works. `finalize` then calls `set_service` immediately. That wiring has quorum and no service delay. Warden is the deployment that wants the delay.
 
-## Vigil
+## Service contracts that read a policy by name
 
-Vigil stays pinned to Atlas 0.2.0 until its `constant(name)` reads move. This spec does not change Vigil.
-
-On an Atlas 0.3 pin, `resolve("vigil_policy")` is still how the vault finds the policy contract. A repoint of that name waits `delay_blocks` only when warden is the Atlas guardian and the proposal targets `schedule_service`. Vigil's withdrawal delay and veto stay in the vault. They are not this delay.
+A service contract that finds its policy through Atlas `resolve(name)` sees a repoint of that name wait `delay_blocks` only when warden is the Atlas guardian and the proposal targets `schedule_service`. Delays inside the service contract itself, such as a withdrawal delay, are separate from this one.
 
 ## Acceptance
 

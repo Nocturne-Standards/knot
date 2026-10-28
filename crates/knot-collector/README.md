@@ -17,7 +17,7 @@ recompute via `knot-encoding`; BLS verify on partials and party signup;
 pagination + row caps + TTL sweep; loopback bind parses `SocketAddr`;
 graceful shutdown; `PRAGMA synchronous=FULL` + `fullfsync`; generic 500 bodies.
 
-**2026-07-24 — availability hardening (audit I8/I9/I10/M10):** last-write-wins
+**2026-07-24 — availability hardening:** last-write-wins
 partial replace (same `signer_pk`); sig capped at 48 bytes (BLS); max 32
 partials / proposal; max 512-char note/summary/name; 64 KiB body limit; GET id
 must be 64 hex; `DELETE /v1/party/:pk` removed; non-loopback bind requires

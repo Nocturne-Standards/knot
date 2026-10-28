@@ -51,12 +51,21 @@ These live on `cursor/knot-council-setup-8037` until then:
 - [ ] Date the root `CHANGELOG.md` `[Unreleased]` block, and the crate
       changelogs, for the versions that ship.
 - [ ] Re-read crate `description` fields against the published API.
-- [ ] SPDX headers: logic crates and `knot-encoding` already carry
-      `SPDX-License-Identifier`. `knot-registry-data` and
-      `knot-proposals-data` sources do not. Add Apache-2.0 headers
-      before those crates publish.
-- [ ] Confirm licence files: root `LICENSE-APACHE` and `LICENSE-AGPL`,
-      plus each crate `LICENSE`.
+- [x] SPDX headers on `knot-registry-data` and `knot-proposals-data`
+      (`lib.rs`, `state.rs`, `build.rs`). Logic crates and `knot-encoding`
+      already had them.
+- [ ] Confirm licence files: root `LICENSE-APACHE` and `LICENSE-AGPL`
+      exist. Per-crate `LICENSE` copies are still absent.
+- [x] `ATLAS_PIN_HEX` unset or empty fails the book build. CI sets the
+      lab id `c1c1…c1` (64 hex chars). A release build must use the real
+      Atlas id.
+- [x] Proposals book data-driver wasm
+      (`make wasm-dd` in `crates/knot-proposals-data`, feature
+      `data-driver-js`, Atlas pin `fd2b8594…`). sha256
+      `d7559c81a3e0c7d5d556a97cf0182d3958aa5c50a4e274bfe17e3c73c04f97dc`,
+      recorded as `dd_wasm_sha256` on the `knot-proposals-data` pin.
+      `dd_wasm_path` stays null. This wasm is a decoder. It does not
+      change the deployed book id.
 - [ ] `knot-warden` / `knot-warden-encoding`: do not publish while they
       need a private Atlas tree.
 
