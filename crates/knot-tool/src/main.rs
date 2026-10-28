@@ -499,8 +499,7 @@ fn prompt_new_password() -> Result<String> {
 }
 
 fn parse_digest32(text: &str) -> Result<[u8; 32]> {
-    let raw = hex::decode(text.trim().trim_start_matches("0x"))
-        .context("digest is not hex")?;
+    let raw = hex::decode(text.trim().trim_start_matches("0x")).context("digest is not hex")?;
     if raw.len() != 32 {
         bail!(
             "digest must be 32 bytes, got {} bytes. This command refuses a text message.",
