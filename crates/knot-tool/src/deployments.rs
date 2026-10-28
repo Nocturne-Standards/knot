@@ -250,7 +250,7 @@ mod tests {
         "knot-registry": { "current": { "contract_id": "envreg", "version": "0.2.1" }, "history": [] }
       },
       "wiring": { "knot-proposals.init_registry": { "tx_id": "t1" } },
-      "vigil-vault": { "current": { "contract_id": "vigil" }, "history": [] }
+      "other-product": { "current": { "contract_id": "other" }, "history": [] }
     }"#;
 
     #[test]
@@ -268,7 +268,7 @@ mod tests {
         let f = DeploymentsFile::from_json(ENVELOPED, PathBuf::from("env.json")).unwrap();
         assert_eq!(f.contract_id("knot-registry").unwrap(), "envreg");
         assert_eq!(f.contract_id("multisig-registry").unwrap(), "envreg");
-        assert_eq!(f.contract_id("vigil-vault").unwrap(), "vigil");
+        assert_eq!(f.contract_id("other-product").unwrap(), "other");
         assert!(f.contract_id("knot-proposals").is_err());
         assert!(f.contract_id("schema").is_err());
     }
