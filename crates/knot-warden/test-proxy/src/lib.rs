@@ -14,6 +14,7 @@ extern crate alloc;
 #[dusk_forge::contract]
 mod warden_test_proxy {
     use alloc::string::String;
+    use alloc::vec::Vec;
 
     use dusk_core::abi::{self, ContractId};
 
@@ -41,8 +42,30 @@ mod warden_test_proxy {
         }
 
         pub fn call_accept_scheduler(&self, warden: ContractId) {
-            let _: () =
-                abi::call(warden, "accept_scheduler", &()).expect("proxy accept_scheduler");
+            let _: () = abi::call(warden, "accept_scheduler", &()).expect("proxy accept_scheduler");
+        }
+
+        /// Hop through `path`, then `call_raw` `target`. Deployed at both
+        /// the transfer contract id and `PROXY_ID`, a path of
+        /// `[PROXY_ID, TRANSFER_CONTRACT]` reproduces the stack of the
+        /// transfer contract's `contract_to_contract` relay: the target sees
+        /// the transfer contract as `caller` with two more frames below it.
+        pub fn relay(
+            &self,
+            path: Vec<ContractId>,
+            target: ContractId,
+            fn_name: String,
+            args: Vec<u8>,
+        ) {
+            match path.split_first() {
+                None => {
+                    abi::call_raw(target, &fn_name, &args).expect("proxy relay target");
+                }
+                Some((next, rest)) => {
+                    let _: () = abi::call(*next, "relay", &(rest.to_vec(), target, fn_name, args))
+                        .expect("proxy relay hop");
+                }
+            }
         }
 
         pub fn call_set_guardian(&self, warden: ContractId, next: Account) {

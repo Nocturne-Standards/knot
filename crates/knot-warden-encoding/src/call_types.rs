@@ -13,7 +13,9 @@ use bytecheck::CheckBytes;
 use dusk_core::abi::ContractId;
 use rkyv::{Archive, Deserialize, Serialize};
 
-pub use atlas_encoding::call_types::{Account, PendingView as AtlasPendingView, SetServiceArgs};
+pub use atlas_encoding::call_types::{
+    Account, PendingChange as AtlasPendingChange, PendingView as AtlasPendingView, SetServiceArgs,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(CheckBytes))]

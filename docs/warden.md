@@ -1,6 +1,6 @@
 # Warden
 
-Source is `knot-warden` 0.2.1 and `knot-warden-encoding` 0.2.0. The live testnet contract id is in [nocturne-deployments](https://github.com/Nocturne-Standards/nocturne-deployments). Older ids in changelogs, including `fb143b1e…` and `113159d3…`, are history. Warden and `knot-warden-encoding` build only next to an Atlas checkout. Public CI does not build them.
+Source is `knot-warden` 0.3.0 and `knot-warden-encoding` 0.2.1. Testnet still runs 0.2.1; 0.3.0 is not deployed (a new bytecode is a new contract id). The live testnet contract id is in [nocturne-deployments](https://github.com/Nocturne-Standards/nocturne-deployments). Older ids in changelogs, including `fb143b1e…` and `113159d3…`, are history. Warden and `knot-warden-encoding` build only next to an Atlas checkout. Public CI does not build them.
 
 Warden is the contract an operator puts in Atlas's guardian slot when a service repoint must wait. Knot-proposals stays a generic `call_raw` executor and does not grow a delay. Atlas stays a registry: it does not call warden, and it does not delay `set_service`.
 
@@ -20,6 +20,8 @@ Two numbers, two jobs:
 |---|---|---|
 | `delay_blocks` | warden | `schedule_service`, `set_delay`, `set_scheduler`, `set_guardian` |
 | `timelock_blocks` | Atlas | `set_guardian` (after the warden delay), `set_timelock` |
+
+From 0.3.0 the warden keeps `timelock_blocks >= delay_blocks` on its own paths: `set_timelock` refuses a value below the warden delay, and `set_delay` refuses a raise above the Atlas timelock. See [Delay order](#delay-order) for what that does and does not cover.
 
 Atlas's delay is what a hostile warden cannot delete. Warden can call `set_guardian`, but the new guardian does not write until Atlas `execute_pending`. Until that call, warden is still the guardian and `delay_blocks` still applies to service repoints. After that call, warden's delay no longer matters. Operators alarm on Atlas `pending` for that reason.
 
@@ -64,7 +66,7 @@ Before `init_warden`, writes panic `warden not initialized: call init_warden fir
 
 The scheduler is the only writer, except `init_warden` and the permissionless executes.
 
-`Account::External`: `public_sender` equals the key, and the call is direct. A direct account call has `caller` unset (a bare session call) or equal to the genesis transfer contract. Every Moonlight transaction enters through that contract's `spend_and_execute`. Any other caller is a contract using the key, and is not the scheduler.
+`Account::External`: `public_sender` equals the key, and the call is direct. A direct account call has an empty call stack (a bare session call) or a call stack whose only frame is the genesis transfer contract. Every Moonlight transaction enters through that contract's `spend_and_execute`. Any other stack is a contract using the key, and is not the scheduler. That includes the transfer contract's `contract_to_contract`: it re-enters with the transfer contract as `caller` and the signer as `public_sender`, but leaves the relaying contract and the outer transfer frame on the stack, so the warden refuses it. Up to 0.2.1 the warden checked only `caller`, and accepted that relay.
 
 `Account::Contract`: `caller` equals the id. `public_sender` is ignored. The contract decides which users may reach it. Knot-proposals qualifies because `finalize` `call_raw`s the target, so `caller` is the proposals id.
 
@@ -85,10 +87,10 @@ The bootstrap method is not named `init`. Piecrust treats an exported `init` as 
 | Method | Authority | Effect |
 |---|---|---|
 | `init_warden(InitWardenArgs)` | deploy owner, direct call, once | Sets `atlas`, `scheduler`, `delay_blocks` |
-| `schedule_service(SetServiceArgs)` | scheduler | One pending repoint for that name |
+| `schedule_service(SetServiceArgs)` | scheduler | One pending repoint for that name. Panics `warden is not the atlas guardian` once a guardian handover has applied |
 | `execute_service(String)` | permissionless after `execute_at` | Calls Atlas `set_service` |
 | `cancel_service(String)` | scheduler | Drops that name's pending repoint |
-| `set_delay(u64)` | scheduler | Schedules a new `delay_blocks` |
+| `set_delay(u64)` | scheduler | Schedules a new `delay_blocks`. A raise above the Atlas timelock (current or pending) panics `delay above the atlas timelock` |
 | `set_scheduler(Account)` | scheduler | Schedules a new scheduler. It does not take the role until the delay has passed AND the incoming scheduler has called `accept_scheduler`, even at delay `0` |
 | `accept_scheduler()` | incoming scheduler | Authenticated like a scheduler call against the pending scheduler change (a direct call from the key, or `caller` equal to the contract id). Applies the change at once if the delay has passed. Panics `the pending admin change is not a scheduler change` for another kind |
 | `accept_atlas_guardian()` | scheduler | For when this warden is the incoming guardian of an Atlas guardian change: the warden calls Atlas `accept_guardian` |
@@ -96,7 +98,7 @@ The bootstrap method is not named `init`. Piecrust treats an exported `init` as 
 | `execute_admin()` | permissionless after `execute_at` | Applies the admin slot. A scheduler change also needs `accept_scheduler` first (`incoming scheduler has not accepted`) |
 | `cancel_admin()` | scheduler | Drops the admin slot |
 | `set_guardian(Account)` | scheduler | Queues in the admin slot for `delay_blocks`; `execute_admin` then forwards it to Atlas. Panics `warden is not the atlas guardian`, `atlas has a pending change; cancel or execute it first`, or `guardian contract id zero` |
-| `set_timelock(u64)` | scheduler | Forwards to Atlas in this transaction. Panics `an atlas guardian change is queued; cancel it first` while `set_guardian` is queued |
+| `set_timelock(u64)` | scheduler | Forwards to Atlas in this transaction. Panics `an atlas guardian change is queued; cancel it first` while `set_guardian` is queued, and `timelock below the warden delay` for a value below `delay_blocks` (current or pending) |
 | `cancel_atlas_pending()` | scheduler | Forwards to Atlas `cancel_pending` |
 | `atlas`, `scheduler`, `delay_blocks`, `pending_service(name)`, `pending_admin` | permissionless | Reads |
 
@@ -105,6 +107,8 @@ The bootstrap method is not named `init`. Piecrust treats an exported `init` as 
 Deploy owner matches Atlas: a direct account call and `public_sender == self_owner()`. Otherwise panic `Only the deploy owner may init_warden`. A second init panics `warden already initialized`. The Atlas id cannot be changed afterward. A different Atlas is a different warden.
 
 ### Service repoint
+
+`schedule_service` first reads Atlas `guardian()` and panics `warden is not the atlas guardian` unless it is this warden. An orphaned warden cannot queue, and does not emit, a repoint Atlas would refuse. This matches the EVM warden's `scheduleService`. While an Atlas guardian rotation is pending but not applied, the warden is still the guardian and still schedules.
 
 `schedule_service` panics `empty service name` when `name` is empty, `service name longer than 64 bytes` above 64 bytes, and `service id zero` for the all-zero id. Atlas refuses all three at `set_service` (the last two from Atlas 0.4.1), and a queued repoint Atlas would refuse can never execute, so they are rejected up front.
 
@@ -147,9 +151,9 @@ forwards it, and Atlas waits for the incoming guardian.
 ### What the warden does not protect
 
 - **The delay is a reaction window, not a veto.** Only the scheduler can cancel. A compromised scheduler can queue a repoint at height `t`; a replacement scheduler queued at `t+1` lands at `t+1+delay_blocks`, after the repoint is executable. Nothing inside the system recovers from a scheduler compromise before the window closes; observers have to act on `service_scheduled` (revoke the pin, rotate the consumers).
-- **A guardian handover orphans the warden.** After Atlas applies a new guardian, queued `pending_services` and `pending_admin` entries can never execute (Atlas refuses the warden). They are inert, not cleared; there is no event for "no longer guardian". Watch Atlas `guardian_set`.
+- **A guardian handover orphans the warden.** After Atlas applies a new guardian, queued `pending_services` and `pending_admin` entries can never execute (Atlas refuses the warden). They are inert, not cleared; there is no event for "no longer guardian". Watch Atlas `guardian_set`. From 0.3.0 `schedule_service` and `set_guardian` refuse new entries once the warden is not the guardian. On 0.2.1 `schedule_service` still accepts them, so a `service_scheduled` after `guardian_set` is noise.
 - **`init_warden` does not check that it is Atlas's guardian.** Deployment tooling must read Atlas `guardian()` and the warden's `atlas()` and compare both directions.
-- **External keys must be dedicated.** Atlas and the warden accept the genesis transfer contract as `caller` of a direct call, and the transfer contract can call any contract on behalf of a Moonlight sender (`contract_to_contract`), with `public_sender` still the original signer. A malicious contract that a guardian or scheduler key is tricked into calling can therefore reach calls that take no argument or ignore it (`cancel_pending`, `cancel_service`, `cancel_admin`, `cancel_atlas_pending`). Do not use a guardian or scheduler key to sign anything else; prefer a contract account.
+- **External keys must be dedicated.** The transfer contract can call any contract on behalf of a Moonlight sender (`contract_to_contract`), with `caller` the transfer contract and `public_sender` still the original signer. From 0.3.0 the warden refuses that relay for every `External` check (scheduler, incoming scheduler, deploy owner) by requiring the transfer contract to be the only frame on the call stack. Up to 0.2.1 it checked only `caller`, so a malicious contract that a scheduler key was tricked into calling could reach the warden methods whose argument a relayed payload decodes as: the `()` methods (`cancel_admin`, `cancel_atlas_pending`, `accept_scheduler`, `accept_atlas_guardian`) and the `u64` methods (`set_delay`, `set_timelock`), where only the 777,600-block caps stop the decoded value; `schedule_service` only with a contract id ground for the purpose. A relayed payload does not decode as an `Account`. Atlas has the same exposure for an `External` guardian until its own bytecode adds the check. Do not use a guardian or scheduler key to sign anything else; prefer a contract account.
 
 ### Forwards
 
@@ -160,6 +164,17 @@ Atlas's own panics propagate: `guardian unchanged`, `timelock unchanged`, `no pe
 The `execute_admin` forward of a queued guardian change must not fail: a panic rolls back the clear of the admin slot and leaves the one slot occupied (blocking `set_delay` and `set_scheduler`) until `cancel_admin`. 0.2.0 could reach that state when `set_timelock` opened an Atlas change during the wait, when Atlas already held one, or when warden was not Atlas's guardian. From 0.2.1 `set_guardian` checks all three when queued, and `set_timelock` is refused while the guardian change is queued, so nothing else can open an Atlas change in the window.
 
 A guardian change therefore waits twice: warden's `delay_blocks`, then Atlas `timelock_blocks` (passed to `init_guardian`). The Atlas wait is the one that still holds if a guardian could remove its own delay, because Atlas keeps it, not the guardian.
+
+### Delay order
+
+The intended configuration is `timelock_blocks >= delay_blocks`. From 0.3.0 the warden refuses the two calls that would break it while it is the path to Atlas:
+
+- `set_timelock(blocks)` panics `timelock below the warden delay` when `blocks` is below `delay_blocks` or below a pending `Delay` change in the admin slot.
+- `set_delay(blocks)` panics `delay above the atlas timelock` when it raises the delay above Atlas `timelock_blocks` or above a pending Atlas `Timelock` change. Lowering the delay is always allowed.
+
+`init_warden` does not check it, by design. In the bootstrap order (see Wiring) the warden is initialized before Atlas `init_guardian` names it, so the timelock it will sit behind is not known yet, and a check against an uninitialized Atlas (`timelock_blocks` 0) would refuse every non-zero delay. Deploy tooling owns the first check: before Atlas `init_guardian` (or Atlas `set_guardian` to a new warden), read the warden's `delay_blocks()` and refuse a `timelock_blocks` below it. A deployment that starts with the timelock below the delay can be fixed from the warden by raising the timelock or lowering the delay.
+
+The check only covers changes made through this warden. A guardian that is not this warden sets Atlas's timelock directly.
 
 While an Atlas guardian rotation is pending, warden remains the caller Atlas accepts, and `schedule_service` still waits `delay_blocks`. Atlas does not freeze the directory during `set_guardian`. Warden is what keeps a repoint from landing in that window.
 
@@ -175,9 +190,9 @@ Typed rkyv payloads, `contract-events` feature, topic string equal to the emit n
 | `service_scheduled` | `schedule_service`, including the zero-delay path, before apply |
 | `service_executed` | `execute_service`, after the local entry is taken and before the Atlas call returns |
 | `service_cancelled` | `cancel_service` |
-| `admin_scheduled` | `set_delay` / `set_scheduler`, including the zero-delay path, before apply |
+| `admin_scheduled` | `set_delay` / `set_scheduler` / `set_guardian`, including the zero-delay path, before apply |
 | `admin_cancelled` | `cancel_admin` |
-| `guardian_forwarded` | `set_guardian`, after the Atlas call. The wait stays on Atlas |
+| `guardian_forwarded` | `execute_admin(AtlasGuardian)`, after the Atlas call. The wait then stays on Atlas |
 | `timelock_forwarded` | `set_timelock`, after the Atlas call. The wait stays on Atlas |
 | `atlas_cancel_forwarded` | `cancel_atlas_pending`, after the Atlas call. Payload is empty |
 
@@ -202,7 +217,7 @@ A service move through knot, once this is deployed:
 2. Members approve. Anyone `finalize`s. That `call_raw` only schedules.
 3. After `execute_at`, anyone calls `execute_service`. That transaction is the one that calls Atlas `set_service`.
 
-A guardian rotation through knot uses `function_name` `set_guardian` and `target` warden. `finalize` reaches Atlas in that same transaction. Atlas then waits `timelock_blocks`. Anyone calls Atlas `execute_pending`. Cancelling that rotation is a proposal whose function is `cancel_atlas_pending`.
+A guardian rotation through knot uses `function_name` `set_guardian` and `target` warden. `finalize` only queues it in the warden admin slot (since 0.2.0); it does not reach Atlas. After `delay_blocks`, anyone calls warden `execute_admin`, which forwards `set_guardian` to Atlas, and the Atlas `timelock_blocks` wait starts in that transaction. The incoming guardian calls Atlas `accept_guardian` (a warden accepts through `accept_atlas_guardian`), and anyone calls Atlas `execute_pending` after the timelock, or the acceptance applies it if the timelock has already passed. Cancelling the rotation is a proposal whose function is `cancel_admin` while it is queued in the warden, or `cancel_atlas_pending` once it has been forwarded.
 
 Pointing Atlas's guardian straight at the proposals contract still works. `finalize` then calls `set_service` immediately. That wiring has quorum and no service delay. Warden is the deployment that wants the delay.
 
@@ -215,7 +230,7 @@ A service contract that finds its policy through Atlas `resolve(name)` sees a re
 An implementation is wrong if any of these fail:
 
 - Deploy does not call `init_warden`. A later `init_warden` from the deploy owner works once. A second call panics. A non-owner and an inter-contract call panic.
-- An external scheduler is rejected when `caller` is `Some`, even if `public_sender` is the key.
+- An external scheduler, incoming scheduler, or deploy owner is accepted only from a direct call: an empty call stack, or the genesis transfer contract as the only frame (a Moonlight transaction). Any other caller, and a transfer-contract relay with more frames below it (`contract_to_contract`), is rejected even if `public_sender` is the key.
 - A contract scheduler is accepted only when `caller` is that id.
 - `schedule_service` of the current Atlas id panics and leaves no pending entry. An empty name panics. A second schedule for the same name panics. A second name may be pending beside the first.
 - `execute_service` before `execute_at` panics. At `execute_at`, a caller who is not the scheduler applies it, and Atlas `resolve` returns the new id.
@@ -224,5 +239,7 @@ An implementation is wrong if any of these fail:
 - `set_delay` to the current value does not take the admin slot. A real `set_delay` waits. `schedule_service` during that wait stores `execute_at` from the old delay.
 - `set_delay(0)` does not apply before the current delay has elapsed.
 - `set_scheduler` follows the same slot, unchanged check, and wait.
-- `set_guardian` from the scheduler sets Atlas `pending` in that transaction and does not write warden's maps. A non-scheduler cannot forward.
+- `set_guardian` from the scheduler queues in the admin slot and does not write Atlas or warden's service map. `execute_admin` after `execute_at` sets Atlas `pending`. A non-scheduler cannot queue it.
+- After an Atlas guardian handover has applied, `schedule_service` panics `warden is not the atlas guardian` and leaves no pending entry.
+- `set_timelock` below the current or pending warden delay panics. `set_delay` raising above the current or pending Atlas timelock panics; lowering does not.
 - Writes before `init_warden` panic. The public method list has no `init`.

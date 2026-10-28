@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+## [0.3.0]
+
+Bytecode changes; not deployed. A deployment is a new contract id (see `docs/warden.md`).
+
+### Security
+
+- `Account::External` checks (scheduler, incoming scheduler in `accept_scheduler`, deploy owner in `init_warden`) accept only a direct call: an empty call stack or the genesis transfer contract as the only frame. 0.2.1 checked only `caller`, so a contract a scheduler key was tricked into calling could relay through the transfer contract's `contract_to_contract` and reach `cancel_admin`, `cancel_atlas_pending`, `accept_scheduler`, `accept_atlas_guardian`, and (stopped only by the caps) `set_delay` / `set_timelock`. `Account::Contract` checks are unchanged. Review finding F-01 (2026-10-28).
+
+### Fixed
+
+- `schedule_service` panics `warden is not the atlas guardian` once Atlas's guardian is no longer this warden, as the EVM warden's `scheduleService` does. 0.2.1 still queued and announced `service_scheduled` entries that could never execute. Review finding F-02.
+
+### Added
+
+- `set_timelock` panics `timelock below the warden delay` for a value below `delay_blocks` or a pending delay change; `set_delay` panics `delay above the atlas timelock` for a raise above Atlas `timelock_blocks` or a pending Atlas timelock change. Lowering the delay is always allowed. `init_warden` does not check the order, because Atlas names the warden after it is initialized; deploy tooling checks it before Atlas `init_guardian`. Review finding F-04.
+
+### Changed
+
+- `knot-warden-encoding` 0.2.1 (re-exports Atlas `PendingChange` as `AtlasPendingChange`; layouts unchanged).
+
 ## [0.2.1]
 
 ### Added

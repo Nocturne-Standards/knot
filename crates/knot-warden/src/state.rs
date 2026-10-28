@@ -23,8 +23,8 @@ mod warden {
     use dusk_core::signatures::bls::PublicKey as BlsPublicKey;
 
     use knot_warden_encoding::call_types::{
-        Account, AtlasPendingView, InitWardenArgs, PendingAdmin, PendingAdminView,
-        PendingServiceView, SetServiceArgs,
+        Account, AtlasPendingChange, AtlasPendingView, InitWardenArgs, PendingAdmin,
+        PendingAdminView, PendingServiceView, SetServiceArgs,
     };
     use knot_warden_encoding::events::{
         AdminCancelled, AdminScheduled, AtlasCancelForwarded, AtlasSet, DelaySet,
@@ -134,8 +134,13 @@ mod warden {
 
         /// One pending repoint for `name`. Delay `0` still emits
         /// `service_scheduled`, then applies in this call.
+        ///
+        /// Refused once the warden is no longer Atlas's guardian: Atlas would
+        /// refuse the repoint at `execute_service`, so the entry could never
+        /// apply and `service_scheduled` would be a false alarm for watchers.
         pub fn schedule_service(&mut self, args: SetServiceArgs) {
             self.require_scheduler();
+            self.require_atlas_guardian();
             if args.name.is_empty() {
                 panic!("empty service name");
             }
@@ -207,11 +212,19 @@ mod warden {
 
         /// Wait out the current delay. Raising and lowering both wait, so
         /// the scheduler cannot zero the delay and repoint in one transaction.
+        ///
+        /// A raise may not go above the Atlas timelock, current or pending, so
+        /// the warden keeps `timelock_blocks >= delay_blocks` (a guardian
+        /// change waits at least twice the warden delay). Lowering is always
+        /// allowed: it never breaks that order.
         pub fn set_delay(&mut self, blocks: u64) {
             self.require_scheduler();
             Self::require_delay(blocks);
             if self.delay_blocks == blocks {
                 panic!("delay unchanged");
+            }
+            if blocks > self.delay_blocks && blocks > self.atlas_timelock_floor() {
+                panic!("delay above the atlas timelock");
             }
             self.schedule_admin(PendingAdmin::Delay(blocks));
         }
@@ -311,12 +324,8 @@ mod warden {
         pub fn set_guardian(&mut self, next: Account) {
             self.require_scheduler();
             Self::require_usable_account(&next, "guardian", self.atlas_id());
-            let current: Option<Account> =
-                abi::call(self.atlas_id(), "guardian", &()).expect("warden: atlas guardian failed");
-            if current != Some(Account::Contract(abi::self_id())) {
-                panic!("warden is not the atlas guardian");
-            }
-            if current.as_ref() == Some(&next) {
+            self.require_atlas_guardian();
+            if next == Account::Contract(abi::self_id()) {
                 panic!("guardian unchanged");
             }
             let atlas_pending: Option<AtlasPendingView> =
@@ -369,7 +378,42 @@ mod warden {
             }
         }
 
+        /// The warden only acts on Atlas while it holds the guardian slot.
+        fn require_atlas_guardian(&self) {
+            let current: Option<Account> =
+                abi::call(self.atlas_id(), "guardian", &()).expect("warden: atlas guardian failed");
+            if current != Some(Account::Contract(abi::self_id())) {
+                panic!("warden is not the atlas guardian");
+            }
+        }
+
+        /// The lowest Atlas timelock in force or queued. A pending Atlas
+        /// timelock change lands without another warden check, so it counts.
+        fn atlas_timelock_floor(&self) -> u64 {
+            let atlas = self.atlas_id();
+            let current: u64 = abi::call(atlas, "timelock_blocks", &())
+                .expect("warden: atlas timelock_blocks failed");
+            let pending: Option<AtlasPendingView> =
+                abi::call(atlas, "pending", &()).expect("warden: atlas pending failed");
+            match pending.map(|p| p.change) {
+                Some(AtlasPendingChange::Timelock(next)) => current.min(next),
+                _ => current,
+            }
+        }
+
+        /// The highest warden delay in force or queued.
+        fn delay_ceiling(&self) -> u64 {
+            match self.pending_admin {
+                Some((PendingAdmin::Delay(next), _)) => self.delay_blocks.max(next),
+                _ => self.delay_blocks,
+            }
+        }
+
         /// Forward Atlas `set_timelock` in this transaction.
+        ///
+        /// Refuses a timelock below the warden delay, current or pending, so
+        /// the scheduler cannot shorten the Atlas wait on a guardian change
+        /// below `delay_blocks`.
         pub fn set_timelock(&mut self, blocks: u64) {
             self.require_scheduler();
             if matches!(
@@ -377,6 +421,9 @@ mod warden {
                 Some((PendingAdmin::AtlasGuardian(_), _))
             ) {
                 panic!("an atlas guardian change is queued; cancel it first");
+            }
+            if blocks < self.delay_ceiling() {
+                panic!("timelock below the warden delay");
             }
             let _: () = abi::call(self.atlas_id(), "set_timelock", &blocks)
                 .expect("warden: atlas set_timelock failed");
@@ -431,13 +478,17 @@ mod warden {
             ContractId::from_bytes(bytes)
         }
 
-        /// Bare session call (`caller` unset) or a Moonlight transaction
-        /// (caller is the transfer contract). Any other caller is a contract
-        /// using the sender's key.
+        /// Bare session call (empty call stack) or a Moonlight transaction
+        /// (the transfer contract is the only frame below this one). Any other
+        /// stack is a contract using the sender's key. That includes the
+        /// transfer contract's `contract_to_contract`, which re-enters with
+        /// the transfer contract as `caller` but leaves the relaying contract
+        /// and the outer transfer frame on the stack.
         fn is_direct_account_call() -> bool {
-            match abi::caller() {
-                None => true,
-                Some(id) => id == Self::transfer_contract_id(),
+            match abi::callstack().as_slice() {
+                [] => true,
+                [only] => *only == Self::transfer_contract_id(),
+                _ => false,
             }
         }
 

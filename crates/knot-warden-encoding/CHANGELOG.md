@@ -5,8 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ## [Unreleased]
 
+## [0.2.1]
+
 ### Added
 
+- Re-export Atlas `PendingChange` as `AtlasPendingChange`, for warden 0.3.0's timelock check. No layout change.
 - `AtlasSet`, `GuardianForwarded`, `TimelockForwarded`, `AtlasCancelForwarded`.
   Layout goldens pin them.
 

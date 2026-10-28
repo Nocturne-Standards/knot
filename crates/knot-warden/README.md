@@ -2,7 +2,7 @@
 
 Delaying guardian in front of Atlas. Spec: [`docs/warden.md`](../../docs/warden.md).
 
-This crate is 0.2.1. Testnet runs it as the guardian of Atlas 0.4.1; the live ids are in [Deployments](https://docs.nocturne-standards.org/v1/deployments/). Older ids, including `113159d3…` (0.1.1), are history.
+This crate is 0.3.0 (not deployed). Testnet runs 0.2.1 as the guardian of Atlas 0.4.1; the live ids are in [Deployments](https://docs.nocturne-standards.org/v1/deployments/). Older ids, including `113159d3…` (0.1.1), are history.
 
 ## Build / test
 

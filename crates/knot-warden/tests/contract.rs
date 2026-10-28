@@ -631,7 +631,7 @@ fn set_delay_unchanged_does_not_take_slot_and_real_change_waits() {
     let (_, owner) = keypair(rng);
     let (_, op) = keypair(rng);
     let session = &mut deploy(&owner);
-    bootstrap(session, &owner, Account::External(op), 10, 0);
+    bootstrap(session, &owner, Account::External(op), 10, 20);
 
     set_sender(session, Some(&op));
     let same = session.call::<u64, ()>(WARDEN_ID, "set_delay", &10, POINT_LIMIT);
@@ -878,7 +878,7 @@ fn set_guardian_waits_delay_then_forwards() {
     assert_eq!(atlas_pending.execute_at, 14);
 
     set_sender(session, Some(&op));
-    let blocked = session.call::<u64, ()>(WARDEN_ID, "set_timelock", &3, POINT_LIMIT);
+    let blocked = session.call::<u64, ()>(WARDEN_ID, "set_timelock", &5, POINT_LIMIT);
     assert!(blocked.is_err(), "atlas slot is already taken");
 
     set_sender(session, Some(&op));
@@ -897,18 +897,18 @@ fn set_guardian_waits_delay_then_forwards() {
 
     set_sender(session, Some(&op));
     let timelock = session
-        .call::<u64, ()>(WARDEN_ID, "set_timelock", &3, POINT_LIMIT)
+        .call::<u64, ()>(WARDEN_ID, "set_timelock", &5, POINT_LIMIT)
         .expect("forward set_timelock");
     assert_eq!(warden_topics(&timelock), ["timelock_forwarded"]);
     let forwarded: TimelockForwarded =
         decode_event(event(&timelock, WARDEN_ID, "timelock_forwarded"));
-    assert_eq!(forwarded.blocks, 3);
+    assert_eq!(forwarded.blocks, 5);
     let atlas_pending = session
         .call::<(), Option<PendingView>>(ATLAS_ID, "pending", &(), POINT_LIMIT)
         .unwrap()
         .data
         .unwrap();
-    assert_eq!(atlas_pending.change, PendingChange::Timelock(3));
+    assert_eq!(atlas_pending.change, PendingChange::Timelock(5));
     assert!(pending_admin(session).is_none());
 }
 
@@ -1466,4 +1466,378 @@ fn the_warden_accepts_as_the_incoming_atlas_guardian() {
             .data,
         Some(Account::Contract(WARDEN_ID))
     );
+}
+
+fn deploy_transfer_proxy(session: &mut Session, owner: &BlsPublicKey) {
+    let _: (ContractId, Option<CallReceipt<()>>) = session
+        .deploy(
+            PROXY_BYTECODE,
+            ContractData::builder()
+                .owner(owner.to_bytes().to_vec())
+                .contract_id(TRANSFER_CONTRACT),
+            POINT_LIMIT,
+        )
+        .expect("deploy proxy at the transfer contract id");
+}
+
+fn rkyv_bytes<T>(value: &T) -> Vec<u8>
+where
+    T: rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<256>>,
+{
+    rkyv::to_bytes::<_, 256>(value)
+        .expect("serialize call args")
+        .to_vec()
+}
+
+/// A Moonlight transaction calling `target` directly: the transfer contract
+/// is the only frame below it.
+fn via_transfer(
+    session: &mut Session,
+    sender: &BlsPublicKey,
+    target: ContractId,
+    fn_name: &str,
+    args: Vec<u8>,
+) -> Result<CallReceipt<()>, dusk_vm::Error> {
+    via_path(session, sender, Vec::new(), target, fn_name, args)
+}
+
+/// What `transfer.contract_to_contract` produces when a contract the signer
+/// called relays into `target`: transfer -> relaying contract -> transfer ->
+/// target. `caller` at the target is the transfer contract either way.
+fn via_contract_to_contract(
+    session: &mut Session,
+    sender: &BlsPublicKey,
+    target: ContractId,
+    fn_name: &str,
+    args: Vec<u8>,
+) -> Result<CallReceipt<()>, dusk_vm::Error> {
+    via_path(
+        session,
+        sender,
+        alloc::vec![PROXY_ID, TRANSFER_CONTRACT],
+        target,
+        fn_name,
+        args,
+    )
+}
+
+fn via_path(
+    session: &mut Session,
+    sender: &BlsPublicKey,
+    path: Vec<ContractId>,
+    target: ContractId,
+    fn_name: &str,
+    args: Vec<u8>,
+) -> Result<CallReceipt<()>, dusk_vm::Error> {
+    set_sender(session, Some(sender));
+    session.call::<(Vec<ContractId>, ContractId, String, Vec<u8>), ()>(
+        TRANSFER_CONTRACT,
+        "relay",
+        &(path, target, String::from(fn_name), args),
+        POINT_LIMIT,
+    )
+}
+
+#[test]
+fn deploy_owner_refuses_a_contract_to_contract_relay() {
+    let rng = &mut StdRng::seed_from_u64(50);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    deploy_transfer_proxy(session, &owner);
+    let args = rkyv_bytes(&InitWardenArgs {
+        atlas: ATLAS_ID,
+        scheduler: Account::External(op),
+        delay_blocks: 0,
+    });
+
+    let relayed = via_contract_to_contract(session, &owner, WARDEN_ID, "init_warden", args.clone());
+    assert_panics(
+        relayed.expect_err("relayed init"),
+        "Only the deploy owner may init_warden",
+    );
+    via_transfer(session, &owner, WARDEN_ID, "init_warden", args).expect("direct init");
+}
+
+#[test]
+fn external_scheduler_refuses_a_contract_to_contract_relay() {
+    let rng = &mut StdRng::seed_from_u64(51);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    deploy_transfer_proxy(session, &owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    via_transfer(
+        session,
+        &op,
+        WARDEN_ID,
+        "schedule_service",
+        rkyv_bytes(&service("treasury", SERVICE_ID)),
+    )
+    .expect("direct schedule_service");
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_delay", &6, POINT_LIMIT)
+        .expect("queue a delay change");
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_timelock", &12, POINT_LIMIT)
+        .expect("open an atlas change");
+
+    // The `()` and `u64` methods are the ones a relayed payload decodes as.
+    let relayed: [(&str, Vec<u8>); 7] = [
+        ("cancel_service", rkyv_bytes(&String::from("treasury"))),
+        ("cancel_admin", Vec::new()),
+        ("cancel_atlas_pending", Vec::new()),
+        ("accept_atlas_guardian", Vec::new()),
+        ("set_delay", rkyv_bytes(&8u64)),
+        ("set_timelock", rkyv_bytes(&14u64)),
+        (
+            "schedule_service",
+            rkyv_bytes(&service("payroll", SERVICE_ID_2)),
+        ),
+    ];
+    for (fn_name, args) in relayed {
+        let err = via_contract_to_contract(session, &op, WARDEN_ID, fn_name, args);
+        assert_panics(
+            err.expect_err(fn_name),
+            "External scheduler: direct call required",
+        );
+    }
+    assert!(pending_service(session, "treasury").is_some());
+    assert!(pending_service(session, "payroll").is_none());
+    assert_eq!(
+        pending_admin(session).unwrap().change,
+        PendingAdmin::Delay(6)
+    );
+    assert!(
+        session
+            .call::<(), Option<PendingView>>(ATLAS_ID, "pending", &(), POINT_LIMIT)
+            .unwrap()
+            .data
+            .is_some()
+    );
+
+    via_transfer(
+        session,
+        &op,
+        WARDEN_ID,
+        "cancel_service",
+        rkyv_bytes(&String::from("treasury")),
+    )
+    .expect("direct cancel_service");
+    via_transfer(session, &op, WARDEN_ID, "cancel_admin", Vec::new()).expect("direct cancel_admin");
+    via_transfer(session, &op, WARDEN_ID, "cancel_atlas_pending", Vec::new())
+        .expect("direct cancel_atlas_pending");
+}
+
+#[test]
+fn incoming_scheduler_refuses_a_contract_to_contract_relay() {
+    let rng = &mut StdRng::seed_from_u64(52);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let (_, next) = keypair(rng);
+    let session = &mut deploy(&owner);
+    deploy_transfer_proxy(session, &owner);
+    bootstrap(session, &owner, Account::External(op), 0, 10);
+
+    set_sender(session, Some(&op));
+    session
+        .call::<Account, ()>(
+            WARDEN_ID,
+            "set_scheduler",
+            &Account::External(next),
+            POINT_LIMIT,
+        )
+        .expect("queue scheduler change");
+
+    let relayed =
+        via_contract_to_contract(session, &next, WARDEN_ID, "accept_scheduler", Vec::new());
+    assert_panics(
+        relayed.expect_err("relayed accept"),
+        "External incoming scheduler: direct call required",
+    );
+    assert!(
+        !session
+            .call::<(), bool>(WARDEN_ID, "pending_admin_accepted", &(), POINT_LIMIT)
+            .unwrap()
+            .data
+    );
+
+    via_transfer(session, &next, WARDEN_ID, "accept_scheduler", Vec::new()).expect("direct accept");
+    assert_eq!(
+        session
+            .call::<(), Option<Account>>(WARDEN_ID, "scheduler", &(), POINT_LIMIT)
+            .unwrap()
+            .data,
+        Some(Account::External(next))
+    );
+}
+
+/// The call-stack rule is for keys only. A contract scheduler is matched on
+/// `caller`, however deep the stack below it is.
+#[test]
+fn contract_scheduler_is_unaffected_by_the_stack_below_it() {
+    let rng = &mut StdRng::seed_from_u64(53);
+    let (_, owner) = keypair(rng);
+    let (_, user) = keypair(rng);
+    let session = &mut deploy(&owner);
+    deploy_transfer_proxy(session, &owner);
+    bootstrap(session, &owner, Account::Contract(PROXY_ID), 0, 10);
+
+    // A wallet transaction into the scheduler contract: transfer -> proxy -> warden.
+    via_path(
+        session,
+        &user,
+        alloc::vec![PROXY_ID],
+        WARDEN_ID,
+        "schedule_service",
+        rkyv_bytes(&service("treasury", SERVICE_ID)),
+    )
+    .expect("contract scheduler behind a Moonlight transaction");
+    assert_eq!(resolve(session, "treasury"), Some(SERVICE_ID));
+}
+
+#[test]
+fn schedule_service_refuses_after_a_guardian_handover() {
+    let rng = &mut StdRng::seed_from_u64(54);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let (_, next) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 0, 0);
+
+    set_sender(session, Some(&op));
+    session
+        .call::<Account, ()>(
+            WARDEN_ID,
+            "set_guardian",
+            &Account::External(next),
+            POINT_LIMIT,
+        )
+        .expect("forward set_guardian");
+
+    // Atlas holds the rotation but has not applied it: the warden is still
+    // the guardian and still schedules.
+    schedule(session, &op, "treasury", SERVICE_ID);
+    assert_eq!(resolve(session, "treasury"), Some(SERVICE_ID));
+
+    set_sender(session, Some(&next));
+    session
+        .call::<(), ()>(ATLAS_ID, "accept_guardian", &(), POINT_LIMIT)
+        .expect("incoming guardian accepts and applies");
+    assert_eq!(
+        session
+            .call::<(), Option<Account>>(ATLAS_ID, "guardian", &(), POINT_LIMIT)
+            .unwrap()
+            .data,
+        Some(Account::External(next))
+    );
+
+    set_sender(session, Some(&op));
+    let orphaned = session.call::<SetServiceArgs, ()>(
+        WARDEN_ID,
+        "schedule_service",
+        &service("payroll", SERVICE_ID_2),
+        POINT_LIMIT,
+    );
+    assert_panics(
+        orphaned.expect_err("orphaned warden"),
+        "warden is not the atlas guardian",
+    );
+    assert!(pending_service(session, "payroll").is_none());
+}
+
+#[test]
+fn set_timelock_refuses_a_value_below_the_warden_delay() {
+    let rng = &mut StdRng::seed_from_u64(55);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    set_sender(session, Some(&op));
+    let low = session.call::<u64, ()>(WARDEN_ID, "set_timelock", &3, POINT_LIMIT);
+    assert_panics(
+        low.expect_err("below delay"),
+        "timelock below the warden delay",
+    );
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_timelock", &4, POINT_LIMIT)
+        .expect("equal to the delay");
+    set_sender(session, Some(&op));
+    session
+        .call::<(), ()>(WARDEN_ID, "cancel_atlas_pending", &(), POINT_LIMIT)
+        .expect("cancel");
+
+    // A queued delay raise counts as the delay.
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_delay", &6, POINT_LIMIT)
+        .expect("queue a raise");
+    set_sender(session, Some(&op));
+    let below_pending = session.call::<u64, ()>(WARDEN_ID, "set_timelock", &5, POINT_LIMIT);
+    assert_panics(
+        below_pending.expect_err("below pending delay"),
+        "timelock below the warden delay",
+    );
+}
+
+#[test]
+fn set_delay_refuses_a_raise_above_the_atlas_timelock() {
+    let rng = &mut StdRng::seed_from_u64(56);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 4, 10);
+
+    set_sender(session, Some(&op));
+    let high = session.call::<u64, ()>(WARDEN_ID, "set_delay", &11, POINT_LIMIT);
+    assert_panics(
+        high.expect_err("above timelock"),
+        "delay above the atlas timelock",
+    );
+    assert!(pending_admin(session).is_none());
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_delay", &10, POINT_LIMIT)
+        .expect("equal to the timelock");
+    set_sender(session, Some(&op));
+    session
+        .call::<(), ()>(WARDEN_ID, "cancel_admin", &(), POINT_LIMIT)
+        .expect("cancel");
+
+    // A queued Atlas timelock cut counts as the timelock.
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_timelock", &5, POINT_LIMIT)
+        .expect("queue an atlas cut");
+    set_sender(session, Some(&op));
+    let above_pending = session.call::<u64, ()>(WARDEN_ID, "set_delay", &6, POINT_LIMIT);
+    assert_panics(
+        above_pending.expect_err("above pending timelock"),
+        "delay above the atlas timelock",
+    );
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_delay", &5, POINT_LIMIT)
+        .expect("equal to the pending timelock");
+}
+
+/// `init_warden` cannot see the timelock it will sit behind, so a deployment
+/// can start with the delay above it. Lowering the delay is never refused.
+#[test]
+fn set_delay_may_always_lower() {
+    let rng = &mut StdRng::seed_from_u64(57);
+    let (_, owner) = keypair(rng);
+    let (_, op) = keypair(rng);
+    let session = &mut deploy(&owner);
+    bootstrap(session, &owner, Account::External(op), 8, 2);
+
+    set_sender(session, Some(&op));
+    session
+        .call::<u64, ()>(WARDEN_ID, "set_delay", &6, POINT_LIMIT)
+        .expect("lowering is allowed above the timelock");
 }
