@@ -288,16 +288,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
-name = "atlas-encoding"
-version = "0.3.0"
-dependencies = [
- "bytecheck",
- "dusk-core",
- "rkyv",
- "serde",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1612,36 +1602,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "knot-warden"
-version = "0.3.0"
-dependencies = [
- "atlas-encoding",
- "bytecheck",
- "dusk-bls12_381",
- "dusk-bytes",
- "dusk-core",
- "dusk-data-driver",
- "dusk-forge",
- "dusk-vm",
- "knot-warden-encoding",
- "rand 0.8.8",
- "rkyv",
- "serde",
-]
-
-[[package]]
-name = "knot-warden-encoding"
-version = "0.2.1"
-dependencies = [
- "atlas-encoding",
- "bytecheck",
- "dusk-core",
- "dusk-forge",
- "rkyv",
- "serde",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1754,6 +1714,46 @@ checksum = "c334ab77a6d4f29c5c2e41149c0f03af4082923aa364aa0c9876232f33f9853f"
 dependencies = [
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "nocturne-atlas-encoding"
+version = "0.4.0"
+dependencies = [
+ "bytecheck",
+ "dusk-core",
+ "rkyv",
+ "serde",
+]
+
+[[package]]
+name = "nocturne-knot-warden"
+version = "0.3.0"
+dependencies = [
+ "bytecheck",
+ "dusk-bls12_381",
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-data-driver",
+ "dusk-forge",
+ "dusk-vm",
+ "nocturne-atlas-encoding",
+ "nocturne-knot-warden-encoding",
+ "rand 0.8.8",
+ "rkyv",
+ "serde",
+]
+
+[[package]]
+name = "nocturne-knot-warden-encoding"
+version = "0.2.1"
+dependencies = [
+ "bytecheck",
+ "dusk-core",
+ "dusk-forge",
+ "nocturne-atlas-encoding",
+ "rkyv",
+ "serde",
 ]
 
 [[package]]

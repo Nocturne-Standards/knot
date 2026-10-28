@@ -14,6 +14,10 @@ details live in each crate's `CHANGELOG.md`. Semver policy:
 - `rkyv` moves from `=0.7.39` to `=0.7.46` in every crate and lockfile (fixes RUSTSEC-2026-0001, `Rc`/`Arc` `from_value` on OOM). The `knot-encoding` layout goldens (35), `knot-proposals` (45 tests), `knot-registry` (41), `knot-warden` (27) and `knot-warden-encoding` pass unchanged: the archived layouts are byte-identical. RUSTSEC-2026-0235 has no 0.7 fix and stays accepted (no `Rc`/`Arc` archives in Knot types). `knot-event-decoder` also moves its registry `dusk-core` dev-dependency to `=1.7.0` to match `knot-warden-encoding`.
 - Known, not from this change: `knot-event-decoder`'s `conformance_emit_topics` fails on `main` because `knot-registry` emits `evm_bootstrap_sent` and the decoder has no arm for it. That workspace is not covered by public CI.
 
+### Changed
+
+- Warden group renamed to `nocturne-knot-warden`, `nocturne-knot-warden-encoding`, `nocturne-knot-event-decoder` (still `publish = false`). Rust names and `knot_warden.wasm` are unchanged. They now build against the sibling Atlas tree's `nocturne-atlas-encoding` 0.4 (`package = ...` on the `atlas-encoding` key); the warden host tests run against Atlas 0.5.0.
+
 ### Added
 
 - `knot-warden` 0.2.1: two-step handover for the scheduler (`accept_scheduler`, `pending_admin_accepted`) and `accept_atlas_guardian`, matching Atlas 0.4.1's `accept_guardian`. 31 contract tests.

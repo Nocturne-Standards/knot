@@ -13,6 +13,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 - `AtlasSet`, `GuardianForwarded`, `TimelockForwarded`, `AtlasCancelForwarded`.
   Layout goldens pin them.
 
+### Changed
+
+- Package renamed to `nocturne-knot-warden-encoding` (the `nocturne-knot-*` crates.io pattern). `[lib] name = "knot_warden_encoding"` keeps the Rust name. Dependents keep the `knot-warden-encoding` key and add `package = "nocturne-knot-warden-encoding"`.
+- `atlas-encoding` is `nocturne-atlas-encoding` 0.4 (sibling path, `package = ...`). 0.4.0 keeps every 0.3.0 layout, so `Account` and `SetServiceArgs` bytes are unchanged; the goldens pass.
+
 ## [0.2.0]
 
 ### Changed

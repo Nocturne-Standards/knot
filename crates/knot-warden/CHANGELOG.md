@@ -24,6 +24,8 @@ Bytecode changes; not deployed. A deployment is a new contract id (see `docs/war
 ### Changed
 
 - `knot-warden-encoding` 0.2.1 (re-exports Atlas `PendingChange` as `AtlasPendingChange`; layouts unchanged).
+- Package renamed to `nocturne-knot-warden` (the `nocturne-knot-*` crates.io pattern). `[lib] name = "knot_warden"` keeps the Rust name and the WASM file name `knot_warden.wasm`. Dependents keep the `knot-warden` key and add `package = "nocturne-knot-warden"`.
+- Dev-dependency `atlas-encoding` is `nocturne-atlas-encoding` 0.4 (sibling path). The host tests run against the Atlas 0.5.0 contract.
 
 ## [0.2.1]
 

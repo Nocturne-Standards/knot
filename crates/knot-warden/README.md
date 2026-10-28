@@ -6,7 +6,9 @@ This crate is 0.3.0 (not deployed). Testnet runs 0.2.1 as the guardian of Atlas 
 
 ## Build / test
 
-Needs a sibling checkout of atlas at the 0.3 kernel (`aichbindas/atlas` next to this repo) so `knot-warden-encoding` can use `Account` and `SetServiceArgs`, and so the host tests can load `atlas.wasm`.
+Package `nocturne-knot-warden`; the Rust name and the WASM file stay `knot_warden`.
+
+Needs a sibling checkout of atlas with `atlas-encoding` 0.4 (package `nocturne-atlas-encoding`; `aichbindas/atlas` next to this repo) so `knot-warden-encoding` can use `Account` and `SetServiceArgs`, and so the host tests can load `atlas.wasm`.
 
 ```bash
 make -C crates/knot-warden test

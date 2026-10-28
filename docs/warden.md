@@ -4,7 +4,7 @@ Source is `knot-warden` 0.3.0 and `knot-warden-encoding` 0.2.1. Testnet still ru
 
 Warden is the contract an operator puts in Atlas's guardian slot when a service repoint must wait. Knot-proposals stays a generic `call_raw` executor and does not grow a delay. Atlas stays a registry: it does not call warden, and it does not delay `set_service`.
 
-Built against `atlas-encoding` 0.3.0, the call types Atlas 0.4.1 serves: method names `resolve`, `set_service`, `set_guardian`, `set_timelock`, `cancel_pending`, and the `atlas-encoding` types `Account` and `SetServiceArgs`. A later Atlas bytecode is a new `ContractId` and a new warden deployment.
+Built against `atlas-encoding` 0.4.0 (package `nocturne-atlas-encoding`). Its call types are those of 0.3.0, which Atlas 0.4.1 serves; 0.4.0 only adds the `GuardianAccepted` event. The host tests run against the Atlas 0.5.0 contract. The calls used: method names `resolve`, `set_service`, `set_guardian`, `set_timelock`, `cancel_pending`, and the `atlas-encoding` types `Account` and `SetServiceArgs`. A later Atlas bytecode is a new `ContractId` and a new warden deployment.
 
 ## Job
 
@@ -37,12 +37,12 @@ Atlas's delay is what a hostile warden cannot delete. Warden can call `set_guard
 
 ## Crates
 
-Both under Apache-2.0, next to the existing suite. Each crate is its own Cargo workspace: they path-depend on a sibling Atlas 0.4.1 checkout (`atlas-encoding` 0.3.0), and public knot CI does not check that sibling out. `make -C crates/knot-warden test` builds the contracts and runs the suite.
+Both under Apache-2.0, next to the existing suite. Each crate is its own Cargo workspace: they path-depend on a sibling Atlas checkout (`nocturne-atlas-encoding` 0.4.0, Atlas 0.5.0 tree), and public knot CI does not check that sibling out. `make -C crates/knot-warden test` builds the contracts and runs the suite.
 
-| Crate | Role |
+| Package | Role |
 |---|---|
-| `knot-warden-encoding` | Call types and events. Depends on `atlas-encoding` for `Account` and `SetServiceArgs`. Layout goldens pin every public type. |
-| `knot-warden` | The contract. Depends on `knot-warden-encoding`. No dependency on `knot-registry` or `knot-proposals`. |
+| `nocturne-knot-warden-encoding` | Call types and events. Depends on `atlas-encoding` for `Account` and `SetServiceArgs`. Layout goldens pin every public type. |
+| `nocturne-knot-warden` | The contract. Depends on `knot-warden-encoding`. No dependency on `knot-registry` or `knot-proposals`. |
 
 The scheduler is an `Account`. A proposals contract is one possible `Account::Contract`. A lab key is `Account::External`. Warden does not link Knot.
 

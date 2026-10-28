@@ -1,7 +1,7 @@
 [workspace]
 
 [package]
-name = "knot-event-decoder"
+name = "nocturne-knot-event-decoder"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
@@ -11,11 +11,11 @@ repository = "https://github.com/Nocturne-Standards/knot"
 description = "Dispatch Knot named events by contract, topic, and version"
 
 # Own workspace: path-depends on knot-warden-encoding, which needs a sibling
-# atlas 0.3 checkout. Parent `cargo test` must not require that sibling.
+# atlas checkout (atlas-encoding 0.4). Parent `cargo test` must not require that sibling.
 
 [dependencies]
 knot-encoding = { path = "../knot-encoding", features = ["data-driver"] }
-knot-warden-encoding = { path = "../knot-warden-encoding", features = ["data-driver"] }
+knot-warden-encoding = { package = "nocturne-knot-warden-encoding", path = "../knot-warden-encoding", features = ["data-driver"] }
 rkyv = { version = "=0.7.46", default-features = false, features = ["size_32", "alloc", "validation"] }
 serde_json = "1"
 
@@ -26,3 +26,7 @@ rand = { version = "0.8.6", default-features = false }
 rkyv = { version = "=0.7.46", default-features = false, features = ["size_32", "alloc"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[lib]
+# Package is nocturne-knot-event-decoder; the Rust name keeps the short name.
+name = "knot_event_decoder"
