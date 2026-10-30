@@ -35,18 +35,6 @@ impl Contract {
     }
 }
 
-#[cfg(feature = "deployments-crate")]
-fn deployments() -> Result<nocturne_deployments::DeploymentsFile> {
-    let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    nocturne_deployments::load_from(&start).with_context(|| {
-        format!(
-            "could not load deployments/testnet.json from {} \
-             (set NOCTURNE_DEPLOYMENTS or place deployments/testnet.json)",
-            start.display()
-        )
-    })
-}
-
 #[cfg(not(feature = "deployments-crate"))]
 fn deployments() -> Result<crate::deployments::DeploymentsFile> {
     let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -81,6 +69,32 @@ pub fn contract_self_id_bytes(which: Contract) -> Result<[u8; 32]> {
         .map_err(|_| anyhow::anyhow!("contract id must be 32 bytes"))
 }
 
+/// pins-v2 lookup of `knot/<name>/testnet`, tier `own` then `public`.
+#[cfg(feature = "deployments-crate")]
+pub fn contract_id_hex(which: Contract) -> Result<String> {
+    use nocturne_deployments::v2::{Catalog, FullName, Reader};
+
+    let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let catalog = Catalog::discover(&start).with_context(|| {
+        format!(
+            "could not find a pins-v2 checkout from {} \
+             (set NOCTURNE_PINS or place nocturne-deployments next to this checkout)",
+            start.display()
+        )
+    })?;
+    let name = FullName {
+        product: "knot".to_string(),
+        name: which.json_key().to_string(),
+        network: "testnet".to_string(),
+        tier: None,
+    };
+    let found = catalog
+        .find(&name, Reader::Own)
+        .with_context(|| format!("no {name} in the pins-v2 catalog"))?;
+    Ok(found.contract.id)
+}
+
+#[cfg(not(feature = "deployments-crate"))]
 pub fn contract_id_hex(which: Contract) -> Result<String> {
     let file = deployments()?;
     let key = which.json_key();
