@@ -2389,8 +2389,8 @@ dependencies = [
 
 [[package]]
 name = "nocturne-deployments"
-version = "0.1.0"
-source = "git+https://github.com/Nocturne-Standards/nocturne-deployments?rev=5811377f39f152f51878eee87985062acfdad0b8#5811377f39f152f51878eee87985062acfdad0b8"
+version = "0.2.0"
+source = "git+https://github.com/Nocturne-Standards/nocturne-deployments?tag=nocturne-deployments-v0.2.0#ad3c2d47d7904c9c6bf3dcb24825941b8be131a7"
 dependencies = [
  "serde",
  "serde_json",
