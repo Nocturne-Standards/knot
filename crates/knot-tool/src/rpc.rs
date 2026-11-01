@@ -2187,7 +2187,7 @@ async fn loopback_quorum_message(state: &AppState, account_id: u64) -> ApiResult
     let self_id =
         chain::contract_self_id_bytes(chain::Contract::Registry).map_err(RpcError::internal)?;
     let msg = crate::loopback::canonical_quorum_message(
-        chain::digest_chain_id(),
+        bls::digest_chain_id(),
         &self_id,
         account_id,
         view.nonce,

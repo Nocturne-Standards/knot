@@ -1,0 +1,6 @@
+{
+  "kind": "rust-crate",
+  "path": "crates/knot-tool/Cargo.toml",
+  "policy": "next-release",
+  "exceptions": []
+}
