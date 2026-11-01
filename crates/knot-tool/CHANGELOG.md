@@ -15,6 +15,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Fixed
 
+- `deployments-crate` feature: the `nocturne-deployments` git dependency moves
+  off rev `5811377` (gone from the public repo) to tag
+  `nocturne-deployments-v0.2.0`, and reads the pins-v2 `Catalog`
+  (`knot/<name>/testnet`, tier `own` then `public`; `NOCTURNE_PINS` or walk-up)
+  instead of the v1 `load_from`.
 - Default build loads both pin shapes: the flat `testnet.json` and the
   enveloped `duskds/testnet.json` (`nocturne.pins.v1`, `contracts`,
   `aliases`). `NOCTURNE_DEPLOYMENTS` may name either file or the pins dir
