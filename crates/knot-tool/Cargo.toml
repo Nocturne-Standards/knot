@@ -48,7 +48,11 @@ subtle = "2"
 libc = "0.2"
 argon2 = "0.5"
 directories = "5"
-nocturne-deployments = { git = "https://github.com/Nocturne-Standards/nocturne-deployments", tag = "nocturne-deployments-v0.2.0", package = "nocturne-deployments", optional = true }
+# Dusk network data (node URL, chain id) and the pins-v2 `Catalog`. Both from
+# Nocturne-Standards/nocturne-deployments at one commit. The rev moves to tag
+# `nocturne-deployments-v0.3.0` once that tag is cut.
+dusk-networks = { git = "https://github.com/Nocturne-Standards/nocturne-deployments", rev = "28649e2ee26990eddc96764784b2e553f41c5cb9", package = "dusk-networks" }
+nocturne-deployments = { git = "https://github.com/Nocturne-Standards/nocturne-deployments", rev = "28649e2ee26990eddc96764784b2e553f41c5cb9", package = "nocturne-deployments" }
 
 [dev-dependencies]
 dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
@@ -64,7 +68,6 @@ tempfile = "3"
 [features]
 default = []
 data-driver = []
-# Opt into the public nocturne-deployments crate: pins-v2 `Catalog`
-# (NOCTURNE_PINS / walk-up to a nocturne-deployments checkout). Default build
-# reads pin JSON via NOCTURNE_DEPLOYMENTS / walk-up (see src/deployments.rs).
-deployments-crate = ["dep:nocturne-deployments"]
+# No-op, kept so existing `--features deployments-crate` commands still build.
+# The pins-v2 `Catalog` is the only pin reader now (see src/chain.rs).
+deployments-crate = []

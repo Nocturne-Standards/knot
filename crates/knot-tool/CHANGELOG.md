@@ -27,6 +27,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
 
 ### Changed
 
+- Testnet node URL and digest chain id come from the `dusk-networks` crate
+  (Dusk's published network data) instead of constants here. `KNOT_CHAIN_ID`
+  still overrides the chain id.
+- Contract pins: the pins-v2 `Catalog` of `nocturne-deployments` is the only
+  reader, in every build. The in-tree reader of the flat `testnet.json` /
+  `duskds/testnet.json` files is gone. `NOCTURNE_PINS` is read first;
+  `NOCTURNE_DEPLOYMENTS` still works when it names a pins checkout or a file
+  inside one. The `deployments-crate` feature is now a no-op.
+- `nocturne-deployments` and `dusk-networks` are pinned to rev `28649e2`
+  until tag `nocturne-deployments-v0.3.0` is cut.
 - Registry diagnostics (`diagnose_quorum`, `account_meta`, `member_key_bytes`) moved
   off-chain: `knot-tool` derives them from `account()` + local BLS verify. On-chain
   ABI keeps only `next_account_id` among scalar probes.
