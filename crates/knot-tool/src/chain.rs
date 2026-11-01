@@ -4,11 +4,12 @@
 //! - **Reads**: direct RUES HTTP with raw rkyv bodies
 //!   (`Content-Type: application/octet-stream`).
 //!
-//! Supports `knot-registry` and `knot-proposals` ids from a local
-//! `deployments/testnet.json` pin file (see `NOCTURNE_DEPLOYMENTS`).
-//! `--network testnet` is hard-coded.
+//! Supports `knot-registry` and `knot-proposals` ids from the pins-v2
+//! `Catalog` (`knot/<name>/testnet`; see [`pins_catalog`]). Node URL from
+//! `dusk-networks`. `--network testnet` is hard-coded.
 
-use std::path::PathBuf;
+use std::env;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
@@ -16,7 +17,11 @@ use bytecheck::CheckBytes;
 use rkyv::validation::validators::DefaultValidator;
 use rkyv::{Archive, Deserialize, Infallible, Serialize};
 
-const TESTNET_RUES_BASE: &str = "https://testnet.nodes.dusk.network";
+use knot_tool::network::testnet_node_url;
+use nocturne_deployments::v2::{Catalog, ENV_INDEXES, FullName, Reader, is_v2_root};
+
+/// Older override: a pins checkout (or a file inside one). `NOCTURNE_PINS` wins.
+const ENV_DEPLOYMENTS: &str = "NOCTURNE_DEPLOYMENTS";
 /// Accepted by current testnet (1.7.x); mirrors `agent-pay-lp`.
 const RUSK_VERSION: &str = "1.0.0";
 
@@ -35,30 +40,6 @@ impl Contract {
     }
 }
 
-#[cfg(not(feature = "deployments-crate"))]
-fn deployments() -> Result<crate::deployments::DeploymentsFile> {
-    let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    crate::deployments::load_from(&start).with_context(|| {
-        format!(
-            "could not load deployments/testnet.json from {} \
-             (set NOCTURNE_DEPLOYMENTS or place deployments/testnet.json)",
-            start.display()
-        )
-    })
-}
-
-/// Chain id for v3 digests on testnet (`init_chain_id=2` in deploy-history).
-#[allow(dead_code)]
-pub const DIGEST_CHAIN_ID: u64 = 2;
-
-#[allow(dead_code)]
-pub fn digest_chain_id() -> u64 {
-    std::env::var("KNOT_CHAIN_ID")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DIGEST_CHAIN_ID)
-}
-
 pub fn contract_self_id_bytes(which: Contract) -> Result<[u8; 32]> {
     let hex = contract_id_hex(which)?;
     let bytes = hex::decode(hex.trim_start_matches("0x"))
@@ -69,19 +50,48 @@ pub fn contract_self_id_bytes(which: Contract) -> Result<[u8; 32]> {
         .map_err(|_| anyhow::anyhow!("contract id must be 32 bytes"))
 }
 
-/// pins-v2 lookup of `knot/<name>/testnet`, tier `own` then `public`.
-#[cfg(feature = "deployments-crate")]
-pub fn contract_id_hex(which: Contract) -> Result<String> {
-    use nocturne_deployments::v2::{Catalog, FullName, Reader};
-
+/// The pins checkouts to read, in this order:
+///
+/// 1. `NOCTURNE_PINS`: path-separator list of pins-v2 checkouts.
+/// 2. `NOCTURNE_DEPLOYMENTS`: one checkout, or any file or directory inside it
+///    (the old `testnet.json` / `duskds/testnet.json` paths still work).
+/// 3. Walk up from this crate to `nocturne-deployments-internal` /
+///    `nocturne-deployments` (private shadows public).
+pub fn pins_catalog() -> Result<Catalog> {
+    if env::var_os(ENV_INDEXES).is_none()
+        && let Some(raw) = env::var_os(ENV_DEPLOYMENTS)
+    {
+        let given = PathBuf::from(raw);
+        let root = v2_root_of(&given).with_context(|| {
+            format!(
+                "{ENV_DEPLOYMENTS}={} is not inside a pins-v2 checkout (no index.json \
+                 with schema nocturne.index.v1); set {ENV_INDEXES} instead",
+                given.display()
+            )
+        })?;
+        return Catalog::open(&[&root])
+            .with_context(|| format!("opening pins checkout {}", root.display()));
+    }
     let start = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let catalog = Catalog::discover(&start).with_context(|| {
+    Catalog::discover(&start).with_context(|| {
         format!(
             "could not find a pins-v2 checkout from {} \
-             (set NOCTURNE_PINS or place nocturne-deployments next to this checkout)",
+             (set {ENV_INDEXES} or place nocturne-deployments next to this checkout)",
             start.display()
         )
-    })?;
+    })
+}
+
+/// The pins-v2 checkout holding `path` (itself or its nearest ancestor).
+fn v2_root_of(path: &Path) -> Option<PathBuf> {
+    path.ancestors()
+        .find(|d| is_v2_root(d))
+        .map(Path::to_path_buf)
+}
+
+/// pins-v2 lookup of `knot/<name>/testnet`, tier `own` then `public`.
+pub fn contract_id_hex(which: Contract) -> Result<String> {
+    let catalog = pins_catalog()?;
     let name = FullName {
         product: "knot".to_string(),
         name: which.json_key().to_string(),
@@ -92,18 +102,6 @@ pub fn contract_id_hex(which: Contract) -> Result<String> {
         .find(&name, Reader::Own)
         .with_context(|| format!("no {name} in the pins-v2 catalog"))?;
     Ok(found.contract.id)
-}
-
-#[cfg(not(feature = "deployments-crate"))]
-pub fn contract_id_hex(which: Contract) -> Result<String> {
-    let file = deployments()?;
-    let key = which.json_key();
-    file.contract_id(key).map(str::to_string).with_context(|| {
-        format!(
-            "no {key}.current.contract_id in {} — deploy the contract and update the pin file",
-            file.path().display()
-        )
-    })
 }
 
 pub fn encode<A>(args: &A) -> Result<Vec<u8>>
@@ -139,7 +137,7 @@ where
     R::Archived: Deserialize<R, Infallible> + for<'b> CheckBytes<DefaultValidator<'b>>,
 {
     let id = contract_id_hex.trim_start_matches("0x");
-    let url = format!("{TESTNET_RUES_BASE}/on/contracts:{id}/{fn_name}");
+    let url = format!("{}/on/contracts:{id}/{fn_name}", testnet_node_url());
     let client = reqwest::Client::new();
     let resp = client
         .post(&url)
@@ -170,7 +168,7 @@ where
 }
 
 pub async fn chain_height() -> Result<u64> {
-    let url = format!("{TESTNET_RUES_BASE}/on/graphql/query");
+    let url = format!("{}/on/graphql/query", testnet_node_url());
     let client = reqwest::Client::new();
     let resp = client
         .post(&url)
@@ -388,6 +386,27 @@ pub fn submit_call(fn_name: &str, args_bytes: &[u8]) -> Result<WriteResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deployments_path_maps_to_its_pins_checkout() {
+        let root = tempfile::tempdir().unwrap();
+        let pins = root.path().join("nocturne-deployments");
+        std::fs::create_dir_all(pins.join("duskds")).unwrap();
+        std::fs::write(
+            pins.join("index.json"),
+            r#"{"schema":"nocturne.index.v1","repo":"o/p","visibility":"public","entries":[]}"#,
+        )
+        .unwrap();
+        let old_file = pins.join("duskds").join("testnet.json");
+        std::fs::write(&old_file, "{}").unwrap();
+        assert_eq!(v2_root_of(&pins).as_deref(), Some(pins.as_path()));
+        assert_eq!(v2_root_of(&old_file).as_deref(), Some(pins.as_path()));
+        assert_eq!(
+            v2_root_of(&pins.join("index.json")).as_deref(),
+            Some(pins.as_path())
+        );
+        assert_eq!(v2_root_of(root.path()), None);
+    }
 
     #[test]
     fn normalize_strips_cr_progress_and_ansi() {

@@ -1238,6 +1238,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dusk-networks"
+version = "0.1.0"
+source = "git+https://github.com/Nocturne-Standards/nocturne-deployments?rev=28649e2ee26990eddc96764784b2e553f41c5cb9#28649e2ee26990eddc96764784b2e553f41c5cb9"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "dusk-plonk"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2183,6 +2193,7 @@ dependencies = [
  "dusk-bls12_381",
  "dusk-bytes",
  "dusk-core",
+ "dusk-networks",
  "dusk-vm",
  "hex",
  "knot-encoding",
@@ -2389,9 +2400,10 @@ dependencies = [
 
 [[package]]
 name = "nocturne-deployments"
-version = "0.2.0"
-source = "git+https://github.com/Nocturne-Standards/nocturne-deployments?tag=nocturne-deployments-v0.2.0#ad3c2d47d7904c9c6bf3dcb24825941b8be131a7"
+version = "0.3.0"
+source = "git+https://github.com/Nocturne-Standards/nocturne-deployments?rev=28649e2ee26990eddc96764784b2e553f41c5cb9#28649e2ee26990eddc96764784b2e553f41c5cb9"
 dependencies = [
+ "dusk-networks",
  "serde",
  "serde_json",
  "thiserror 2.0.19",

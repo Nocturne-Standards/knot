@@ -63,15 +63,17 @@ resolve). Knot knot-tool covers registry, proposals, and generic Lab only.
 
 ## Contract pins (testnet)
 
-Default build reads `deployments/testnet.json` via an in-tree loader
-(`NOCTURNE_DEPLOYMENTS` or walk-up / sibling discovery). A fresh clone
-**compiles** without pins; chain calls that need live contract IDs need a pin
-file — clone
-[`Nocturne-Standards/nocturne-deployments`](https://github.com/Nocturne-Standards/nocturne-deployments)
-next to this repo, or point `NOCTURNE_DEPLOYMENTS` at `testnet.json`.
+Contract IDs come from the pins-v2 `Catalog` of the
+[`nocturne-deployments`](https://github.com/Nocturne-Standards/nocturne-deployments)
+crate: `knot/<name>/testnet`, tier `own` then `public`. Checkouts are found by
+`NOCTURNE_PINS` (path list), else `NOCTURNE_DEPLOYMENTS` (a checkout or any
+file inside it), else walking up to a `nocturne-deployments-internal` /
+`nocturne-deployments` sibling. A fresh clone **compiles** without pins; chain
+calls that need live contract IDs need a checkout.
 
-Optional: `--features deployments-crate` uses the public `nocturne-deployments`
-crate instead of the local loader.
+The testnet node URL and chain id come from the `dusk-networks` crate (Dusk's
+published network data). `KNOT_CHAIN_ID` still overrides the digest chain id.
+The `deployments-crate` feature is a no-op kept for old build commands.
 ## Scope
 
 This tool owns both ends of the wire — the contract's own source

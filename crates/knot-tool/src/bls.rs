@@ -21,13 +21,13 @@ use dusk_core::signatures::bls::{
 use knot_encoding::call_types::ProposalView;
 use knot_encoding::{ProposalIntentV3, party_signup_preimage, recompute_and_verify_v3};
 
-pub const DIGEST_CHAIN_ID: u64 = 2;
-
+/// Chain id v3 digests bind to: Dusk testnet's (from `dusk-networks`), or
+/// `KNOT_CHAIN_ID` when set.
 pub fn digest_chain_id() -> u64 {
     std::env::var("KNOT_CHAIN_ID")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(DIGEST_CHAIN_ID)
+        .unwrap_or_else(crate::network::testnet_chain_id)
 }
 
 pub fn sign(sk: &BlsSecretKey, msg: &[u8]) -> BlsSignature {
