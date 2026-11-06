@@ -364,7 +364,7 @@ pub fn print_canonical_intent(blob: &ProposalBlob) -> Result<[u8; 32]> {
     println!("=== out-of-band fingerprint (compare with co-signers) ===");
     println!("  hex: {}", knot_encoding::digest_hex(&digest));
     println!(
-        "  mnemonic (24 BIP39 words): {}",
+        "  fingerprint words (24, digest only, not a seed): {}",
         knot_encoding::digest_mnemonic(&digest)
     );
     println!(

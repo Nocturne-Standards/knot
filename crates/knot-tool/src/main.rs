@@ -424,7 +424,7 @@ enum BlobCmd {
         #[arg(long)]
         account: u64,
     },
-    /// Print out-of-band full-digest fingerprint (hex + 24-word mnemonic).
+    /// Print out-of-band full-digest fingerprint (hex + 24 fingerprint words).
     Fingerprint { file: PathBuf },
     /// POST a local blob file to the collector; prints the content-addressed id.
     Push {
@@ -612,7 +612,7 @@ fn print_signing_fingerprint(msg: &[u8]) {
     println!("  msg_hex: 0x{}", hex::encode(msg));
     println!("=== out-of-band fingerprint (compare with co-signers) ===");
     println!("  hex: {digest_hex}");
-    println!("  mnemonic (24 BIP39 words): {mnemonic}");
+    println!("  fingerprint words (24, digest only, not a seed): {mnemonic}");
     println!("  safety-number: {safety}");
 }
 
@@ -1278,7 +1278,7 @@ async fn main() -> Result<()> {
                 println!("=== out-of-band fingerprint (compare with co-signers) ===");
                 println!("  hex: {}", knot_encoding::digest_hex(&digest));
                 println!(
-                    "  mnemonic (24 BIP39 words): {}",
+                    "  fingerprint words (24, digest only, not a seed): {}",
                     knot_encoding::digest_mnemonic(&digest)
                 );
                 println!(

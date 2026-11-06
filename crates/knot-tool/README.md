@@ -177,7 +177,7 @@ developers can exercise multisig flows; do not treat it as a hardened wallet.
 - **Signing preview/confirm (2026-07-24)** — proposal approve, blob sign,
   quorum submit, quorum-agg submit, and change-account submit print the
   fingerprint first; CLI requires `--confirm`; HTTP sign endpoints require
-  `"confirm": true` (400 otherwise). UI: Preview → show mnemonic → confirm →
+  `"confirm": true` (400 otherwise). UI: Preview → show fingerprint words → confirm →
   Submit. Prefer one signer identity per `serve` process (soft note when
   multiple local signers are requested). Quorum “type any message” lab panels
   remain an **unsafe demo** (arbitrary UTF-8, not a canonical intent) — use
@@ -212,7 +212,7 @@ developers can exercise multisig flows; do not treat it as a hardened wallet.
   `cargo test --test blob_aggregate_local` (builds against registry WASM;
   PreFork insecure sigs). QR deferred. Collector holds no secret keys.
 - **M3 fingerprint (2026-07-23)** — `blob show` / `blob fingerprint` /
-  `proposal approve` print full-digest hex + 24-word BIP39 mnemonic + safety
+  `proposal approve` print full-digest hex + 24 fingerprint words (BIP39 list) + safety
   number for out-of-band compare. Hardware keys: research note only (below).
 - **M1 intent display (2026-07-23)** — structured `proposal create`
   (target / function / args / deadline), approve recomputes the proposal digest and
@@ -254,11 +254,11 @@ compare the printed **full** digest fingerprint on a second channel (call,
 Signal, in person) — not via the same machine that handed them the blob:
 
 - `hex` — full `0x` + 64 hex chars
-- `mnemonic` — 24 BIP39 English words over the full 32-byte digest
+- fingerprint words (`digest_mnemonic` in JSON) — 24 BIP39 English words over the full 32-byte digest; a digest encoding, not a wallet seed
 - `safety-number` — grouped decimal of all 256 bits
 
 Never trust a short truncation alone (salt-grinding trap). Compromised
-coordinator cannot forge a matching mnemonic for a different intent.
+coordinator cannot forge matching fingerprint words for a different intent.
 
 ### Hardware keys (research only — no implementation in this plan)
 
