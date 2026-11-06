@@ -316,6 +316,7 @@ knot-tool init --name alice   # creates the store if missing, else unlock-check 
 knot-tool identity new alice
 knot-tool identity list
 knot-tool identity export alice
+knot-tool change-password      # re-encrypt the store; new password is always prompted twice (never env); .bak rewritten too
 # On another machine / store: import a foreign member PK (cannot sign):
 # knot-tool identity import-pk bob <base58-or-hex-pk>
 

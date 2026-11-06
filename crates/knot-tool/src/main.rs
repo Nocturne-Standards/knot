@@ -62,6 +62,10 @@ enum Cmd {
         #[arg(long)]
         name: Option<String>,
     },
+    /// Re-encrypt the identity store under a new password. Asks for the
+    /// current password (or `KNOT_PWD` with `KNOT_ALLOW_ENV_PWD=1`), then
+    /// always prompts twice for the new one; the new one is never read from env.
+    ChangePassword,
     /// Manage local BLS "member" identities.
     Identity {
         #[command(subcommand)]
@@ -566,6 +570,19 @@ fn prompt_new_password() -> Result<String> {
     }
 }
 
+/// Interactive only: a replacement password is never taken from the environment,
+/// so a scripted `KNOT_PWD` cannot silently become the new password.
+fn prompt_replacement_password() -> Result<String> {
+    let pwd1 = rpassword::prompt_password("New identity store password: ")
+        .context("reading new password")?;
+    let pwd2 =
+        rpassword::prompt_password("Confirm new password: ").context("reading confirmation")?;
+    if pwd1 != pwd2 {
+        bail!("passwords did not match");
+    }
+    Ok(pwd1)
+}
+
 fn parse_digest32(text: &str) -> Result<[u8; 32]> {
     let raw = hex::decode(text.trim().trim_start_matches("0x")).context("digest is not hex")?;
     if raw.len() != 32 {
@@ -720,6 +737,19 @@ async fn main() -> Result<()> {
                 println!("created identity store at {}", store_path.display());
                 print_identity_summary(&identities);
             }
+        }
+
+        Cmd::ChangePassword => {
+            if !store_path.exists() {
+                bail!("no identity store at {}", store_path.display());
+            }
+            let old_password = zeroize::Zeroizing::new(prompt_password()?);
+            let new_password = zeroize::Zeroizing::new(prompt_replacement_password()?);
+            let count = keystore::change_password(&store_path, &old_password, &new_password)?;
+            println!(
+                "re-encrypted {} ({count} identities) under the new password; the .bak copy was rewritten too",
+                store_path.display()
+            );
         }
 
         Cmd::Identity { cmd } => match cmd {

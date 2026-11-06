@@ -568,6 +568,25 @@ pub fn save(path: &Path, password: &str, identities: &[Identity]) -> Result<()> 
     Ok(())
 }
 
+/// Re-encrypts the store at `path` under `new_password` (fresh salt and nonce).
+/// The `.bak` copy is rewritten from the new primary afterwards, so no copy
+/// under the old password stays next to the store. Returns the identity count.
+pub fn change_password(path: &Path, old_password: &str, new_password: &str) -> Result<usize> {
+    if !path.exists() {
+        bail!("no identity store at {}", path.display());
+    }
+    if new_password.is_empty() {
+        bail!("the new password is empty");
+    }
+    if old_password == new_password {
+        bail!("the new password is the same as the current one");
+    }
+    let identities = load(path, old_password)?;
+    save(path, new_password, &identities)?;
+    copy_backup(path)?;
+    Ok(identities.len())
+}
+
 pub fn generate(name: &str) -> Identity {
     let sk = BlsSecretKey::random(&mut OsRng);
     let pk = BlsPublicKey::from(&sk);
@@ -807,5 +826,60 @@ mod tests {
         } else {
             unsafe { std::env::remove_var("KNOT_STORE") };
         }
+    }
+
+    #[test]
+    fn change_password_reencrypts_store_and_backup() {
+        let dir = test_dir("chpw");
+        let path = dir.join("identities.dat");
+        let alice = generate("alice");
+        let alice_pk = alice.pk.to_bytes();
+        save(&path, "old-pw", &[alice, generate("bob")]).expect("save");
+        save(&path, "old-pw", &load(&path, "old-pw").unwrap()).expect("second save makes a .bak");
+
+        let count = change_password(&path, "old-pw", "new-pw").expect("change");
+        assert_eq!(count, 2);
+
+        let loaded = load(&path, "new-pw").expect("new password opens the store");
+        assert_eq!(loaded[0].name, "alice");
+        assert_eq!(
+            loaded[0].pk.to_bytes(),
+            alice_pk,
+            "keys survive the re-encrypt"
+        );
+        assert!(!loaded[0].is_pk_only());
+        assert!(
+            load(&path, "old-pw").is_err(),
+            "old password must no longer open the store"
+        );
+
+        let bak = bak_path(&path);
+        assert!(
+            load(&bak, "new-pw").is_ok(),
+            ".bak must be under the new password"
+        );
+        assert!(
+            load(&bak, "old-pw").is_err(),
+            "no .bak copy under the old password"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn change_password_refuses_wrong_old_same_or_empty_new() {
+        let dir = test_dir("chpwrefuse");
+        let path = dir.join("identities.dat");
+        save(&path, "pw", &[generate("a")]).expect("save");
+        let before = fs::read(&path).unwrap();
+        assert!(change_password(&path, "wrong", "new").is_err());
+        assert!(change_password(&path, "pw", "pw").is_err());
+        assert!(change_password(&path, "pw", "").is_err());
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            before,
+            "a refused change leaves the store as it was"
+        );
+        assert!(change_password(&dir.join("missing.dat"), "pw", "new").is_err());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
