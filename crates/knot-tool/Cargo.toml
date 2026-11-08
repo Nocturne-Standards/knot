@@ -47,7 +47,7 @@ zeroize = "1"
 subtle = "2"
 libc = "0.2"
 argon2 = "0.5"
-directories = "5"
+directories = "6"
 # Dusk network data (node URL, chain id) and the pins-v2 `Catalog`. Both from
 # Nocturne-Standards/nocturne-deployments at one commit. The rev moves to tag
 # `nocturne-deployments-v0.3.0` once that tag is cut.
