@@ -11,8 +11,6 @@
 extern crate alloc;
 
 mod chain;
-#[cfg(not(feature = "deployments-crate"))]
-mod deployments;
 mod keystore;
 mod loopback;
 mod proposals_types;
@@ -1741,7 +1739,7 @@ async fn evm_round_from_chain(account: u64, context: evm::EvmContext) -> Result<
         other => other,
     };
     evm::EvmSigFile::new(
-        chain::digest_chain_id(),
+        bls::digest_chain_id(),
         chain::contract_self_id_bytes(chain::Contract::Registry)?,
         account,
         member_bytes(&view),

@@ -11,9 +11,9 @@ members = [
     "crates/knot-collector",
 ]
 
-# Contract pins: knot-tool default build reads deployments/testnet.json via a
-# local loader (NOCTURNE_DEPLOYMENTS / walk-up). Optional feature
-# `deployments-crate` uses the public Nocturne-Standards/nocturne-deployments crate.
+# Contract pins: knot-tool reads the pins-v2 `Catalog` of the public
+# Nocturne-Standards/nocturne-deployments crate (NOCTURNE_PINS / walk-up).
+# Dusk node URL and chain id come from its `dusk-networks` crate.
 
 # knot-warden and knot-warden-encoding (packages nocturne-knot-warden,
 # nocturne-knot-warden-encoding) are separate workspaces (each Cargo.toml
