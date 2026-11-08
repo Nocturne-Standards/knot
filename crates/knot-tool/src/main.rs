@@ -476,9 +476,10 @@ enum EvmCmd {
         /// `KnotEvmRoot` address (20-byte hex).
         #[arg(long)]
         root: String,
-        /// DuskEVM chain id (`block.chainid`; 745 on testnet).
+        /// DuskEVM chain id (`block.chainid`). Defaults to testnet's, from the
+        /// network data.
         #[arg(long)]
-        evm_chain: u64,
+        evm_chain: Option<u64>,
         /// `KnotEvmRoot.rotationNonce(account)` right now.
         #[arg(long)]
         rotation_nonce: u64,
@@ -1888,6 +1889,10 @@ async fn run_evm(cmd: EvmCmd, store_path: &std::path::Path) -> Result<()> {
             let root = evm::parse_hex_array::<20>(&root, "--root")?;
             let consumer = evm::parse_hex_array::<20>(&consumer, "--consumer")?;
             let digest = parse_digest32(&digest)?;
+            let evm_chain = match evm_chain {
+                Some(id) => id,
+                None => knot_tool::network::testnet_evm_chain_id().map_err(anyhow::Error::msg)?,
+            };
             let fresh = evm_round_from_chain(
                 account,
                 evm::EvmContext::Action {
