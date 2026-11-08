@@ -360,6 +360,9 @@ pub fn print_canonical_intent(blob: &ProposalBlob) -> Result<[u8; 32]> {
     println!("  function: {}", i.function_name);
     println!("  call_args: 0x{}", hex::encode(&i.call_args));
     println!("  deadline: {}", i.deadline);
+    for note in crate::network::intent_notes(&i.target_contract_id, &i.call_args) {
+        println!("  note: {note}");
+    }
     println!("  digest: 0x{}", hex::encode(digest));
     println!("=== out-of-band fingerprint (compare with co-signers) ===");
     println!("  hex: {}", knot_encoding::digest_hex(&digest));

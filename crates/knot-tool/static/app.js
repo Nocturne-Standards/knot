@@ -1179,6 +1179,17 @@ async function confirmIntent() {
   try {
     // Still hit preview so approve has a confirmed digest under the hood.
     const out = await api(`/api/proposal/${id}/preview`);
+    const notes = Array.isArray(out.notes) ? out.notes : [];
+    // Notes inform; the chain decides. A blocklist hit still needs a clear yes.
+    if (notes.some((n) => n.startsWith("WARNING"))) {
+      const ok = confirm(`${notes.join("\n")}\n\nConfirm this intent anyway?`);
+      if (!ok) {
+        showToast("Intent not confirmed");
+        return;
+      }
+    } else if (notes.length) {
+      showToast(notes.join(" · "));
+    }
     const html =
       `mnemonic: ${escapeHtml(out.digest_mnemonic)} · ` +
       `digest: ${escapeHtml(String(out.digest_hex).slice(0, 16))}…`;

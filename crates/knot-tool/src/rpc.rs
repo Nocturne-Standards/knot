@@ -730,6 +730,7 @@ fn mock_proposal_preview(p: &MockProposal) -> ApiResult<SignPreviewOut> {
         function_name: intent.function_name,
         call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
         deadline: intent.deadline,
+        notes: knot_tool::network::intent_notes(&intent.target_contract_id, &intent.call_args),
     })
 }
 
@@ -1735,6 +1736,8 @@ struct SignPreviewOut {
     function_name: String,
     call_args_hex: String,
     deadline: u64,
+    /// Target label and blocklist hits from the network data; see `network::intent_notes`.
+    notes: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -1757,6 +1760,7 @@ struct IntentDisplay {
     digest_hex: String,
     digest_mnemonic: String,
     digest_safety_number: String,
+    notes: Vec<String>,
 }
 
 fn proposal_preview_from_view(
@@ -1785,6 +1789,7 @@ fn proposal_preview_from_view(
         function_name: intent.function_name,
         call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
         deadline: intent.deadline,
+        notes: knot_tool::network::intent_notes(&intent.target_contract_id, &intent.call_args),
     })
 }
 
@@ -1838,6 +1843,7 @@ async fn api_blob_preview(
         function_name: i.function_name.clone(),
         call_args_hex: format!("0x{}", hex::encode(&i.call_args)),
         deadline: i.deadline,
+        notes: knot_tool::network::intent_notes(&i.target_contract_id, &i.call_args),
     }))
 }
 
@@ -1887,6 +1893,7 @@ async fn api_proposal_approve(
             function: intent.function_name.clone(),
             call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
             deadline: intent.deadline,
+            notes: knot_tool::network::intent_notes(&intent.target_contract_id, &intent.call_args),
             digest_hex: format!("0x{}", hex::encode(digest)),
             digest_mnemonic: knot_encoding::digest_mnemonic(&digest),
             digest_safety_number: knot_encoding::digest_safety_number(&digest),
@@ -1948,6 +1955,7 @@ async fn api_proposal_approve(
         function: intent.function_name.clone(),
         call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
         deadline: intent.deadline,
+        notes: knot_tool::network::intent_notes(&intent.target_contract_id, &intent.call_args),
         digest_hex: format!("0x{}", hex::encode(digest)),
         digest_mnemonic: knot_encoding::digest_mnemonic(&digest),
         digest_safety_number: knot_encoding::digest_safety_number(&digest),
