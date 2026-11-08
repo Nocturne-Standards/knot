@@ -451,6 +451,25 @@ async fn app_js() -> impl IntoResponse {
     )
 }
 
+async fn lab_text_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/javascript")],
+        include_str!("../static/lab-text.js"),
+    )
+}
+
+/// Vendored `@dusk-network/app-core` files (text, names, confusables), served
+/// from a fixed list so no path reaches the file system.
+async fn vendor_app_core(AxPath(file): AxPath<String>) -> Result<Response, StatusCode> {
+    let body: &'static str = match file.as_str() {
+        "text.js" => include_str!("../static/vendor/app-core/text.js"),
+        "names.js" => include_str!("../static/vendor/app-core/names.js"),
+        "confusables.js" => include_str!("../static/vendor/app-core/confusables.js"),
+        _ => return Err(StatusCode::NOT_FOUND),
+    };
+    Ok(([(header::CONTENT_TYPE, "application/javascript")], body).into_response())
+}
+
 async fn mock_ledger_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "application/javascript")],
@@ -711,6 +730,7 @@ fn mock_proposal_preview(p: &MockProposal) -> ApiResult<SignPreviewOut> {
         function_name: intent.function_name,
         call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
         deadline: intent.deadline,
+        notes: knot_tool::network::intent_notes(&intent.target_contract_id, &intent.call_args),
     })
 }
 
@@ -1716,6 +1736,8 @@ struct SignPreviewOut {
     function_name: String,
     call_args_hex: String,
     deadline: u64,
+    /// Target label and blocklist hits from the network data; see `network::intent_notes`.
+    notes: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -1738,6 +1760,7 @@ struct IntentDisplay {
     digest_hex: String,
     digest_mnemonic: String,
     digest_safety_number: String,
+    notes: Vec<String>,
 }
 
 fn proposal_preview_from_view(
@@ -1766,6 +1789,7 @@ fn proposal_preview_from_view(
         function_name: intent.function_name,
         call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
         deadline: intent.deadline,
+        notes: knot_tool::network::intent_notes(&intent.target_contract_id, &intent.call_args),
     })
 }
 
@@ -1819,6 +1843,7 @@ async fn api_blob_preview(
         function_name: i.function_name.clone(),
         call_args_hex: format!("0x{}", hex::encode(&i.call_args)),
         deadline: i.deadline,
+        notes: knot_tool::network::intent_notes(&i.target_contract_id, &i.call_args),
     }))
 }
 
@@ -1868,6 +1893,7 @@ async fn api_proposal_approve(
             function: intent.function_name.clone(),
             call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
             deadline: intent.deadline,
+            notes: knot_tool::network::intent_notes(&intent.target_contract_id, &intent.call_args),
             digest_hex: format!("0x{}", hex::encode(digest)),
             digest_mnemonic: knot_encoding::digest_mnemonic(&digest),
             digest_safety_number: knot_encoding::digest_safety_number(&digest),
@@ -1929,6 +1955,7 @@ async fn api_proposal_approve(
         function: intent.function_name.clone(),
         call_args_hex: format!("0x{}", hex::encode(&intent.call_args)),
         deadline: intent.deadline,
+        notes: knot_tool::network::intent_notes(&intent.target_contract_id, &intent.call_args),
         digest_hex: format!("0x{}", hex::encode(digest)),
         digest_mnemonic: knot_encoding::digest_mnemonic(&digest),
         digest_safety_number: knot_encoding::digest_safety_number(&digest),
@@ -2306,6 +2333,8 @@ fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/app.js", get(app_js))
+        .route("/lab-text.js", get(lab_text_js))
+        .route("/vendor/app-core/{file}", get(vendor_app_core))
         .route("/mock-ledger.js", get(mock_ledger_js))
         .route("/style.css", get(style_css))
         .route("/fonts.css", get(fonts_css))

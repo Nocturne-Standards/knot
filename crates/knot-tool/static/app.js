@@ -172,6 +172,16 @@ function formatSubmitHtml(out) {
   return { html: parts.join(" "), ok };
 }
 
+// Text a peer or a member typed, as a person must read it: hidden and
+// direction-changing characters show as codes. Display only; sign the original.
+// lab-text.js is a module and loads after this script starts, so fall back
+// until it is there.
+function shown(s) {
+  const kt = window.knotText;
+  if (!kt) return String(s ?? "");
+  return kt.displayText(String(s ?? ""), { isolate: true }).text;
+}
+
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -596,7 +606,7 @@ function renderSignerTile(id, { selected, deselected, active, youSelected, onCli
     ? `<span class="pill">pk-only</span>`
     : `<span class="pill signing">signing</span>`;
   row.innerHTML =
-    `<span class="id-name"><span class="id-name-text">${escapeHtml(id.name)}</span> ${kind}</span>` +
+    `<span class="id-name"><span class="id-name-text">${escapeHtml(shown(id.name))}</span> ${kind}</span>` +
     `<span class="pk" title="${escapeHtml(id.pk_base58)}">${escapeHtml(id.pk_base58.slice(0, 14))}…</span>` +
     `<button type="button" class="tiny icon-btn" data-copy="${escapeHtml(id.pk_base58)}" title="Copy public key" aria-label="Copy public key">${COPY_ICON_SVG}</button>`;
   row.addEventListener("click", (ev) => {
@@ -828,8 +838,8 @@ function refreshIntentCard() {
     return;
   }
   card.hidden = false;
-  if (purposeEl) purposeEl.textContent = p.purpose || "Intent";
-  if (descEl) descEl.textContent = p.description || "(no description)";
+  if (purposeEl) purposeEl.textContent = p.purpose ? shown(p.purpose) : "Intent";
+  if (descEl) descEl.textContent = p.description ? shown(p.description) : "(no description)";
   const confirmBtn = el("btn-intent-confirm");
   if (confirmBtn) {
     confirmBtn.disabled = false;
@@ -954,7 +964,7 @@ async function fetchCouncilOutcome(id) {
       `${outcomeChip(true)}<span class="outcome-title">Council #${escapeHtml(String(id))}</span>` +
         `<span class="outcome-meta"><strong>Threshold:</strong> ${out.threshold}-of-${memberNames.length || "?"}</span>` +
         delayLine +
-        `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(memberNames.length ? memberNames.join(", ") : "(see keys)")}</span>`,
+        `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(memberNames.length ? memberNames.map(shown).join(", ") : "(see keys)")}</span>`,
       true
     );
   } catch (e) {
@@ -981,6 +991,20 @@ async function createIdentity() {
   const input = el("new-identity-name");
   const name = input ? input.value.trim() : "";
   if (!name) return;
+  const kt = window.knotText;
+  if (kt) {
+    if (kt.nameHides(name)) {
+      alert(kt.NAME_HIDES);
+      return;
+    }
+    const others = cachedIdentities.map((i) => i.name);
+    if (others.some((o) => kt.sameName(o, name))) {
+      alert("An identity with that name already exists.");
+      return;
+    }
+    const twin = others.find((o) => kt.looksAlike(o, name));
+    if (twin && !confirm(`"${name}" looks like "${twin}". Create it anyway?`)) return;
+  }
   try {
     await api("/api/identities", { method: "POST", body: JSON.stringify({ name }) });
     if (input) input.value = "";
@@ -1044,7 +1068,7 @@ async function submitCreateAccount() {
         `${outcomeChip(true)}<span class="outcome-title">Council #${escapeHtml(String(createdId))} formed</span>` +
           `<span class="outcome-meta"><strong>Threshold:</strong> ${threshold}-of-${members.length}</span>` +
           delayMeta +
-          `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(members.join(", "))}</span>`,
+          `<span class="outcome-meta"><strong>Members:</strong> ${escapeHtml(members.map(shown).join(", "))}</span>`,
         true
       );
     } else {
@@ -1155,6 +1179,17 @@ async function confirmIntent() {
   try {
     // Still hit preview so approve has a confirmed digest under the hood.
     const out = await api(`/api/proposal/${id}/preview`);
+    const notes = Array.isArray(out.notes) ? out.notes : [];
+    // Notes inform; the chain decides. A blocklist hit still needs a clear yes.
+    if (notes.some((n) => n.startsWith("WARNING"))) {
+      const ok = confirm(`${notes.join("\n")}\n\nConfirm this intent anyway?`);
+      if (!ok) {
+        showToast("Intent not confirmed");
+        return;
+      }
+    } else if (notes.length) {
+      showToast(notes.join(" · "));
+    }
     const html =
       `mnemonic: ${escapeHtml(out.digest_mnemonic)} · ` +
       `digest: ${escapeHtml(String(out.digest_hex).slice(0, 16))}…`;
