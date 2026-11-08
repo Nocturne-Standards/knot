@@ -451,6 +451,25 @@ async fn app_js() -> impl IntoResponse {
     )
 }
 
+async fn lab_text_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/javascript")],
+        include_str!("../static/lab-text.js"),
+    )
+}
+
+/// Vendored `@dusk-network/app-core` files (text, names, confusables), served
+/// from a fixed list so no path reaches the file system.
+async fn vendor_app_core(AxPath(file): AxPath<String>) -> Result<Response, StatusCode> {
+    let body: &'static str = match file.as_str() {
+        "text.js" => include_str!("../static/vendor/app-core/text.js"),
+        "names.js" => include_str!("../static/vendor/app-core/names.js"),
+        "confusables.js" => include_str!("../static/vendor/app-core/confusables.js"),
+        _ => return Err(StatusCode::NOT_FOUND),
+    };
+    Ok(([(header::CONTENT_TYPE, "application/javascript")], body).into_response())
+}
+
 async fn mock_ledger_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "application/javascript")],
@@ -2306,6 +2325,8 @@ fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(index))
         .route("/app.js", get(app_js))
+        .route("/lab-text.js", get(lab_text_js))
+        .route("/vendor/app-core/{file}", get(vendor_app_core))
         .route("/mock-ledger.js", get(mock_ledger_js))
         .route("/style.css", get(style_css))
         .route("/fonts.css", get(fonts_css))
