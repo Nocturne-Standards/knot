@@ -1,4 +1,6 @@
-# knot-encoding
+# nocturne-knot-encoding
+
+Package `nocturne-knot-encoding`; the Rust name is `knot_encoding`.
 
 Canonical proposal signing preimage + `ProposalBlob` types for the multisig
 suite, plus shared call types behind a default-off feature. Shared by
