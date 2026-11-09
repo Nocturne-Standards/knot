@@ -57,23 +57,22 @@ leave their machine. Ops detail (htpasswd, nginx, participant checklist): bring
 your own reverse-proxy wiring — the collector HTTP API in
 `crates/knot-collector/README.md` is the contract.
 
-**PM dispute council:** use wen
-[`pm-council-tool`](https://github.com/aichbindas/wen) (product UX for council
-resolve). Knot knot-tool covers registry, proposals, and generic Lab only.
+`knot-tool` covers registry, proposals, and the generic Lab only.
 
-## Contract pins (testnet)
+## Contract ids (testnet)
 
-Contract IDs come from the pins-v2 `Catalog` of the
-[`nocturne-deployments`](https://github.com/Nocturne-Standards/nocturne-deployments)
-crate: `knot/<name>/testnet`, tier `own` then `public`. Checkouts are found by
-`NOCTURNE_PINS` (path list), else `NOCTURNE_DEPLOYMENTS` (a checkout or any
-file inside it), else walking up to a `nocturne-deployments-internal` /
-`nocturne-deployments` sibling. A fresh clone **compiles** without pins; chain
-calls that need live contract IDs need a checkout.
+This repo holds no live contract ids. Set the ids of the contracts you run
+against in the environment:
 
-The testnet node URL and chain id come from the `dusk-networks` crate (Dusk's
-published network data). `KNOT_CHAIN_ID` still overrides the digest chain id.
-The `deployments-crate` feature is a no-op kept for old build commands.
+```bash
+export KNOT_REGISTRY_ID=<64 hex chars>
+export KNOT_PROPOSALS_ID=<64 hex chars>
+```
+
+A command that needs a contract fails with a message naming the missing
+variable. The testnet node URL and chain id come from Dusk's published network
+data, vendored in `data/dusk-networks/`. `KNOT_CHAIN_ID` still overrides the
+digest chain id.
 ## Scope
 
 This tool owns both ends of the wire — the contract's own source
@@ -84,8 +83,8 @@ data-driver round-trip every other deploy/wire script in this repo uses for
 submission goes two ways:
 
 - **Writes** (`create_account`, `verify_quorum`, `verify_quorum_aggregate`,
-  `change_account`): shell out to the `rusk-wallet` CLI binary, same pattern
-  as `scripts/wire-contract.sh` — real testnet transaction, costs gas, needs
+  `change_account`): shell out to the `rusk-wallet` CLI binary, real
+  testnet transaction, costs gas, needs
   `RUSK_WALLET_PWD` set (unlock password for `rusk-wallet` gas-paying writes).
 - **Reads** (`account`, `account_meta`, `member_key_bytes`, `next_account_id`,
   …): a direct RUES HTTP call (`POST /on/contracts:<id>/<fn>`) — free, no
@@ -410,7 +409,7 @@ need `--confirm`.
 
 ```bash
 # 1. Publish the member set. Members, threshold and nonce are read from the
-#    registry in the pins. The receiver is the KnotEvmRoot address the
+#    registry named by KNOT_REGISTRY_ID. The receiver is the KnotEvmRoot address the
 #    registry was set up with (init_evm_root_receiver).
 knot-tool --store <my-store> evm bootstrap-sign --account 0 \
   --receiver 0x<KnotEvmRoot> --signer alice --file bootstrap.json            # preview

@@ -415,6 +415,12 @@ dependencies = [
 
 [[package]]
 name = "base64"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
+
+[[package]]
+name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
@@ -1176,14 +1182,16 @@ dependencies = [
 
 [[package]]
 name = "dusk-core"
-version = "1.6.0"
-source = "git+https://github.com/dusk-network/rusk?tag=dusk-core-1.6.0#ae1a38a2079c681126a96f94c17d282ea2639946"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6acfdcceb4353d4bd0fa5debb7ad848a21a2672b41533bbe3b55ff5ed90663d4"
 dependencies = [
  "ark-bn254",
  "ark-groth16",
  "ark-relations",
  "ark-serialize",
  "blake2b_simd",
+ "blake3",
  "bls12_381-bls",
  "bytecheck",
  "c-kzg",
@@ -1201,7 +1209,7 @@ dependencies = [
  "rand 0.8.7",
  "rkyv",
  "serde",
- "serde_with",
+ "serde_with 3.21.0",
  "sha2 0.10.9",
 ]
 
@@ -1272,16 +1280,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dusk-networks"
-version = "0.1.0"
-source = "git+https://github.com/Nocturne-Standards/nocturne-deployments?rev=28649e2ee26990eddc96764784b2e553f41c5cb9#28649e2ee26990eddc96764784b2e553f41c5cb9"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "dusk-plonk"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1328,8 +1326,9 @@ dependencies = [
 
 [[package]]
 name = "dusk-vm"
-version = "1.6.0"
-source = "git+https://github.com/dusk-network/rusk?tag=dusk-core-1.6.0#ae1a38a2079c681126a96f94c17d282ea2639946"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf25fe410ca68af5633d6894c78ceb5580bbe657a859dc38973e4b44b1e3be76"
 dependencies = [
  "blake2b_simd",
  "blake3",
@@ -1345,6 +1344,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "sha3",
+ "thiserror 1.0.69",
  "tracing",
  "wasmparser 0.240.0",
 ]
@@ -1754,9 +1754,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "hex-conservative"
@@ -1882,7 +1879,7 @@ version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "futures-channel",
  "futures-util",
@@ -2236,12 +2233,10 @@ dependencies = [
  "dusk-bls12_381",
  "dusk-bytes",
  "dusk-core",
- "dusk-networks",
  "dusk-vm",
  "hex",
  "knot-encoding",
  "libc",
- "nocturne-deployments",
  "pbkdf2",
  "rand 0.8.7",
  "reqwest",
@@ -2442,17 +2437,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nocturne-deployments"
-version = "0.3.0"
-source = "git+https://github.com/Nocturne-Standards/nocturne-deployments?rev=28649e2ee26990eddc96764784b2e553f41c5cb9#28649e2ee26990eddc96764784b2e553f41c5cb9"
-dependencies = [
- "dusk-networks",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2616,7 +2600,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe3f30d1ec57e8d558681e117dee574629a6c068d83b3a08d2de34373e4ea9b4"
 dependencies = [
  "aes-gcm",
- "base64",
+ "base64 0.22.1",
  "bs58 0.4.0",
  "bytecheck",
  "dusk-bls12_381",
@@ -2631,7 +2615,7 @@ dependencies = [
  "rand 0.8.7",
  "rkyv",
  "serde",
- "serde_with",
+ "serde_with 3.21.0",
  "sha2 0.10.9",
  "subtle",
  "zeroize",
@@ -2639,9 +2623,9 @@ dependencies = [
 
 [[package]]
 name = "piecrust"
-version = "0.30.0"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "768a69c4aac88337ec2c1b9ac1624d4c52bd50c6ecbdaed70b5854006d56fe01"
+checksum = "2bf078a2440121fcdefe5e9f41082d9ae532200071761b40b2528ee43aa791ff"
 dependencies = [
  "blake3",
  "bytecheck",
@@ -2662,15 +2646,17 @@ dependencies = [
 
 [[package]]
 name = "piecrust-uplink"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9df8d2d3f5deb052f61c65d01d892c4babe604cd884cdd2fcef7f6da4392b476"
+checksum = "a6d4c7523f2e97cc85728501b8f06cea19e57c18280b89ff6d2ee10c9743c7d5"
 dependencies = [
  "bytecheck",
  "dlmalloc",
  "hex",
  "rkyv",
  "serde",
+ "serde_with 2.3.3",
+ "tracing",
 ]
 
 [[package]]
@@ -3073,7 +3059,7 @@ version = "0.12.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "cookie",
  "cookie_store",
@@ -3401,11 +3387,25 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
+version = "2.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07ff71d2c147a7b57362cead5e22f772cd52f6ab31cfcd9edcd7f6aeb2a0afbe"
+dependencies = [
+ "base64 0.13.1",
+ "chrono",
+ "hex",
+ "serde",
+ "serde_json",
+ "time",
+]
+
+[[package]]
+name = "serde_with"
 version = "3.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76a5c54c7310e7b8b9577c286d7e399ddd876c3e12b3ed917a8aabc4b96e9e8c"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bs58 0.5.1",
  "chrono",
  "hex",

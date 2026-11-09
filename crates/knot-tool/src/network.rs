@@ -1,14 +1,84 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Nocturne Standards
 
-//! Dusk testnet facts (node URL, chain id) from the `dusk-networks` crate, the
-//! vendored `@dusk-network/networks` data. Dusk publishes these values, so this
-//! crate keeps no copy of them.
+//! Dusk testnet facts (node URL, chain id, labels, blocklist) from the vendored
+//! `@dusk-network/networks` data in `data/dusk-networks/` (MPL-2.0; see the
+//! README there). Dusk publishes these values; only the fields this tool reads
+//! are typed, and unknown fields are ignored so a newer file still parses.
+
+use std::collections::BTreeMap;
+use std::sync::OnceLock;
+
+use serde::Deserialize;
+
+const TESTNET_JSON: &str = include_str!("../data/dusk-networks/testnet.json");
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Network {
+    pub name: String,
+    pub chain_id: u64,
+    pub urls: Urls,
+    pub contracts: Contracts,
+    pub dusk_evm: Option<DuskEvm>,
+    pub display: Display,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Urls {
+    pub node: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Contracts {
+    pub transfer: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuskEvm {
+    pub chain_id: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Display {
+    /// Names of contracts (by hex id) and accounts (by base58 key).
+    pub labels: BTreeMap<String, String>,
+    /// Accounts the Dusk apps do not send to.
+    pub blocklist: Vec<Blocked>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Blocked {
+    /// Base58 public account.
+    pub account: String,
+    pub reason: BlockReason,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BlockReason {
+    Compromised,
+    Scam,
+    /// A reason added upstream after this tool was written.
+    #[serde(other)]
+    Other,
+}
+
+impl Network {
+    /// The display name of a contract (hex id) or account (base58 key), if Dusk names it.
+    pub fn label_for(&self, id_or_account: &str) -> Option<&str> {
+        self.display.labels.get(id_or_account).map(String::as_str)
+    }
+}
 
 /// The Dusk testnet entry. Every chain call in this tool targets testnet.
-pub fn testnet() -> &'static dusk_networks::Network {
-    // The crate embeds testnet at build time; a release without it is a broken release.
-    dusk_networks::by_name("testnet").expect("dusk-networks embeds testnet")
+pub fn testnet() -> &'static Network {
+    static TESTNET: OnceLock<Network> = OnceLock::new();
+    // The data is fixed at build time and covered by the tests, so a parse
+    // failure means a broken vendored file.
+    TESTNET
+        .get_or_init(|| serde_json::from_str(TESTNET_JSON).expect("vendored testnet.json parses"))
 }
 
 /// Testnet node base URL (RUES and GraphQL), without a trailing slash.

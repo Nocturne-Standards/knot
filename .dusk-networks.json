@@ -1,6 +1,6 @@
 {
-  "kind": "rust-crate",
-  "path": "crates/knot-tool/Cargo.toml",
+  "kind": "vendored",
+  "path": "crates/knot-tool/data/dusk-networks",
   "policy": "next-release",
   "exceptions": []
 }

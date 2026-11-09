@@ -62,13 +62,17 @@ fn set_sender(session: &mut Session, sender: Option<&BlsPublicKey>) {
 fn deploy_registry(owner_pk: &BlsPublicKey) -> Session {
     let vm = VM::ephemeral().expect("Creating ephemeral VM should work");
     let mut session = vm.genesis_session(CHAIN_ID);
+    // dusk-vm 1.7 leaves the height unset; the contracts read it on every write.
+    session
+        .set_meta(Metadata::BLOCK_HEIGHT, 0u64)
+        .expect("set block height");
 
     for (bytecode, id) in [
         (ATLAS_BYTECODE, ATLAS_ID),
         (REGISTRY_DATA_BYTECODE, REGISTRY_DATA_ID),
         (REGISTRY_BYTECODE, REGISTRY_ID),
     ] {
-        session
+        let _: (ContractId, Option<CallReceipt<()>>) = session
             .deploy(
                 bytecode,
                 ContractData::builder()
@@ -819,7 +823,7 @@ fn next_account_id_and_account_roundtrip() {
 
 fn set_block_height(session: &mut Session, height: u64) {
     session
-        .set_meta(Metadata::BLOCK_HEIGHT, Some(height))
+        .set_meta(Metadata::BLOCK_HEIGHT, height)
         .expect("setting block_height metadata should succeed");
 }
 

@@ -11,9 +11,9 @@ members = [
     "crates/knot-collector",
 ]
 
-# Contract pins: knot-tool reads the pins-v2 `Catalog` of the public
-# Nocturne-Standards/nocturne-deployments crate (NOCTURNE_PINS / walk-up).
-# Dusk node URL and chain id come from its `dusk-networks` crate.
+# Contract ids are not in this repo: knot-tool reads KNOT_REGISTRY_ID and
+# KNOT_PROPOSALS_ID from the environment. Dusk node URL and chain id come from
+# the vendored network data in crates/knot-tool/data/dusk-networks/.
 
 # knot-warden and knot-warden-encoding (packages nocturne-knot-warden,
 # nocturne-knot-warden-encoding) are separate workspaces (each Cargo.toml

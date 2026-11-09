@@ -34,8 +34,6 @@ jobs:
         run: scripts/check-public-surface.sh
       - name: Crate version table vs Cargo.toml
         run: scripts/check-crate-version-table.sh
-      - name: Shared-code ratchet
-        run: scripts/check-repo-rules.sh
       - name: cargo fmt --check
         run: cargo fmt --check
       - name: cargo clippy

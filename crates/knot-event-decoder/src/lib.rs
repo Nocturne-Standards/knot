@@ -72,6 +72,12 @@ pub fn decode(
     }
     match (contract, topic) {
         (CONTRACT_REGISTRY, "data_set") => from_archived!(DataSet, bytes),
+        // The registry emits the bare account id here, not a named struct.
+        (CONTRACT_REGISTRY, "evm_bootstrap_sent") => {
+            let account_id = rkyv::from_bytes::<u64>(bytes)
+                .map_err(|err| DecodeError::InvalidPayload(err.to_string()))?;
+            Ok(serde_json::json!({ "account_id": account_id }))
+        }
         (CONTRACT_REGISTRY, "account_created") => from_archived!(AccountCreated, bytes),
         (CONTRACT_REGISTRY, "pending_scheduled") => from_archived!(PendingScheduled, bytes),
         (CONTRACT_REGISTRY, "account_changed") => from_archived!(AccountChanged, bytes),

@@ -1,0 +1,7 @@
+# Default rules plus one path allowance.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Vendored Dusk network data: public contract and account addresses, not secrets (MPL-2.0, see crates/knot-tool/data/dusk-networks/README.md)"
+paths = ['''crates/knot-tool/data/dusk-networks/testnet\.json''']

@@ -613,36 +613,6 @@ dependencies = [
 
 [[package]]
 name = "dusk-core"
-version = "1.6.0"
-source = "git+https://github.com/dusk-network/rusk?tag=dusk-core-1.6.0#ae1a38a2079c681126a96f94c17d282ea2639946"
-dependencies = [
- "ark-bn254",
- "ark-groth16",
- "ark-relations",
- "ark-serialize",
- "blake2b_simd",
- "bls12_381-bls",
- "bytecheck",
- "dusk-bls12_381",
- "dusk-bytes",
- "dusk-jubjub",
- "dusk-plonk",
- "dusk-poseidon",
- "ff",
- "jubjub-schnorr",
- "phoenix-circuits",
- "phoenix-core",
- "piecrust-uplink 0.20.0",
- "poseidon-merkle",
- "rand",
- "rkyv",
- "serde",
- "serde_with 3.24.0",
- "sha2 0.10.9",
-]
-
-[[package]]
-name = "dusk-core"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6acfdcceb4353d4bd0fa5debb7ad848a21a2672b41533bbe3b55ff5ed90663d4"
@@ -664,7 +634,7 @@ dependencies = [
  "jubjub-schnorr",
  "phoenix-circuits",
  "phoenix-core",
- "piecrust-uplink 0.21.0",
+ "piecrust-uplink",
  "poseidon-merkle",
  "rand",
  "rkyv",
@@ -852,9 +822,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "hkdf"
@@ -988,7 +955,7 @@ name = "knot-encoding"
 version = "0.1.2"
 dependencies = [
  "bytecheck",
- "dusk-core 1.6.0",
+ "dusk-core",
  "rkyv",
  "serde",
  "sha2 0.10.9",
@@ -1058,7 +1025,7 @@ name = "nocturne-atlas-encoding"
 version = "0.4.0"
 dependencies = [
  "bytecheck",
- "dusk-core 1.7.0",
+ "dusk-core",
  "rkyv",
  "serde",
 ]
@@ -1067,8 +1034,7 @@ dependencies = [
 name = "nocturne-knot-event-decoder"
 version = "0.1.0"
 dependencies = [
- "dusk-core 1.6.0",
- "dusk-core 1.7.0",
+ "dusk-core",
  "knot-encoding",
  "nocturne-knot-warden-encoding",
  "rand",
@@ -1082,7 +1048,7 @@ name = "nocturne-knot-warden-encoding"
 version = "0.2.1"
 dependencies = [
  "bytecheck",
- "dusk-core 1.7.0",
+ "dusk-core",
  "nocturne-atlas-encoding",
  "rkyv",
  "serde",
@@ -1192,18 +1158,6 @@ dependencies = [
  "sha2 0.10.9",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "piecrust-uplink"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9df8d2d3f5deb052f61c65d01d892c4babe604cd884cdd2fcef7f6da4392b476"
-dependencies = [
- "bytecheck",
- "hex",
- "rkyv",
- "serde",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 # Warden
 
-Source is `knot-warden` 0.3.0 and `knot-warden-encoding` 0.2.1. Testnet still runs 0.2.1; 0.3.0 is not deployed (a new bytecode is a new contract id). The live testnet contract id is in [nocturne-deployments](https://github.com/Nocturne-Standards/nocturne-deployments). Older ids in changelogs, including `fb143b1e…` and `113159d3…`, are history. Warden and `knot-warden-encoding` build only next to an Atlas checkout. Public CI does not build them.
+Source is `knot-warden` 0.3.0 and `knot-warden-encoding` 0.2.1. Testnet still runs 0.2.1; 0.3.0 is not deployed (a new bytecode is a new contract id). Warden and `knot-warden-encoding` build only next to an Atlas checkout. Public CI does not build them.
 
 Warden is the contract an operator puts in Atlas's guardian slot when a service repoint must wait. Knot-proposals stays a generic `call_raw` executor and does not grow a delay. Atlas stays a registry: it does not call warden, and it does not delay `set_service`.
 

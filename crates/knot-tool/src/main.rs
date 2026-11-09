@@ -445,7 +445,7 @@ enum BlobCmd {
 #[derive(Subcommand)]
 enum EvmCmd {
     /// Sign the bootstrap message for `publish_bootstrap_root` and add the partial to `--file`.
-    /// Account members, threshold and nonce are read from the registry in the pins.
+    /// Account members, threshold and nonce are read from the registry named by KNOT_REGISTRY_ID.
     BootstrapSign {
         #[arg(long)]
         account: u64,
@@ -1729,7 +1729,7 @@ fn member_bytes(view: &MultisigAccountView) -> Vec<[u8; 96]> {
     view.members.iter().map(|pk| pk.to_bytes()).collect()
 }
 
-/// The round as the registry in the pins sees it right now.
+/// The round as the registry named by KNOT_REGISTRY_ID sees it right now.
 async fn evm_round_from_chain(account: u64, context: evm::EvmContext) -> Result<evm::EvmSigFile> {
     let view = fetch_registry_account(account).await?;
     let context = match context {
