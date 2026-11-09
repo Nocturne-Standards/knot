@@ -10,8 +10,8 @@ license = "Apache-2.0"
 repository = "https://github.com/Nocturne-Standards/knot"
 description = "Delaying guardian in front of an Atlas registry. Calls Atlas; Atlas does not call it."
 
-# Own workspace: path-depends on sibling atlas (atlas-encoding 0.4) via knot-warden-encoding.
-# Public knot CI does not check that sibling out. `make test` in this directory.
+# Own workspace. The host tests load atlas.wasm from an Atlas checkout next to this repo
+# (Nocturne-Standards/atlas); public knot CI does not check that out. `make test` in this directory.
 
 [dependencies]
 knot-warden-encoding = { package = "nocturne-knot-warden-encoding", path = "../knot-warden-encoding", features = ["contract-events"] }
@@ -27,7 +27,7 @@ dusk-forge = "0.3.0"
 dusk-bytes = "=0.1.7"
 
 [dev-dependencies]
-atlas-encoding = { package = "nocturne-atlas-encoding", path = "../../../atlas/crates/atlas-encoding", version = "0.4" }
+atlas-encoding = { package = "nocturne-atlas-encoding", version = "0.5" }
 knot-warden-encoding = { package = "nocturne-knot-warden-encoding", path = "../knot-warden-encoding" }
 dusk-core = { version = "=1.7.0", features = ["zk"] }
 dusk-vm = { version = "=1.7.0", default-features = false }

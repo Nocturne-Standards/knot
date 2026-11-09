@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 dusk-core = { version = "=1.7.0" }
-knot-encoding = { path = "../../crates/knot-encoding", features = ["call-types"] }
+knot-encoding = { package = "nocturne-knot-encoding", path = "../../crates/knot-encoding", features = ["call-types"] }
 bls12_381-bls = { version = "=0.6.0", default-features = false }
 dusk-bls12_381 = { version = "=0.14.2", default-features = false, features = ["alloc", "pairings"] }
 dusk-bytes = "=0.1.7"

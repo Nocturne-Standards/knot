@@ -501,17 +501,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "knot-encoding"
-version = "0.1.2"
-dependencies = [
- "bytecheck",
- "dusk-core",
- "rkyv",
- "sha2 0.10.9",
- "tiny-keccak",
-]
-
-[[package]]
 name = "knot-evm-root-e2e"
 version = "0.1.0"
 dependencies = [
@@ -519,7 +508,7 @@ dependencies = [
  "dusk-bls12_381",
  "dusk-bytes",
  "dusk-core",
- "knot-encoding",
+ "nocturne-knot-encoding",
  "rand",
  "rkyv",
  "tiny-keccak",
@@ -536,6 +525,17 @@ name = "log"
 version = "0.4.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
+
+[[package]]
+name = "nocturne-knot-encoding"
+version = "0.1.2"
+dependencies = [
+ "bytecheck",
+ "dusk-core",
+ "rkyv",
+ "sha2 0.10.9",
+ "tiny-keccak",
+]
 
 [[package]]
 name = "once_cell"

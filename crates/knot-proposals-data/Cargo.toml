@@ -1,5 +1,5 @@
 [package]
-name = "knot-proposals-data"
+name = "nocturne-knot-proposals-data"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
@@ -10,7 +10,7 @@ repository = "https://github.com/Nocturne-Standards/knot"
 build = "build.rs"
 
 [dependencies]
-knot-encoding = { path = "../knot-encoding", features = ["call-types"] }
+knot-encoding = { package = "nocturne-knot-encoding", path = "../knot-encoding", version = "0.1.2", features = ["call-types"] }
 
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 
@@ -32,4 +32,5 @@ data-driver = [
 data-driver-js = ["data-driver", "dusk-data-driver/alloc"]
 
 [lib]
+name = "knot_proposals_data"
 crate-type = ["cdylib", "rlib"]

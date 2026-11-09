@@ -2117,141 +2117,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "knot-collector"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "axum",
- "bs58 0.5.1",
- "dusk-bytes",
- "dusk-core",
- "hex",
- "knot-encoding",
- "rand 0.8.7",
- "reqwest",
- "rusqlite",
- "serde",
- "serde_json",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "knot-encoding"
-version = "0.1.2"
-dependencies = [
- "bytecheck",
- "dusk-core",
- "dusk-forge",
- "proptest",
- "rand 0.8.7",
- "rkyv",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tiny-keccak",
-]
-
-[[package]]
 name = "knot-mock-atlas"
 version = "0.1.0"
 dependencies = [
  "dusk-core",
  "dusk-forge",
-]
-
-[[package]]
-name = "knot-proposals"
-version = "0.4.0"
-dependencies = [
- "bytecheck",
- "dusk-bls12_381",
- "dusk-bytes",
- "dusk-core",
- "dusk-data-driver",
- "dusk-forge",
- "dusk-vm",
- "knot-encoding",
- "rand 0.8.7",
- "rkyv",
- "serde",
-]
-
-[[package]]
-name = "knot-proposals-data"
-version = "0.1.0"
-dependencies = [
- "dusk-bytes",
- "dusk-core",
- "dusk-data-driver",
- "dusk-forge",
- "knot-encoding",
- "serde",
-]
-
-[[package]]
-name = "knot-registry"
-version = "0.2.1"
-dependencies = [
- "bytecheck",
- "dusk-bls12_381",
- "dusk-bytes",
- "dusk-core",
- "dusk-data-driver",
- "dusk-forge",
- "dusk-vm",
- "knot-encoding",
- "rand 0.8.7",
- "rkyv",
- "serde",
-]
-
-[[package]]
-name = "knot-registry-data"
-version = "0.1.0"
-dependencies = [
- "dusk-bytes",
- "dusk-core",
- "dusk-forge",
- "knot-encoding",
-]
-
-[[package]]
-name = "knot-tool"
-version = "0.2.0"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "argon2",
- "axum",
- "bs58 0.5.1",
- "bytecheck",
- "clap",
- "directories",
- "dusk-bls12_381",
- "dusk-bytes",
- "dusk-core",
- "dusk-vm",
- "hex",
- "knot-encoding",
- "libc",
- "pbkdf2",
- "rand 0.8.7",
- "reqwest",
- "rkyv",
- "rpassword",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "subtle",
- "tempfile",
- "tiny-keccak",
- "tokio",
- "tower",
- "url",
- "zeroize",
 ]
 
 [[package]]
@@ -2434,6 +2304,136 @@ checksum = "c334ab77a6d4f29c5c2e41149c0f03af4082923aa364aa0c9876232f33f9853f"
 dependencies = [
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "nocturne-knot-collector"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "bs58 0.5.1",
+ "dusk-bytes",
+ "dusk-core",
+ "hex",
+ "nocturne-knot-encoding",
+ "rand 0.8.7",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "nocturne-knot-encoding"
+version = "0.1.2"
+dependencies = [
+ "bytecheck",
+ "dusk-core",
+ "dusk-forge",
+ "proptest",
+ "rand 0.8.7",
+ "rkyv",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "nocturne-knot-proposals"
+version = "0.4.0"
+dependencies = [
+ "bytecheck",
+ "dusk-bls12_381",
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-data-driver",
+ "dusk-forge",
+ "dusk-vm",
+ "nocturne-knot-encoding",
+ "rand 0.8.7",
+ "rkyv",
+ "serde",
+]
+
+[[package]]
+name = "nocturne-knot-proposals-data"
+version = "0.1.0"
+dependencies = [
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-data-driver",
+ "dusk-forge",
+ "nocturne-knot-encoding",
+ "serde",
+]
+
+[[package]]
+name = "nocturne-knot-registry"
+version = "0.2.1"
+dependencies = [
+ "bytecheck",
+ "dusk-bls12_381",
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-data-driver",
+ "dusk-forge",
+ "dusk-vm",
+ "nocturne-knot-encoding",
+ "rand 0.8.7",
+ "rkyv",
+ "serde",
+]
+
+[[package]]
+name = "nocturne-knot-registry-data"
+version = "0.1.0"
+dependencies = [
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-forge",
+ "nocturne-knot-encoding",
+]
+
+[[package]]
+name = "nocturne-knot-tool"
+version = "0.2.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "argon2",
+ "axum",
+ "bs58 0.5.1",
+ "bytecheck",
+ "clap",
+ "directories",
+ "dusk-bls12_381",
+ "dusk-bytes",
+ "dusk-core",
+ "dusk-vm",
+ "hex",
+ "libc",
+ "nocturne-knot-encoding",
+ "pbkdf2",
+ "rand 0.8.7",
+ "reqwest",
+ "rkyv",
+ "rpassword",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "tempfile",
+ "tiny-keccak",
+ "tokio",
+ "tower",
+ "url",
+ "zeroize",
 ]
 
 [[package]]

@@ -42,18 +42,20 @@ Stacking both on one intent waits twice. Atlas `timelock_blocks` covers
 
 ## Crates
 
-| Crate | License | Version | Role |
+| Package | License | Version | Role |
 |---|---|---|---|
-| `knot-encoding` | Apache-2.0 | 0.1.2 | Canonical proposal preimage + blob helpers + M3 fingerprint |
-| `knot-registry` | Apache-2.0 | 0.2.1 | On-chain BLS M-of-N quorum API |
-| `knot-registry-data` | Apache-2.0 | 0.1.0 | Account book; writes only from the Atlas-resolved registry logic |
-| `knot-proposals` | Apache-2.0 | 0.4.0 | On-chain propose → approve → finalize `call_raw` |
-| `knot-proposals-data` | Apache-2.0 | 0.1.0 | Proposal book; writes only from the Atlas-resolved proposals logic |
-| `knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
-| `knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
-| `nocturne-knot-warden-encoding` | Apache-2.0 | 0.2.1 | Warden call types and events (Rust name `knot_warden_encoding`). Own workspace; needs a sibling Atlas checkout (`nocturne-atlas-encoding` 0.4.0, Atlas 0.5.0 tree) |
+| `nocturne-knot-encoding` | Apache-2.0 | 0.1.2 | Canonical proposal preimage + blob helpers + M3 fingerprint |
+| `nocturne-knot-registry` | Apache-2.0 | 0.2.1 | On-chain BLS M-of-N quorum API |
+| `nocturne-knot-registry-data` | Apache-2.0 | 0.1.0 | Account book; writes only from the Atlas-resolved registry logic |
+| `nocturne-knot-proposals` | Apache-2.0 | 0.4.0 | On-chain propose → approve → finalize `call_raw` |
+| `nocturne-knot-proposals-data` | Apache-2.0 | 0.1.0 | Proposal book; writes only from the Atlas-resolved proposals logic |
+| `nocturne-knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
+| `nocturne-knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
+| `nocturne-knot-warden-encoding` | Apache-2.0 | 0.2.1 | Warden call types and events (Rust name `knot_warden_encoding`). Own workspace; uses `nocturne-atlas-encoding` 0.5 from crates.io |
 | `nocturne-knot-warden` | Apache-2.0 | 0.3.0 | Delaying guardian in front of Atlas. Live ids are in [Deployments](https://docs.nocturne-standards.org/v1/deployments/) |
-| `nocturne-knot-event-decoder` | Apache-2.0 | 0.1.0 | Named-event dispatch for registry, proposals, and warden. Needs a sibling Atlas checkout (`nocturne-atlas-encoding` 0.4.0, Atlas 0.5.0 tree) |
+| `nocturne-knot-event-decoder` | Apache-2.0 | 0.1.0 | Named-event dispatch for registry, proposals, and warden. Uses `nocturne-atlas-encoding` 0.5 from crates.io |
+
+All packages use the `nocturne-knot-*` name on crates.io. The Rust names do not change (`knot_encoding`, `knot_registry`, and so on), and neither do the binaries `knot-tool` and `knot-collector`.
 
 The Apache suite and **AGPL collector** are intentionally split. Self-host
 `knot-collector` only if you accept AGPL (or purchase a commercial
@@ -103,14 +105,14 @@ how crate semvers relate to git tags.
 ## Quick commands
 
 ```bash
-cargo build -p knot-tool
-cargo test -p knot-encoding
+cargo build -p nocturne-knot-tool
+cargo test -p nocturne-knot-encoding
 
 # Contract crates build/test WASM via their own Makefiles (cwd-sensitive):
 (cd crates/knot-registry && make wasm && make test)
 (cd crates/knot-proposals && make wasm && make test)
 ```
 
-Cold-start the Lab: `cargo run -p knot-tool -- init` then
-`cargo run -p knot-tool -- serve --bind 127.0.0.1:8877`.
+Cold-start the Lab: `cargo run -p nocturne-knot-tool -- init` then
+`cargo run -p nocturne-knot-tool -- serve --bind 127.0.0.1:8877`.
 See each crate's `README.md` for API surface and usage detail.

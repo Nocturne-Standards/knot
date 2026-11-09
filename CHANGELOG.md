@@ -10,6 +10,7 @@ details live in each crate's `CHANGELOG.md`. Semver policy:
 
 ### Changed
 
+- Every package takes the `nocturne-knot-*` name for crates.io: `nocturne-knot-encoding`, `-registry`, `-proposals`, `-registry-data`, `-proposals-data`, `-tool`, `-collector` (the warden group already had it). Rust names (`[lib] name`), wasm file names and the `knot-tool` and `knot-collector` binaries are unchanged; dependents keep the short key with `package = "..."`. Use `cargo build -p nocturne-knot-tool` and so on. Atlas now comes from crates.io (`nocturne-atlas-encoding` 0.5) for the warden crates.
 - `dusk-core` and `dusk-vm` move from the rusk git tag to crates.io `=1.7.0` in every crate and lockfile (`piecrust` 0.31). Contract sources are unchanged; test code sets the block height and annotates `Session::deploy` results. `knot-event-decoder` decodes the registry's `evm_bootstrap_sent` event (a bare `u64` account id).
 - The repo holds no live contract ids. The `deploy-*` and `wire-contract` wrapper scripts (they drove a sibling deployments checkout) and the `nocturne-deployments` dependency of `knot-tool` are removed; `knot-tool` reads ids from `KNOT_REGISTRY_ID` and `KNOT_PROPOSALS_ID` and vendors Dusk's testnet network data.
 

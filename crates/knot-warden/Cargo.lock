@@ -1718,7 +1718,9 @@ dependencies = [
 
 [[package]]
 name = "nocturne-atlas-encoding"
-version = "0.4.0"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f842abe360c48c5f9e3aba339561dd6640c5e545c096d27892b5609bb0e56f7c"
 dependencies = [
  "bytecheck",
  "dusk-core",

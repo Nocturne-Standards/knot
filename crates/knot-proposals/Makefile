@@ -42,7 +42,8 @@ STACK_SIZE ?= 65536
 
 CRATE_NAME_DASHED := $(shell cargo metadata --no-deps --format-version 1 \
 	--manifest-path Cargo.toml | jq -r '.packages[] | \
-	select(.manifest_path == "$(realpath Cargo.toml)") | .name')
+	select(.manifest_path == "$(realpath Cargo.toml)") | \
+	.targets[] | select(.kind | index("cdylib")) | .name')
 CRATE_NAME := $(subst -,_,$(CRATE_NAME_DASHED))
 
 WORKSPACE_ROOT := $(shell cargo metadata --no-deps --format-version 1 \
@@ -145,7 +146,7 @@ wasm-books:
 		ATLAS_PIN_HEX=$(LAB_ATLAS) \
 		RUSTFLAGS="$(RUSTFLAGS) --remap-path-prefix $(HOME)= -C link-args=-zstack-size=$(STACK_SIZE)" \
 		cargo build --release --features contract --target $(WASM_TARGET) \
-			-p knot-registry -p knot-registry-data -p knot-proposals-data -p knot-mock-atlas
+			-p nocturne-knot-registry -p nocturne-knot-registry-data -p nocturne-knot-proposals-data -p knot-mock-atlas
 
 .PHONY: test
 test: $(CONTRACT_WASM_FILE) wasm-books ## Build contract WASM and run tests

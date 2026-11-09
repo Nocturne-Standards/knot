@@ -2,15 +2,15 @@
 
 Status: **not published**. crates.io publishing is paused. This file is the
 checklist for that publish. The README still pins `knot-encoding` with a git
-tag. The `knot-encoding = "x.y.z"` snippet, the versioning paragraph and the
+tag. The `nocturne-knot-encoding = "x.y.z"` snippet, the versioning paragraph and the
 Integrate page change only when the crates ship.
 
 Nothing here is a chain step. This repo records no live contract ids.
 
 ## Publish order
 
-1. `knot-encoding` first. That reserves the name.
-2. `knot-registry` and `knot-proposals`.
+1. `nocturne-knot-encoding` first. That reserves the prefix.
+2. `nocturne-knot-registry` and `nocturne-knot-proposals`.
 3. The other libraries in this repo, except warden.
 4. `knot-warden` and `knot-warden-encoding` only after Atlas is public, or
    after `atlas-encoding` is on crates.io. They build next to Atlas today.
@@ -18,9 +18,9 @@ Nothing here is a chain step. This repo records no live contract ids.
 Leave unpublished: `knot-mock-atlas`, `knot-proposals/test-target`,
 `knot-warden/test-proxy`, `evm/e2e-tool`, `evm/vectors-gen`.
 
-`knot-collector` is AGPL-3.0-only. The other shipped crates are Apache-2.0.
+`nocturne-knot-collector` is AGPL-3.0-only. The other shipped crates are Apache-2.0.
 
-The data books (`knot-registry-data`, `knot-proposals-data`) bake
+The data books (`nocturne-knot-registry-data`, `nocturne-knot-proposals-data`) bake
 `ATLAS_PIN_HEX` at build time and call Atlas `resolve` on every write.
 Publishing them does not remove that pin.
 
@@ -40,7 +40,7 @@ These change at release:
       see `docs/cargo-release.md`.
 - [ ] Every dependency needs a `version`. Cargo publishes that version and
       drops a sibling `git` or `path` key. `dusk-core` and `dusk-vm` are
-      on crates.io at `=1.7.0`. Path deps on `knot-encoding` become version
+      on crates.io at `=1.7.0`. Path deps on `nocturne-knot-encoding` become version
       deps after step 1.
 - [ ] Date the root `CHANGELOG.md` `[Unreleased]` block, and the crate
       changelogs, for the versions that ship.

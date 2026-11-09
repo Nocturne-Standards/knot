@@ -62,11 +62,14 @@ fn free_port() -> u16 {
 /// `/v1/health` answers (or panics after a timeout).
 fn spawn_collector(bind: &str, db_path: &Path) -> CollectorProcess {
     let build = Command::new("cargo")
-        .args(["build", "-p", "knot-collector"])
+        .args(["build", "-p", "nocturne-knot-collector"])
         .current_dir(workspace_root())
         .status()
-        .expect("run cargo build -p knot-collector");
-    assert!(build.success(), "cargo build -p knot-collector failed");
+        .expect("run cargo build -p nocturne-knot-collector");
+    assert!(
+        build.success(),
+        "cargo build -p nocturne-knot-collector failed"
+    );
 
     let bin = target_dir().join("debug").join("knot-collector");
     assert!(
