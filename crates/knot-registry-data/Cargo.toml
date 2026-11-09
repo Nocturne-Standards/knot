@@ -10,7 +10,7 @@ repository = "https://github.com/Nocturne-Standards/knot"
 build = "build.rs"
 
 [dependencies]
-knot-encoding = { path = "../knot-encoding", features = ["call-types"] }
+knot-encoding = { path = "../knot-encoding", version = "0.1.2", features = ["call-types"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 dusk-core = { version = "=1.7.0" }
