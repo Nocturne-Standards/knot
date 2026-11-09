@@ -30,6 +30,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
   domain tags are unchanged. Keystore default path also moves to
   `~/.knot` (one-release legacy fallback in `knot-tool`).
 
+## [0.2.2] - 2026-11-09
+
+### Changed
+
+- README rewritten for crates.io. No code change.
+
 ## [0.1.6] — 2026-08-04
 
 ### Changed

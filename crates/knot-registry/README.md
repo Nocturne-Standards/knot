@@ -1,97 +1,57 @@
-# knot-registry
+# nocturne-knot-registry
 
-BLS M-of-N quorum verification registry — a shared primitive other contracts
-in this repo can point at instead of each re-implementing committee/
-threshold logic themselves.
+Package `nocturne-knot-registry`, Rust library `knot_registry`.
 
-## Book
+Source of the knot registry smart contract for Dusk: a BLS M-of-N quorum
+verification registry. It answers one question, "did enough of this account's
+members sign this message?", so other contracts can reuse committee and
+threshold logic. It is not a custody wallet and never holds funds.
 
-`knot-registry` is the API. The accounts live on `knot-registry-data`.
-A write lands only when `abi::caller()` is the id Atlas `resolve`s for
-`knot-registry`. `init_data` is owner-only, a direct account call, and one-shot. The same book id may be retried. A different book panics.
-Callers use the logic id. The book holds no DUSK.
+## Usage
 
-## Scope
+This crate is the contract source. It is built to WebAssembly with the
+Makefile in the crate directory (see the repository), not linked as a host
+library:
 
-This is a **verification** registry, not a custody wallet. It never holds
-Dusk or any token — unlike Dusk's own multisig-contract example (deposits/
-transfers to Moonlight accounts). This contract answers one question: *did
-enough of this account's members sign this message?* Callers build
-authorization on top of that answer.
+```bash
+make wasm      # contract
+make wasm-dd   # data-driver
+make test
+```
 
-## Functions
+On non-wasm targets the library is empty. Depend on it only for its tests and
+build tooling. The shared argument and view types live in
+[`nocturne-knot-encoding`](https://crates.io/crates/nocturne-knot-encoding)
+(feature `call-types`).
 
-- `create_account(CreateAccountArgs) -> u64` — registers a member set +
-  threshold, returns an account id. Callable by anyone (naming other keys as
-  members grants no power to the caller themselves).
-- `account(u64) -> Option<MultisigAccountView>` — read-only view.
-- `verify_quorum(VerifyQuorumArgs) -> bool` — pure check: does `sigs` carry
-  `>= threshold` valid, distinct-member signatures over the caller-supplied
-  `msg`? Returns `false` (never panics) for an unknown account or an
-  unmet quorum — panics are reserved for infrastructure failures elsewhere
-  in this repo's contracts, not applicable here since this call has none.
-  **Replay protection is the caller's responsibility** — this registry
-  doesn't interpret `msg`, so a caller must fold its own nonce/context into
-  it if replay matters for their use case.
-- `change_account(ChangeAccountArgs)` — replaces an account's member set /
-  threshold, gated by a quorum of the account's *current* members signing
-  over `knot_encoding::change_account_message_v3` (v3 domain binds
-  `chain_id`, registry `self_id`, account id, on-chain nonce, member count,
-  new member pks, new threshold → Keccak-256). Nonce is not an args field — it is folded from state into the digest. Delay 0 applies in this call;
-  otherwise the change sits in `pending` until `execute_pending`.
-- `set_timelock(SetTimelockArgs)` / `cancel_pending` / `execute_pending` —
-  per-account delay. Raising from 0 applies immediately. **PINNED-DIFFERENT-REDEPLOYED**
-  view layout (`timelock_blocks` + `pending` on `MultisigAccountView`).
-- `verify_quorum_aggregate(VerifyQuorumAggregateArgs) -> bool` — same
-  question as `verify_quorum`, checked with **one** native
-  `abi::verify_bls_multisig` pairing check instead of one `abi::verify_bls`
-  per signer. The caller supplies the *subset* of members who actually
-  signed plus a single pre-aggregated `MultisigSignature`
-  (`MultisigSignature::aggregate` over each signer's
-  `sign_multisig(sk, pk, msg)`) — see `call_types.rs`'s doc on the type for
-  why a wrong/missing signer invalidates the whole aggregate rather than
-  just failing to count. This is the Dusk-specific win over a
-  general-purpose EVM chain: BLS signature aggregation collapses an O(N)
-  cost (N pairing checks) into O(1) (one), natively, no precompile
-  workaround needed — BLS aggregation is native on Dusk.
+Features: `contract` (contract build), `data-driver` (data-driver build),
+`data-driver-js` (data-driver with `alloc`, for JS use).
 
-### Ops helper
+## Contract methods
 
-- `next_account_id() -> u64` — next id `create_account` will allocate.
+- `create_account`: register a member set and threshold, returns an account id.
+- `account`, `next_account_id`: reads.
+- `verify_quorum`: checks that enough distinct members signed `msg`. Returns
+  `false` for an unknown account or unmet quorum. It does not interpret `msg`,
+  so callers must include their own nonce or context against replay.
+- `verify_quorum_aggregate`: same check with one aggregated BLS multisignature.
+- `change_account`: replace members and threshold, authorised by a quorum of
+  the current members over a signed digest.
+- `set_timelock`, `cancel_pending`, `execute_pending`: per-account delay for
+  membership changes.
 
-`account_meta`, `member_key_bytes`, and `diagnose_quorum` were removed from
-the on-chain ABI. Diagnostics are off-chain only — a WASM contract cannot be
-feature-flagged at runtime without shipping two different bytecodes. Use
-[`knot-tool`](../knot-tool/README.md) instead; it derives the same ops data
-from `account()` plus local BLS verify (no gas, no RUES verify free-read
-pitfalls). See [`docs/design-notes.md`](../../docs/design-notes.md).
+State lives in a separate data book contract, wired once with `init_data`.
+The data books and the Atlas service registry are separate from this crate.
+
+## Layout compatibility
+
+Archived layouts of the argument and view types are pinned by golden tests in
+`tests/layout_goldens.rs`. Changing them breaks deployed clients.
 
 ## Status
 
-**v3** on next deploy — `change_account` digest binds `chain_id` and
-registry instance. Deploy **registry before proposals**; burn all v2
-`change_account` signatures. Prior testnet pins (v0.1.x) obsolete after cutover.
+Testnet only, not audited yet.
 
-`make wasm` + `make wasm-dd` + `cargo test --release`. Same dusk-forge-template
-pattern (wasm32-unknown-unknown, Rust 1.94.0, `#[dusk_forge::contract]`).
-`verify_quorum_aggregate`'s tests exercise the real `verify_bls_multisig`
-host query under `VM::ephemeral()` (not mocked) — signing uses
-`sign_multisig_insecure`, not the default secure `sign_multisig`, because
-`VM::ephemeral()` unit tests cannot reach post-hardfork signing policy in
-dusk-vm (PreFork default). **Live testnet clients must use secure
-`sign`/`sign_multisig`** — see [`../knot-tool/README.md`](../knot-tool/README.md).
+Source: https://github.com/Nocturne-Standards/knot
 
-**Layout pin (2026-08-03):** `#[archive_attr(repr(C))]` on shared
-`knot-encoding` call types (this crate re-exports). Layout goldens in
-`tests/layout_goldens.rs` (post-pin hex). On-chain ABI types that changed:
-`MultisigAccountView` / `ChangeAccountArgs`. `AccountMeta` /
-`DiagnoseQuorumResult` live only in `knot-encoding` for off-chain
-[`knot-tool`](../knot-tool/README.md) diagnose — not registry contract
-methods.
-
-## Next steps
-
-- Consumer contracts (e.g. prediction-market council resolve) own their
-  `verify_quorum_aggregate` wiring — see **wen** / prediction-market repos.
-- Watch for dusk-forge codegen edge cases if a future method needs two
-  `ContractId` arguments in one ABI call.
+License: Apache-2.0.

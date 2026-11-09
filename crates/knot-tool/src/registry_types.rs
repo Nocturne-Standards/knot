@@ -1,13 +1,13 @@
-//! Pulls in `knot-registry`'s own call-argument types directly (same
-//! `#[path = ...]` convention every host-side contract test in this repo
-//! already uses, e.g. `knot-registry/tests/contract.rs`,
-//! `compliance-gate/src/lib.rs`'s `license_types` inclusion) — rather than a
-//! duplicated/hand-copied struct set. Since this tool constructs the exact
-//! rkyv bytes the deployed contract expects (no data-driver JSON round-trip
-//! — see README.md), the wire format must match byte-for-byte; including the
-//! real source file guarantees that far more robustly than keeping a copy in
-//! sync by hand.
+//! The registry's call-argument types. The canonical definitions live in
+//! `knot-encoding`; this module re-exports the set the registry contract uses, so the
+//! tool builds the exact rkyv bytes the deployed contract expects with no copy to keep
+//! in sync.
 
-#[allow(unused_imports)]
-#[path = "../../knot-registry/src/call_types.rs"]
-pub mod call_types;
+pub mod call_types {
+    #[allow(unused_imports)]
+    pub use knot_encoding::call_types::{
+        CancelPendingArgs, ChangeAccountArgs, CreateAccountArgs, MultisigAccountView,
+        PublishBootstrapRootArgs, RegistryBookEffect, RegistryPendingChange, RegistryPendingView,
+        SetTimelockArgs, SignatureEntry, VerifyQuorumAggregateArgs, VerifyQuorumArgs,
+    };
+}

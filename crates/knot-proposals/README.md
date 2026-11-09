@@ -1,60 +1,58 @@
-# knot-proposals
+# nocturne-knot-proposals
 
-On-chain **propose → approve → finalize** (`abi::call_raw`), with an optional
-queue when the registry account's `timelock_blocks` is > 0.
-[`knot-registry`](../knot-registry/) for membership/threshold.
-Signed bytes are the v3 digest from [`knot-encoding`](../knot-encoding/).
+Package `nocturne-knot-proposals`, Rust library `knot_proposals`.
 
-## Book
+Source of the knot proposals smart contract for Dusk: an on-chain
+propose, approve, finalize flow for multisig-authorised calls. Members sign a
+digest defined by
+[`nocturne-knot-encoding`](https://crates.io/crates/nocturne-knot-encoding),
+membership and threshold come from `nocturne-knot-registry`, and the final
+call is made with `call_raw`. If the registry account has a timelock, finalize
+queues the proposal and `execute` runs it later.
 
-`knot-proposals` is the API and the `call_raw` caller. The rows live on
-`knot-proposals-data`. Atlas service `knot-proposals`. `init_data` wires the
-book once; the same id may be retried, a different book panics. A new logic
-contract may `init_data` onto that book, but `finalize` and `execute` recompute
-the v3 digest and reject proposals signed for the previous contract. Those
-rows stay until cancel or prune.
-`set_authorized_account` binds this executor to one registry account and bumps
-`auth_generation`. Open and queued proposals from the previous binding cannot
-run, including after a switch back to that account. Owner configuration is a
-direct account call. `prune(0)` is a no-op. Each prune examines a bounded
-prefix of the proposal map and of the digest map. Consumed digests stay until
-`deadline`.
+## Usage
+
+This crate is the contract source. It is built to WebAssembly with the
+Makefile in the crate directory (see the repository), not linked as a host
+library:
+
+```bash
+make wasm      # contract
+make wasm-dd   # data-driver
+make test
+```
+
+On non-wasm targets the library is empty. Depend on it only for its tests and
+build tooling. Shared argument and view types live in
+`nocturne-knot-encoding` (feature `call-types`).
+
+Features: `contract` (contract build), `data-driver` (data-driver build),
+`data-driver-js` (data-driver with `alloc`, for JS use).
+
+## Contract methods
+
+- Owner configuration (direct account calls): `init_data`, `init_registry`,
+  `set_authorized_account`, `set_proposal_ttl`, `set_tombstone`.
+- `propose`: create a proposal with a non-zero deadline and a caller nonce.
+- `approve`: add a BLS signature over the digest.
+- `finalize`: check the quorum, then call the target or queue it.
+- `execute`: run a queued proposal after its delay. Anyone may call it.
+- `cancel`: cancel with a quorum of current members.
+- `prune(limit)`: permissionless storage cleanup.
+- `epoch`, `proposal_ttl`, `proposal`, `status`, `next_proposal_id`: reads.
+
+State lives in a separate data book contract, wired once with `init_data`.
+The data books and the Atlas service registry are separate from this crate.
+
+## Layout compatibility
+
+Archived layouts of the shared types are pinned by golden tests in `tests/layout_goldens.rs`. Changing
+them breaks deployed clients.
 
 ## Status
 
-- **Timelock** — **PINNED-DIFFERENT-REDEPLOYED** `ProposalView.execute_at` and
-  `ProposalStatus::{Queued,Cancelled}`. Signing digest v3 unchanged. Delay is
-  read from the registry account at `finalize`.
-  `abi::chain_id()` + `abi::self_id()` in digests, `consumed` digest records,
-  permissionless `prune`, rich events. **Burns v2** — redeploy fresh;
-  no state migration.
-- Prior **v0.3.x** testnet pins are obsolete after v3 cutover.
+Testnet only, not audited yet.
 
-## Functions
+Source: https://github.com/Nocturne-Standards/knot
 
-| Method | Notes |
-|--------|--------|
-| `init_data` | Owner, direct call; one-shot book contract (same id may be retried) |
-| `init_registry` | Owner, direct call; bumps `epoch` and clears the authorized account |
-| `set_authorized_account` | Owner, direct call; bumps `auth_generation`, so the previous binding's open and queued proposals cannot run |
-| `set_proposal_ttl` | Owner; ceiling only, no wipe (`> 0`, `≤ MAX_PROPOSAL_TTL`) |
-| `set_tombstone(bool)` | Owner; no invalidation |
-| `propose(ProposeArgs) -> id` | Explicit non-zero `deadline`; caller `nonce`; merge identical open digests |
-| `approve` / `finalize` | BLS over digest; delay 0: CEI then `call_raw`; else queue |
-| `execute` | Permissionless after `execute_at` |
-| `cancel` | Immediate; current-member quorum over cancel digest |
-| `prune(limit) -> count` | Permissionless payload reclamation; keeps `Queued` until deadline |
-| `epoch` / `proposal_ttl` / `proposal` / `status` | Reads |
-
-## Deploy order
-
-1. Deploy **registry data**, then **registry logic**. Atlas `knot-registry` names the logic id. `init_data`.
-2. Deploy **proposals data**, then **proposals logic**. Atlas `knot-proposals` names the logic id. `init_data`, `init_registry(registry_logic_id)`, `set_authorized_account`.
-3. Re-create councils / re-sign intents. Prior monolith ids stay history. The book was not funded.
-
-## Build / test
-
-```bash
-cd ../knot-registry && make wasm
-cd ../knot-proposals && make test
-```
+License: Apache-2.0.

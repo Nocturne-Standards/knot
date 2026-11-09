@@ -1,6 +1,11 @@
-//! `knot-proposals` call types — included from the contract crate so the
-//! wire format stays byte-identical (same pattern as `registry_types`).
+//! The proposals contract's call-argument types, re-exported from `knot-encoding`
+//! (same reason as `registry_types`: one definition, byte-identical wire format).
 
-#[allow(unused_imports)]
-#[path = "../../knot-proposals/src/call_types.rs"]
-pub mod call_types;
+pub mod call_types {
+    #[allow(unused_imports)]
+    pub use knot_encoding::call_types::{
+        ApproveArgs, CancelProposalArgs, DigestView, MultisigAccountView, OpenProposal,
+        ProposalStatus, ProposalView, ProposalsConfig, ProposeArgs, PruneReport, SignatureEntry,
+        VerifyQuorumArgs,
+    };
+}
