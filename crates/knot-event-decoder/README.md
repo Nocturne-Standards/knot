@@ -6,7 +6,7 @@ Host dispatcher for named Knot events.
 
 Package `nocturne-knot-event-decoder`; the Rust name stays `knot_event_decoder`.
 
-Depends on `knot-encoding` and `knot-warden-encoding`. The warden crate needs a sibling atlas checkout with `atlas-encoding` 0.4 (`atlas/crates/atlas-encoding` next to this repo).
+Depends on `knot-encoding` and `knot-warden-encoding`. The warden crate uses `nocturne-atlas-encoding` 0.5 from crates.io.
 
 ```bash
 cargo test -p nocturne-knot-event-decoder --manifest-path crates/knot-event-decoder/Cargo.toml

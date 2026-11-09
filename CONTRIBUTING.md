@@ -14,8 +14,8 @@ multisig on Dusk — not production wallet software.
 
 ```bash
 rustc --version   # 1.94+ required
-cargo build -p knot-tool
-cargo test -p knot-encoding
+cargo build -p nocturne-knot-tool
+cargo test -p nocturne-knot-encoding
 ```
 
 A fresh clone builds `knot-tool` without a sibling repo. Contract ids are

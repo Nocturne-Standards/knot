@@ -4,7 +4,7 @@
 # licensing matrix and LICENSING.md for the commercial-license option.
 
 [package]
-name = "knot-collector"
+name = "nocturne-knot-collector"
 version = "0.2.0"
 edition = "2024"
 rust-version = "1.94"
@@ -32,7 +32,7 @@ bs58 = "0.5"
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
-knot-encoding = { path = "../knot-encoding", version = "0.1.2", default-features = false }
+knot-encoding = { package = "nocturne-knot-encoding", path = "../knot-encoding", version = "0.1.2", default-features = false }
 dusk-core = { version = "=1.7.0", default-features = false }
 dusk-bytes = "0.1"
 

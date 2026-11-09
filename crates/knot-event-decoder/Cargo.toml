@@ -14,7 +14,7 @@ description = "Dispatch Knot named events by contract, topic, and version"
 # atlas checkout (atlas-encoding 0.4). Parent `cargo test` must not require that sibling.
 
 [dependencies]
-knot-encoding = { path = "../knot-encoding", version = "0.1.2", features = ["data-driver"] }
+knot-encoding = { package = "nocturne-knot-encoding", path = "../knot-encoding", version = "0.1.2", features = ["data-driver"] }
 knot-warden-encoding = { package = "nocturne-knot-warden-encoding", path = "../knot-warden-encoding", version = "0.2.1", features = ["data-driver"] }
 rkyv = { version = "=0.7.46", default-features = false, features = ["size_32", "alloc", "validation"] }
 serde_json = "1"

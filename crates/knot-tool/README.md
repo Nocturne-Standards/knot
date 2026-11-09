@@ -18,7 +18,7 @@ Architecture and crate interaction diagram:
 [docs.nocturne-standards.org — Knot](https://docs.nocturne-standards.org/v1/knot/)
 · [source on GitHub](https://github.com/Nocturne-Standards/knot)
 
-Cold-start: `cargo run -p knot-tool -- serve --bind 127.0.0.1:8877` from repo root.
+Cold-start: `cargo run -p nocturne-knot-tool -- serve --bind 127.0.0.1:8877` from repo root.
 
 Everything below is lab **Status**, env, and maintainer run notes. Dense on purpose.
 
@@ -37,7 +37,7 @@ export KNOT_COLLECTOR_URL=https://collector.nocturne-standards.org
 export KNOT_COLLECTOR_USER=demo                # collector htpasswd user (not WEN metadata user)
 export KNOT_COLLECTOR_PASSWORD=...
 
-DEMO_MODE=mock cargo run -p knot-tool -- serve --bind 127.0.0.1:8877
+DEMO_MODE=mock cargo run -p nocturne-knot-tool -- serve --bind 127.0.0.1:8877
 ```
 
 Set `DEMO_MODE=mock` or `DEMO_MODE=testnet`, then open the printed bootstrap URL
@@ -294,8 +294,8 @@ cargo build --release
 ### First run
 
 ```bash
-cargo run -p knot-tool -- init [--name alice]
-cargo run -p knot-tool -- serve [--store path] [--bind 127.0.0.1:8877]
+cargo run -p nocturne-knot-tool -- init [--name alice]
+cargo run -p nocturne-knot-tool -- serve [--store path] [--bind 127.0.0.1:8877]
 ```
 
 Builds the release binary, warns about a missing `rusk-wallet` /

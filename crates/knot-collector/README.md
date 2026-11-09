@@ -59,7 +59,7 @@ the same single-`0x` strip as the tool. Party signup requires `sig` over
 ## Run
 
 ```bash
-cargo run -p knot-collector
+cargo run -p nocturne-knot-collector
 curl http://127.0.0.1:8899/v1/health   # {"ok":true,"version":"0.2.0"}
 ```
 

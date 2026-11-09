@@ -145,7 +145,7 @@ wasm-books:
 		ATLAS_PIN_HEX=$(LAB_ATLAS) \
 		RUSTFLAGS="$(RUSTFLAGS) --remap-path-prefix $(HOME)= -C link-args=-zstack-size=$(STACK_SIZE)" \
 		cargo build --release --features contract --target $(WASM_TARGET) \
-			-p knot-registry-data -p knot-mock-atlas
+			-p nocturne-knot-registry-data -p knot-mock-atlas
 
 .PHONY: test
 test: $(CONTRACT_WASM_FILE) wasm-books ## Build contract WASM and run tests
