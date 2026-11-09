@@ -3,7 +3,6 @@ name = "nocturne-knot-encoding"
 version = "0.1.2"
 edition = "2024"
 rust-version = "1.94"
-publish = false
 license = "Apache-2.0"
 repository = "https://github.com/Nocturne-Standards/knot"
 description = "Canonical §4a proposal preimage + §4b ProposalBlob, plus shared multisig call types (layer E, feature-gated)"

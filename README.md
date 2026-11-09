@@ -65,11 +65,11 @@ in `knot-tool`; the collector never holds secret keys.
 **Consumer dep (encoding):**
 
 ```toml
-knot-encoding = { git = "https://github.com/Nocturne-Standards/knot", tag = "v0.2.0", package = "knot-encoding", features = ["call-types"] }
+nocturne-knot-encoding = { version = "0.1", features = ["call-types"] }
 ```
 
-Pin a release tag or rev — see [`docs/versioning.md`](docs/versioning.md) for
-how crate semvers relate to git tags.
+The library name is `knot_encoding`. See [`docs/versioning.md`](docs/versioning.md)
+for how crate semvers relate to git tags.
 
 ## Layout
 
