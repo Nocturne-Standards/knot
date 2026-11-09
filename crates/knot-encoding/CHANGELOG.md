@@ -27,6 +27,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [docs/versi
   package name, paths, docs). Pin JSON keys and `nocturne.knot.multisig.*`
   domain tags are unchanged.
 
+## [0.1.3] - 2026-11-09
+
+### Changed
+
+- README rewritten for crates.io. No code change.
+
 ## [0.1.2] — 2026-08-03
 
 ### Changed

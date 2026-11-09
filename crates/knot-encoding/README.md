@@ -1,62 +1,62 @@
 # nocturne-knot-encoding
 
-Package `nocturne-knot-encoding`; the Rust name is `knot_encoding`.
+Package `nocturne-knot-encoding`, Rust library `knot_encoding`.
 
-Canonical proposal signing preimage + `ProposalBlob` types for the multisig
-suite, plus shared call types behind a default-off feature. Shared by
-`knot-proposals`, `knot-tool`, and tests so the signed bytes cannot drift.
+Canonical signing preimages and digests for the knot multisig contracts, plus
+the `ProposalBlob` types a signer inspects before signing. One shared
+implementation means the bytes a signer approves are the bytes the contracts
+verify. The crate is `no_std` with `alloc`. With default features it pulls in
+only hashing crates.
 
-## Status
+## Usage
 
-- **v0.1.2+timelock** — **PINNED-DIFFERENT-REDEPLOYED** view layout:
-  `timelock_blocks` + `pending` on `MultisigAccountView`; `Queued`/`Cancelled`
-  on `ProposalStatus`; `execute_at` on `ProposalView`. New domains
-  `set_timelock.v1` / `cancel_pending.v1` / `cancel_proposal.v1`. Signing
-  digests for proposal v3 and `change_account` v3 are unchanged.
-- **v0.1.2** — `#[archive_attr(repr(C))]` on struct Archive types in
-  `call_types` (fieldless `ProposalStatus` stays `#[repr(u8)]` only).
-  Measured **DIFFERENT** on `MultisigAccountView` (and several registry /
-  proposals local args); consumers redeployed — see registry/proposals READMEs.
-- **v0.1.0** — `proposal_preimage` / `proposal_digest` /
-  `recompute_and_verify`, `ProposalIntent` / `ProposalBlob` structs.
-- **M3 fingerprint (2026-07-23)** — `digest_hex` / `digest_mnemonic` (BIP39
-  24-word over full 32-byte digest) / `digest_safety_number` for out-of-band
-  co-signer compare. Never truncate.
-- **Call types (`call-types`, 2026-08-02)** — default-off feature holding
-  shared registry/proposals ABI types and event payloads (`events`). Serde
-  derives behind `data-driver`. Both contracts re-export call types from
-  `call_types`. Logic emits; the book does not.
-- Host `rlib` (`no_std` + `alloc`); path-dep from contracts and the tool.
-  Default features stay free of `dusk-core` / `rkyv`.
+```toml
+[dependencies]
+nocturne-knot-encoding = "0.1"
+```
+
+Optional features:
+
+- `call-types`: shared call argument, view and status types for the registry
+  and proposals contracts (`knot_encoding::call_types`), built on `rkyv` and
+  `dusk-core`.
+- `contract-events`: event payload structs (`knot_encoding::events`) with
+  `ContractEvent` impls. Implies `call-types`.
+- `data-driver`: `serde` derives on those types. Implies `call-types`.
+- `fixture-gen`: enables the `generate-event-fixtures` binary. Not for
+  library users.
 
 ## API
 
-- `proposal_digest(...)` / `ProposalIntent::digest()` — full 32-byte Keccak256
-  of the length-prefixed preimage (never truncate).
-- `recompute_and_verify(intent, claimed)` / `recompute_and_verify_v3` —
-  signer-side anti-blind-signing check; returns typed [`GateError`].
-- `gate_blob_for_signing(blob)` — same check for a proposal blob; ignores
-  `human_summary` for trust (display must use canonical fields).
-- `digest_mnemonic(digest)` / `digest_hex` / `digest_safety_number` — full-hash
-  out-of-band fingerprints (M3).
-- Domain tags: `nocturne.knot.multisig.proposal.v3` (proposal preimage),
-  `nocturne.knot.multisig-registry.change_account.v3` (registry membership),
-  `nocturne.knot.multisig-registry.set_timelock.v1`,
-  `nocturne.knot.multisig-registry.cancel_pending.v1`,
-  `nocturne.knot.multisig.proposal.cancel.v1`. Older v2 tags remain for
-  history.
-  **v3**: `proposal_digest_v3` / `ProposalIntentV3` bind `self_id` +
-  `epoch`; `change_account_digest_v3` binds `chain_id`, registry `self_id`, and
-  explicit `member_count`.
-  **Timelock v1**: `set_timelock_digest_v1` / `cancel_pending_digest_v1` /
-  `cancel_proposal_digest_v1` — delay is account state, not part of the
-  proposal signing preimage.
-- `--features call-types` — `call_types::{SignatureEntry, VerifyQuorumArgs,
-  MultisigAccountView}`.
+- `proposal_digest` / `proposal_digest_v3` and `ProposalIntent` /
+  `ProposalIntentV3`: Keccak-256 over a length-prefixed preimage. The v3
+  digest also binds the contract id and an epoch.
+- `recompute_and_verify`, `recompute_and_verify_v3`, `gate_blob_for_signing`:
+  signer-side checks that a claimed digest matches the canonical fields.
+  They return `GateError` on mismatch and do not trust `human_summary`.
+- `change_account_digest_v3`, `set_timelock_digest_v1`,
+  `cancel_pending_digest_v1`, `cancel_proposal_digest_v1`, and the matching
+  `*_preimage_*` and `*_message_*` functions.
+- `digest_hex`, `digest_mnemonic`, `digest_safety_number`: human-readable
+  fingerprints of the full 32-byte digest for out-of-band comparison.
+  Never compare a truncated digest.
+- `DOMAIN_*` constants: the domain-separation tags used by each digest.
 
-## Build / test
+## Layout compatibility
 
-```bash
-cargo test
-cargo build --features call-types
-```
+With `call-types`, the archived (`rkyv`) layouts of the shared types are fixed
+by golden tests in `src/layout_goldens.rs`. Changing a field or its order
+changes the bytes the deployed contracts read, so such changes are breaking.
+
+## Related
+
+The contract crates `nocturne-knot-registry` and `nocturne-knot-proposals`
+use this crate. The data books and Atlas are separate and not part of it.
+
+## Status
+
+Testnet only, not audited yet.
+
+Source: https://github.com/Nocturne-Standards/knot
+
+License: Apache-2.0.

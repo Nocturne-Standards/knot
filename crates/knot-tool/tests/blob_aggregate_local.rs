@@ -17,9 +17,7 @@ use knot_tool::blob::{
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
-#[path = "../../knot-registry/src/call_types.rs"]
-mod call_types;
-use call_types::{CreateAccountArgs, VerifyQuorumAggregateArgs};
+use knot_encoding::call_types::{CreateAccountArgs, VerifyQuorumAggregateArgs};
 
 const REGISTRY_BYTECODE: &[u8] =
     include_bytes!("../../../target/contract/wasm32-unknown-unknown/release/knot_registry.wasm");

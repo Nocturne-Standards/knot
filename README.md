@@ -44,10 +44,10 @@ Stacking both on one intent waits twice. Atlas `timelock_blocks` covers
 
 | Package | License | Version | Role |
 |---|---|---|---|
-| `nocturne-knot-encoding` | Apache-2.0 | 0.1.2 | Canonical proposal preimage + blob helpers + M3 fingerprint |
-| `nocturne-knot-registry` | Apache-2.0 | 0.2.1 | On-chain BLS M-of-N quorum API |
+| `nocturne-knot-encoding` | Apache-2.0 | 0.1.3 | Canonical proposal preimage + blob helpers + M3 fingerprint |
+| `nocturne-knot-registry` | Apache-2.0 | 0.2.2 | On-chain BLS M-of-N quorum API |
 | `nocturne-knot-registry-data` | Apache-2.0 | 0.1.0 | Account book; writes only from the Atlas-resolved registry logic |
-| `nocturne-knot-proposals` | Apache-2.0 | 0.4.0 | On-chain propose → approve → finalize `call_raw` |
+| `nocturne-knot-proposals` | Apache-2.0 | 0.4.1 | On-chain propose → approve → finalize `call_raw` |
 | `nocturne-knot-proposals-data` | Apache-2.0 | 0.1.0 | Proposal book; writes only from the Atlas-resolved proposals logic |
 | `nocturne-knot-tool` | Apache-2.0 | 0.2.0 | Local signing CLI + web Lab (mock + testnet) |
 | `nocturne-knot-collector` | **AGPL-3.0-only** | 0.2.0 | Untrusted off-chain relay |
