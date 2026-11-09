@@ -5,7 +5,6 @@ name = "nocturne-knot-warden-encoding"
 version = "0.2.1"
 edition = "2024"
 rust-version = "1.94"
-publish = false
 license = "Apache-2.0"
 repository = "https://github.com/Nocturne-Standards/knot"
 description = "Host-visible call types and events for the warden contract (rkyv layout-pinned)"

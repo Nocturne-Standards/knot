@@ -3,7 +3,6 @@ name = "nocturne-knot-proposals"
 version = "0.4.0"
 edition = "2024"
 rust-version = "1.94"
-publish = false
 license = "Apache-2.0"
 description = "On-chain propose/approve/finalize+execute multisig proposals contract."
 repository = "https://github.com/Nocturne-Standards/knot"

@@ -5,7 +5,6 @@ name = "nocturne-knot-warden"
 version = "0.3.0"
 edition = "2024"
 rust-version = "1.94"
-publish = false
 license = "Apache-2.0"
 repository = "https://github.com/Nocturne-Standards/knot"
 description = "Delaying guardian in front of an Atlas registry. Calls Atlas; Atlas does not call it."
