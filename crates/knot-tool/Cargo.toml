@@ -25,7 +25,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 dusk-bls12_381 = { version = "=0.14.2", default-features = false }
 dusk-bytes = "=0.1.7"
-dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }
+dusk-core = { version = "=1.7.0" }
 rkyv = { version = "=0.7.46", features = ["size_32", "validation"] }
 bytecheck = "=0.6.12"
 tiny-keccak = { version = "2", features = ["keccak"] }
@@ -48,14 +48,9 @@ subtle = "2"
 libc = "0.2"
 argon2 = "0.5"
 directories = "6"
-# Dusk network data (node URL, chain id) and the pins-v2 `Catalog`. Both from
-# Nocturne-Standards/nocturne-deployments at one commit. The rev moves to tag
-# `nocturne-deployments-v0.3.0` once that tag is cut.
-dusk-networks = { git = "https://github.com/Nocturne-Standards/nocturne-deployments", rev = "28649e2ee26990eddc96764784b2e553f41c5cb9", package = "dusk-networks" }
-nocturne-deployments = { git = "https://github.com/Nocturne-Standards/nocturne-deployments", rev = "28649e2ee26990eddc96764784b2e553f41c5cb9", package = "nocturne-deployments" }
 
 [dev-dependencies]
-dusk-vm = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0", default-features = false }
+dusk-vm = { version = "=1.7.0", default-features = false }
 tower = { version = "0.5", features = ["util"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "cookies"] }
 tempfile = "3"
@@ -68,6 +63,3 @@ tempfile = "3"
 [features]
 default = []
 data-driver = []
-# No-op, kept so existing `--features deployments-crate` commands still build.
-# The pins-v2 `Catalog` is the only pin reader now (see src/chain.rs).
-deployments-crate = []

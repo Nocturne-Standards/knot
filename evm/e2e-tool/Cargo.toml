@@ -8,7 +8,7 @@ publish = false
 [workspace]
 
 [dependencies]
-dusk-core = { version = "1.6", git = "https://github.com/dusk-network/rusk", tag = "dusk-core-1.6.0" }
+dusk-core = { version = "=1.7.0" }
 knot-encoding = { path = "../../crates/knot-encoding", features = ["call-types"] }
 bls12_381-bls = { version = "=0.6.0", default-features = false }
 dusk-bls12_381 = { version = "=0.14.2", default-features = false, features = ["alloc", "pairings"] }

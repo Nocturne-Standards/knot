@@ -75,7 +75,7 @@ fn set_sender(session: &mut Session, sender: Option<&BlsPublicKey>) {
 
 fn set_block_height(session: &mut Session, height: u64) {
     session
-        .set_meta(Metadata::BLOCK_HEIGHT, Some(height))
+        .set_meta(Metadata::BLOCK_HEIGHT, height)
         .expect("setting block_height metadata should succeed");
 }
 
@@ -95,6 +95,10 @@ fn deadline_at_height(height: u64) -> u64 {
 fn deploy_stack(owner_pk: &BlsPublicKey) -> Session {
     let vm = VM::ephemeral().expect("Creating ephemeral VM should work");
     let mut session = vm.genesis_session(CHAIN_ID);
+    // dusk-vm 1.7 leaves the height unset; the contracts read it on every write.
+    session
+        .set_meta(Metadata::BLOCK_HEIGHT, 0u64)
+        .expect("set block height");
     let owner = owner_pk.to_bytes().to_vec();
 
     for (bytecode, id) in [
@@ -105,7 +109,7 @@ fn deploy_stack(owner_pk: &BlsPublicKey) -> Session {
         (PROPOSALS_BYTECODE, PROPOSALS_ID),
         (TARGET_BYTECODE, TARGET_ID),
     ] {
-        session
+        let _: (ContractId, Option<CallReceipt<()>>) = session
             .deploy(
                 bytecode,
                 ContractData::builder().owner(owner.clone()).contract_id(id),
@@ -640,8 +644,12 @@ fn h1_same_intent_two_proposals_contracts_differ() {
     let (_owner_sk, owner_pk) = keypair(rng);
     let vm = VM::ephemeral().expect("vm");
     let mut session = vm.genesis_session(CHAIN_ID);
-
+    // dusk-vm 1.7 leaves the height unset; the contracts read it on every write.
     session
+        .set_meta(Metadata::BLOCK_HEIGHT, 0u64)
+        .expect("set block height");
+
+    let _: (ContractId, Option<CallReceipt<()>>) = session
         .deploy(
             PROPOSALS_BYTECODE,
             ContractData::builder()
@@ -650,7 +658,7 @@ fn h1_same_intent_two_proposals_contracts_differ() {
             POINT_LIMIT,
         )
         .expect("deploy A");
-    session
+    let _: (ContractId, Option<CallReceipt<()>>) = session
         .deploy(
             PROPOSALS_BYTECODE,
             ContractData::builder()
@@ -1312,7 +1320,7 @@ fn short_before_long_digests(account: u64) -> ((u64, u64, u64), (u64, u64, u64))
 }
 
 fn hand_over(session: &mut Session, owner: &BlsPublicKey) {
-    session
+    let _: (ContractId, Option<CallReceipt<()>>) = session
         .deploy(
             PROPOSALS_BYTECODE,
             ContractData::builder()

@@ -8,6 +8,11 @@ details live in each crate's `CHANGELOG.md`. Semver policy:
 
 ## [Unreleased]
 
+### Changed
+
+- `dusk-core` and `dusk-vm` move from the rusk git tag to crates.io `=1.7.0` in every crate and lockfile (`piecrust` 0.31). Contract sources are unchanged; test code sets the block height and annotates `Session::deploy` results. `knot-event-decoder` decodes the registry's `evm_bootstrap_sent` event (a bare `u64` account id).
+- The repo holds no live contract ids. The `deploy-*` and `wire-contract` wrapper scripts (they drove a sibling deployments checkout) and the `nocturne-deployments` dependency of `knot-tool` are removed; `knot-tool` reads ids from `KNOT_REGISTRY_ID` and `KNOT_PROPOSALS_ID` and vendors Dusk's testnet network data.
+
 ### Security
 
 - `knot-warden` 0.3.0 (not deployed): `Account::External` checks and the `init_warden` deploy-owner check refuse a transfer-contract `contract_to_contract` relay (the transfer contract must be the only frame on the call stack); `schedule_service` refuses once the warden is no longer Atlas's guardian; `set_timelock` refuses a value below the warden delay and `set_delay` a raise above the Atlas timelock. `knot-warden-encoding` 0.2.1. Findings F-01, F-02 and F-04 of the 2026-10-28 review. 39 contract tests.
@@ -34,7 +39,7 @@ details live in each crate's `CHANGELOG.md`. Semver policy:
 
 - `knot-event-decoder` 0.1.0: dispatch named registry, proposals, and warden events by contract, topic, and version.
 
-- `knot-warden` 0.1.1 and `knot-warden-encoding` 0.1.0: delaying guardian in front of Atlas. Own workspaces; need a sibling atlas 0.3 checkout. Spec: `docs/warden.md`. 0.1.1 treats the genesis transfer contract as a direct account caller, so a Moonlight wallet can `init_warden`. Testnet current `113159d33377e7778d552cc48f40318c44643ca06970e2482b41b276a4d9cdb3`. First deploy `fb143b1e10288ea6527edc2e556c009d78e7a01add076ab90d6e133aec47cdcb`.
+- `knot-warden` 0.1.1 and `knot-warden-encoding` 0.1.0: delaying guardian in front of Atlas. Own workspaces; need a sibling atlas 0.3 checkout. Spec: `docs/warden.md`. 0.1.1 treats the genesis transfer contract as a direct account caller, so a Moonlight wallet can `init_warden`.
 
 - Public repo hygiene: `SECURITY.md`, `CONTRIBUTING.md`, GitHub templates,
   `docs/design-notes.md`.

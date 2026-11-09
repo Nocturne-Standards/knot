@@ -1,6 +1,6 @@
 use dusk_core::abi::ContractId as WardenId;
-use dusk_core_git::abi::ContractId as KnotId;
-use dusk_core_git::signatures::bls::{
+use dusk_core::abi::ContractId as KnotId;
+use dusk_core::signatures::bls::{
     PublicKey as KnotKey, SecretKey as KnotSecret, Signature as KnotSig,
 };
 use knot_encoding::call_types::RegistryPendingChange;
@@ -349,4 +349,37 @@ fn legacy_contract_names_are_not_arms() {
         let err = decode(contract, "account_created", NAMED_EVENT_VERSION, &bytes).unwrap_err();
         assert!(matches!(err, DecodeError::UnknownEvent { .. }));
     }
+}
+
+#[test]
+fn registry_evm_bootstrap_sent_is_the_bare_account_id() {
+    let bytes = archive(&42u64);
+    let decoded = decode(
+        CONTRACT_REGISTRY,
+        "evm_bootstrap_sent",
+        NAMED_EVENT_VERSION,
+        &bytes,
+    )
+    .expect("decodes");
+    assert_eq!(decoded, serde_json::json!({ "account_id": 42 }));
+
+    assert!(matches!(
+        decode(
+            CONTRACT_REGISTRY,
+            "evm_bootstrap_sent",
+            NAMED_EVENT_VERSION,
+            &[1, 2, 3]
+        ),
+        Err(DecodeError::InvalidPayload(_))
+    ));
+    // Same topic on another contract stays unknown.
+    assert!(matches!(
+        decode(
+            CONTRACT_PROPOSALS,
+            "evm_bootstrap_sent",
+            NAMED_EVENT_VERSION,
+            &bytes
+        ),
+        Err(DecodeError::UnknownEvent { .. })
+    ));
 }

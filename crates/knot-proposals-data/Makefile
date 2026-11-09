@@ -28,7 +28,7 @@
 CONTRACT_FEATURE ?= contract
 
 # Books have no JSON schema. wasm-dd builds the contract feature into the
-# data-driver target dir so deploy-contract.sh can record a path.
+# data-driver target dir so a deploy step can record a path.
 DD_FEATURE ?= contract
 
 # WASM optimization level: -O0, -O1, -O2, -O3, -O4, -Os, -Oz

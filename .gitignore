@@ -5,9 +5,6 @@
 *.swp
 *~
 
-# Local symlink / checkout of Nocturne-Standards/nocturne-deployments pin home.
-/deployments
-
 # Agent tooling stays local. The adoption marker is committed.
 .cursor/
 .worktrees/

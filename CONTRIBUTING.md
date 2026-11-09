@@ -18,15 +18,11 @@ cargo build -p knot-tool
 cargo test -p knot-encoding
 ```
 
-A fresh clone builds `knot-tool` without a sibling repo. Contract **pins**
-(testnet IDs) are optional for compile and read at run time from a pins-v2
-checkout of
-[`Nocturne-Standards/nocturne-deployments`](https://github.com/Nocturne-Standards/nocturne-deployments):
-clone it next to this repo, or set `NOCTURNE_PINS` (a path list of checkouts).
-`NOCTURNE_DEPLOYMENTS` still works when it names a checkout or a file inside
-one. Without pins, chain-integration paths that need live contract IDs fail —
-expected for a pin-less checkout. The testnet node URL and chain id come from
-the `dusk-networks` crate of the same repo.
+A fresh clone builds `knot-tool` without a sibling repo. Contract ids are
+read at run time from `KNOT_REGISTRY_ID` and `KNOT_PROPOSALS_ID`; this repo
+records none. Chain commands without them fail naming the variable. The testnet
+node URL and chain id come from the network data vendored in
+`crates/knot-tool/data/dusk-networks/`.
 
 Contract crates build WASM via per-crate Makefiles (cwd-sensitive):
 

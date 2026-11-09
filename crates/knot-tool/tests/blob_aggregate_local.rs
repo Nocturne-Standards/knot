@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use dusk_bytes::Serializable;
 use dusk_core::abi::{ContractId, Metadata};
 use dusk_core::signatures::bls::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
-use dusk_vm::{ContractData, Session, VM};
+use dusk_vm::{CallReceipt, ContractData, Session, VM};
 use knot_encoding::PartialSig;
 use knot_tool::blob::{
     BlobFile, ThresholdGuard, aggregate_partials, create_blob, read_file, write_file,
@@ -43,12 +43,16 @@ fn keypair(rng: &mut StdRng) -> (BlsSecretKey, BlsPublicKey) {
 fn deploy(owner_pk: &BlsPublicKey) -> Session {
     let vm = VM::ephemeral().expect("ephemeral");
     let mut session = vm.genesis_session(CHAIN_ID);
+    // dusk-vm 1.7 leaves the height unset; the contracts read it on every write.
+    session
+        .set_meta(Metadata::BLOCK_HEIGHT, 0u64)
+        .expect("set block height");
     for (bytecode, id) in [
         (ATLAS_BYTECODE, ATLAS_ID),
         (REGISTRY_DATA_BYTECODE, REGISTRY_DATA_ID),
         (REGISTRY_BYTECODE, REGISTRY_ID),
     ] {
-        session
+        let _: (ContractId, Option<CallReceipt<()>>) = session
             .deploy(
                 bytecode,
                 ContractData::builder()
